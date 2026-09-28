@@ -1,4 +1,12 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 from src.spot_check import agreement_stats, select_disagreement_pairs, select_pairwise_symmetric_disagreement
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _candidates() -> dict[str, dict[str, list[list]]]:
@@ -53,6 +61,40 @@ def test_select_pairwise_symmetric_disagreement_catches_a_vs_b_even_when_third_m
 
     caught_by_pairwise = select_pairwise_symmetric_disagreement(candidates, ["q1"], "M4", "M3", k=1)
     assert set(caught_by_pairwise) == {("q1", "A"), ("q1", "B")}
+
+
+def test_select_pairwise_symmetric_disagreement_is_stable_across_hash_seeds() -> None:
+    """PR #5 리뷰 P2 회귀 테스트: 대칭차집합(set)을 그대로 순회하면 순서가 프로세스의
+
+    해시 시드(PYTHONHASHSEED)에 따라 달라져, 같은 데이터·같은 시드로 뽑는 spot-check 표본이
+    실행마다 바뀔 수 있었다. 같은 프로세스에서 두 번 호출하는 테스트로는 못 잡는 문제라서
+    (해시 시드가 프로세스당 한 번만 정해짐), 서로 다른 PYTHONHASHSEED로 서브프로세스를
+    띄워 결과가 같은지 직접 비교한다.
+    """
+    script = (
+        "import json\n"
+        "from src.spot_check import select_pairwise_symmetric_disagreement\n"
+        "candidates = {\n"
+        "    'M4': {'q1': [[c, 1.0] for c in ['alpha', 'bravo', 'charlie', 'delta', 'echo']]},\n"
+        "    'M3': {'q1': [[c, 1.0] for c in ['victor', 'whiskey', 'xray', 'yankee', 'zulu']]},\n"
+        "}\n"
+        "pairs = select_pairwise_symmetric_disagreement(candidates, ['q1'], 'M4', 'M3', k=5)\n"
+        "print(json.dumps(pairs))\n"
+    )
+
+    outputs = []
+    for seed in ("1", "2", "3"):
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=REPO_ROOT,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        outputs.append(json.loads(result.stdout))
+
+    assert outputs[0] == outputs[1] == outputs[2]
 
 
 def test_select_pairwise_symmetric_disagreement_deduplicates_and_ignores_shared_candidates() -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -72,11 +73,26 @@ def _load_vectors(path: Path) -> tuple[list[str], np.ndarray]:
     return list(data["ids"]), data["vectors"]
 
 
+def _content_hash(*parts: str) -> str:
+    """입력 텍스트들의 해시를 만든다. 캐시 파일명이 같아도 입력이 바뀌면 재계산하도록 쓴다
+
+    (PR #5 리뷰로 발견: 캐시 파일 존재 여부만 보고 재사용해, data/creators.csv를 바꿔도
+    이전 실행의 results/cache가 남아 있으면 새 입력이 실제로 반영되지 않을 수 있었다).
+    """
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def _cached_hash_matches(hash_path: Path, expected: str) -> bool:
+    return hash_path.exists() and hash_path.read_text(encoding="utf-8").strip() == expected
+
+
 def cmd_embed(args: argparse.Namespace) -> None:
     """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 EMBEDDING_MODEL_KEYS의 모델들로 인코딩한다.
 
-    모델별로 저장된 벡터 파일이 이미 있으면 API를 다시 부르지 않고 건너뛴다
-    (리뷰 P2: 재실행 시 무조건 다시 호출하던 문제 수정). `--force`를 주면 강제로 다시 계산한다.
+    모델별로 저장된 벡터 파일이 있고 입력 텍스트 해시도 그대로면 API를 다시 부르지 않고
+    건너뛴다 (리뷰 P2: 재실행 시 무조건 다시 호출하던 문제 수정. 리뷰 P1: 파일 존재만
+    보고 건너뛰면 data/creators.csv를 바꿔도 오래된 캐시를 그대로 쓸 수 있었던 문제 수정).
+    `--force`를 주면 강제로 다시 계산한다.
     카테고리 이름 자체는 크리에이터 입력 텍스트에 없으므로, zero-shot 태깅이 자기
     분야를 되맞히는 순환이 생기지 않는다. 소요 시간·벡터 크기·비용은 E4(운영 지표)로
     `results/e4_embedding.json`에 남긴다(이번 실행에서 새로 계산한 모델만 기록됨).
@@ -92,12 +108,15 @@ def cmd_embed(args: argparse.Namespace) -> None:
     category_codes = [c.code for c in categories]
     category_texts = [c.description for c in categories]
 
+    input_hash = _content_hash(*creator_texts, *category_texts)
+
     e4_path = RESULTS_DIR / "e4_embedding.json"
     e4_report: dict[str, dict] = json.loads(e4_path.read_text(encoding="utf-8")) if e4_path.exists() else {}
     for key in EMBEDDING_MODEL_KEYS:
         creators_path = CACHE_DIR / f"creators_{key}.npz"
         categories_path = CACHE_DIR / f"categories_{key}.npz"
-        if not args.force and creators_path.exists() and categories_path.exists():
+        hash_path = CACHE_DIR / f"embed_{key}.input_hash"
+        if not args.force and creators_path.exists() and categories_path.exists() and _cached_hash_matches(hash_path, input_hash):
             print(f"[embed] {key}: 캐시된 벡터 사용 (재계산하려면 --force)")
             continue
 
@@ -111,6 +130,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
         _save_vectors(creators_path, creator_ids, creator_vectors)
         _save_vectors(categories_path, category_codes, category_vectors)
+        hash_path.write_text(input_hash, encoding="utf-8")
 
         total_tokens = None if creator_tokens is None or category_tokens is None else creator_tokens + category_tokens
         cost_usd = None if total_tokens is None else total_tokens / 1_000_000 * OPENAI_EMBEDDING_PRICE_PER_1M
@@ -133,9 +153,11 @@ def cmd_embed(args: argparse.Namespace) -> None:
 def cmd_tag_llm(args: argparse.Namespace) -> None:
     """LLM 태깅 후보 모델들을 크리에이터 전원에게 2회씩 돌리고, dev 정확도로 하나를 고른다.
 
-    run 파일(`llm_tags_{model}_run{n}.json`)이 이미 있으면 그 run은 다시 호출하지 않고
-    읽어서 재사용한다 (리뷰 P2: 재실행 시 전체를 다시 태깅하던 문제 수정. 크리에이터
-    단위 재개는 아니고 run 단위다 — `--force`를 주면 전부 다시 계산한다).
+    run 파일(`llm_tags_{model}_run{n}.json`)이 있고 입력 텍스트 해시도 그대로면 그 run은
+    다시 호출하지 않고 읽어서 재사용한다 (리뷰 P2: 재실행 시 전체를 다시 태깅하던 문제
+    수정. 크리에이터 단위 재개는 아니고 run 단위다. 리뷰 P1: 파일 존재만 보고 건너뛰면
+    data/creators.csv를 바꿔도 오래된 캐시를 그대로 쓸 수 있었던 문제 수정 —
+    `--force`를 주면 전부 다시 계산한다).
     두 번 실행하는 것은 비결정성(consistency)을 재기 위함이며, 승자 모델의 태그는
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
@@ -144,6 +166,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     category_codes = [c.code for c in categories]
     dev_ids = {c.id for c in dev_creators(creators)}
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
+    input_hash = _content_hash(*(c.input_text() for c in creators), *category_codes)
 
     dev_metrics: dict[str, dict[str, float]] = {}
     usage_summary: dict[str, dict[str, int]] = {}
@@ -154,7 +177,8 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         total_input_tokens = total_output_tokens = 0
         for run_index in range(LLM_CONSISTENCY_RUNS):
             run_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.json"
-            if not args.force and run_path.exists():
+            hash_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.input_hash"
+            if not args.force and run_path.exists() and _cached_hash_matches(hash_path, input_hash):
                 tags_by_id = json.loads(run_path.read_text(encoding="utf-8"))
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 캐시 사용 (재계산하려면 --force)")
             else:
@@ -166,6 +190,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
                     total_output_tokens += result.output_tokens
                 with run_path.open("w", encoding="utf-8") as f:
                     json.dump(tags_by_id, f, ensure_ascii=False, indent=2)
+                hash_path.write_text(input_hash, encoding="utf-8")
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 완료")
             runs.append(tags_by_id)
 
@@ -498,6 +523,11 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
 
     total_found = len(pairs)
     if total_found > SPOT_CHECK_SAMPLE_SIZE:
+        # 정렬 후 샘플링해야 고정 시드가 실행마다 같은 30쌍을 뽑는다는 보장이 생긴다
+        # (PR #5 리뷰로 발견: set 순회 순서가 해시 시드에 따라 달라져 pairs 자체가 이미
+        # 비결정적이었다 — select_pairwise_symmetric_disagreement에서 sorted로 고쳤지만,
+        # 여기서도 한 번 더 정렬해 이 함수만 보고도 재현성이 보장됨을 알 수 있게 한다).
+        pairs = sorted(pairs)
         pairs = random.Random(SPOT_CHECK_SAMPLE_SEED).sample(pairs, SPOT_CHECK_SAMPLE_SIZE)
 
     rows = [
