@@ -1,8 +1,9 @@
 """실험 단계를 순서대로 실행하는 CLI다. `python3 -m src.pipeline <단계>`로 호출한다.
 
 단계: embed -> tag-llm -> select-params -> candidates -> judge-sheet -> report -> score-judgments
-report까지는 사람 판정 없이 자동으로 끝난다 (E1, E3, E4). score-judgments는 judge_sheet.csv를
-사람이 채운 뒤 실행해 E2를 계산한다.
+report까지는 사람 판정 없이 자동으로 끝난다 (E1, E3, E4). judge-sheet 이후 score-judgments 전에
+`auto-judge`(LLM 자동 판정, 보조 수단) 또는 `src.judge_cli`(사람 판정)로 judge_sheet.csv의
+score 열을 채운다.
 """
 
 from __future__ import annotations
@@ -14,13 +15,15 @@ from pathlib import Path
 
 import numpy as np
 
-from src.clients import BgeEmbeddingClient, OpenAIEmbeddingClient, OpenAITagger
+from src.clients import BgeEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger
 from src.config import (
     CACHE_DIR,
     JUDGE_SHUFFLE_SEED,
     JUDGE_TOP_K,
     LLM_CONSISTENCY_RUNS,
     LLM_TAG_MAX,
+    OPENAI_JUDGE_MODEL,
+    OPENAI_JUDGE_MODEL_PRICE,
     OPENAI_LLM_MODEL_CANDIDATES,
     RESULTS_DIR,
     TOP_N_STORED,
@@ -28,6 +31,7 @@ from src.config import (
 from src.data import Creator, dev_creators, load_categories, load_creators, query_creators
 from src.judge import build_judge_pairs, shuffle_rows, write_judge_sheet, write_provenance
 from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
+from src.spot_check import agreement_stats, select_disagreement_pairs
 from src.tagging import (
     confusion_pairs,
     consistency_rate,
@@ -287,6 +291,57 @@ def cmd_judge_sheet(_: argparse.Namespace) -> None:
     print(f"[judge-sheet] {len(rows)}쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.")
 
 
+def cmd_auto_judge(_: argparse.Namespace) -> None:
+    """judge_sheet.csv의 빈 score를 LLM으로 자동 채운다. 사람 판정의 보조·대체 수단이다.
+
+    M4 태깅에 쓴 모델보다 강한 모델(OPENAI_JUDGE_MODEL)을 쓴다. 답을 받을 때마다 즉시
+    파일에 저장해 중단·재개가 가능하며, 결과는 `results/auto_judge_report.json`에
+    비용·건수와 함께 남긴다. 자동 판정은 사람 판정을 대체하는 보조 수단이므로, 신뢰도
+    확인을 위해 일부를 직접 재판정해보는 것을 권장한다.
+    """
+    path = RESULTS_DIR / "judge_sheet.csv"
+    fieldnames = ["pair_id", "query_id", "candidate_id", "score"]
+    with path.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    creators_by_id = {c.id: c for c in load_creators()}
+    judge = OpenAIJudge(model=OPENAI_JUDGE_MODEL)
+
+    pending = [row for row in rows if not row["score"].strip()]
+    total_all = len(rows)
+    print(f"[auto-judge] 전체 {total_all}쌍 중 {total_all - len(pending)}쌍 완료, {len(pending)}쌍 자동 판정 시작 (모델: {OPENAI_JUDGE_MODEL})")
+
+    total_input_tokens = total_output_tokens = 0
+    for i, row in enumerate(pending, start=1):
+        query = creators_by_id[row["query_id"]]
+        candidate = creators_by_id[row["candidate_id"]]
+        result = judge.judge(query.input_text(), candidate.input_text())
+        row["score"] = str(result.score)
+        total_input_tokens += result.input_tokens
+        total_output_tokens += result.output_tokens
+
+        with path.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        if i % 50 == 0 or i == len(pending):
+            print(f"[auto-judge] {i}/{len(pending)} 완료")
+
+    price = OPENAI_JUDGE_MODEL_PRICE
+    cost = total_input_tokens / 1_000_000 * price["input_price"] + total_output_tokens / 1_000_000 * price["output_price"]
+    report = {
+        "model": OPENAI_JUDGE_MODEL,
+        "judged_count": len(pending),
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "estimated_cost_usd": cost,
+    }
+    with (RESULTS_DIR / "auto_judge_report.json").open("w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    print(f"[auto-judge] 완료. 비용 약 ${cost:.4f}. 일부를 src.judge_cli로 직접 재판정해 일치율을 확인하는 것을 권장합니다.")
+
+
 def cmd_report(_: argparse.Namespace) -> None:
     """사람 판정 없이 계산되는 지표(E1 태깅 정확도, E3 대표 사례)를 test 기준으로 출력한다."""
     from src.metrics import check_case
@@ -309,13 +364,9 @@ def cmd_report(_: argparse.Namespace) -> None:
         confusions = sorted(confusion_pairs(test_ranked, test_gold).items(), key=lambda kv: -kv[1])[:5]
         print(f"   주요 혼동 쌍(정답->예측1등): {confusions}")
 
-    print("\n=== E3. 대표 사례 (top-5, text-embedding-3-small x M3 기준) ===")
+    print("\n=== E3. 대표 사례 (top-5, 11개 설정 전체) ===")
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
-    method = f"M3_{EMBEDDING_MODEL_KEYS[0]}"
-
-    def top5(cid: str) -> list[str]:
-        return [item[0] for item in all_candidates[method][cid][:5]]
 
     game_ids = {"G01", "G02", "G03", "G04", "G05", "G06", "G07", "G08", "G09"}
     cases = [
@@ -327,9 +378,15 @@ def cmd_report(_: argparse.Namespace) -> None:
         ("③ 분야넘기 X14->K07 목록에 있어야 함", "K07", {"X14"}, None),
         ("③ 분야넘기 X15->F06 목록에 있어야 함", "F06", {"X15"}, None),
     ]
-    for label, query_id, must_include, must_exclude in cases:
-        result = check_case(top5(query_id), must_include, must_exclude)
-        print(f"   [{'PASS' if result else 'FAIL'}] {label} -> top5={top5(query_id)}")
+    for method in all_candidates:
+        print(f"-- {method}")
+
+        def top5(cid: str, method: str = method) -> list[str]:
+            return [item[0] for item in all_candidates[method][cid][:5]]
+
+        for label, query_id, must_include, must_exclude in cases:
+            result = check_case(top5(query_id), must_include, must_exclude)
+            print(f"   [{'PASS' if result else 'FAIL'}] {label} -> top5={top5(query_id)}")
 
 
 def cmd_score_judgments(_: argparse.Namespace) -> None:
@@ -381,6 +438,70 @@ def cmd_score_judgments(_: argparse.Namespace) -> None:
         print(f"   {a} 승 {wins_a} / {b} 승 {wins_b} / 동점 {ties} (쿼리 {len(query_ids)}개 중)")
 
 
+SPOT_CHECK_TARGET = "M4_bge-m3"
+SPOT_CHECK_BASELINES = ["M3_bge-m3", "R2_bge-m3"]
+
+
+def cmd_spot_check(_: argparse.Namespace) -> None:
+    """자동 판정 전체(556쌍) 대신, target_method가 baseline과 다르게 고른 후보만 골라
+
+    소규모 시트(results/spot_check.csv)를 만든다. 이 쌍들이 target_method 점수를
+    baseline보다 높게 만드는 실제 원인이라, 여기만 사람이 다시 봐도 결정에 필요한
+    확인은 대부분 된다. `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
+    """
+    creators = load_creators()
+    query_ids = [c.id for c in query_creators(creators)]
+
+    with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
+        all_candidates = json.load(f)
+
+    pairs = select_disagreement_pairs(all_candidates, query_ids, SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, k=JUDGE_TOP_K)
+    rows = [
+        {"pair_id": f"{qid}::{cid}", "query_id": qid, "candidate_id": cid, "score": ""}
+        for qid, cid in pairs
+    ]
+    write_judge_sheet_rows(rows, RESULTS_DIR / "spot_check.csv")
+    print(
+        f"[spot-check] {SPOT_CHECK_TARGET}가 {SPOT_CHECK_BASELINES}와 다르게 고른 {len(rows)}쌍을 "
+        f"results/spot_check.csv에 저장했습니다.\n"
+        f"python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 "
+        f"python3 -m src.pipeline spot-check-report 를 실행하세요."
+    )
+
+
+def cmd_spot_check_report(_: argparse.Namespace) -> None:
+    """spot_check.csv의 사람 점수와 judge_sheet.csv의 자동 판정 점수를 같은 쌍끼리 비교한다."""
+    spot_path = RESULTS_DIR / "spot_check.csv"
+    with spot_path.open(encoding="utf-8") as f:
+        spot_rows = list(csv.DictReader(f))
+    unscored = [r["pair_id"] for r in spot_rows if not r["score"].strip()]
+    if unscored:
+        raise ValueError(f"아직 판정이 안 된 쌍이 있습니다: {unscored}. src.judge_cli --file results/spot_check.csv 로 먼저 채우세요.")
+    human = {(r["query_id"], r["candidate_id"]): int(r["score"]) for r in spot_rows}
+
+    with (RESULTS_DIR / "judge_sheet.csv").open(encoding="utf-8") as f:
+        auto_rows = list(csv.DictReader(f))
+    auto = {(r["query_id"], r["candidate_id"]): int(r["score"]) for r in auto_rows if r["score"].strip()}
+
+    stats = agreement_stats(human, auto)
+    print(f"=== spot-check 일치율 ({SPOT_CHECK_TARGET} vs {SPOT_CHECK_BASELINES}만 고른 후보 {stats['count']}쌍) ===")
+    print(f"   완전 일치율: {stats['exact_match_rate']:.2f}")
+    print(f"   ±1 이내 일치율: {stats['within_1_rate']:.2f}")
+    print(f"   평균 절대 오차: {stats['mean_abs_diff']:.2f}")
+    for (qid, cid), auto_score in auto.items():
+        if (qid, cid) in human and human[(qid, cid)] != auto_score:
+            print(f"   불일치: {qid}::{cid}  사람={human[(qid, cid)]}  자동={auto_score}")
+
+
+def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
+    """spot_check.csv 등, judge_sheet.csv와 같은 4열 형식으로 판정 시트를 새로 쓴다."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -391,8 +512,11 @@ def main() -> None:
         "select-params": cmd_select_params,
         "candidates": cmd_candidates,
         "judge-sheet": cmd_judge_sheet,
+        "auto-judge": cmd_auto_judge,
         "report": cmd_report,
         "score-judgments": cmd_score_judgments,
+        "spot-check": cmd_spot_check,
+        "spot-check-report": cmd_spot_check_report,
     }
     for name in stages:
         sub.add_parser(name)

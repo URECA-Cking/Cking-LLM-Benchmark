@@ -45,6 +45,11 @@ LLM_TEMPERATURE = 0
 LLM_TAG_MAX = 3
 LLM_CONSISTENCY_RUNS = 2
 
+# E2 자동 판정(LLM-as-judge)용 모델. M4 태깅에 쓴 모델(gpt-5.4-nano)보다 강한 모델을 써서
+# "같은 LLM이 자기 태깅을 스스로 좋게 채점하는" 순환 편향을 줄인다.
+OPENAI_JUDGE_MODEL = "gpt-5.4-mini-2026-03-17"
+OPENAI_JUDGE_MODEL_PRICE = {"input_price": 0.75, "output_price": 4.50}
+
 # 태깅·유사도 임계값은 dev로만 결정한다. 여기 값은 select 단계가 채운 뒤 고정한다.
 ZERO_SHOT_TAU: dict[str, float | None] = {
     "text-embedding-3-small": None,

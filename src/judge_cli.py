@@ -1,6 +1,7 @@
-"""results/judge_sheet.csv를 터미널에서 하나씩 채우는 대화형 도구다.
+"""판정 시트를 터미널에서 하나씩 채우는 대화형 도구다.
 
-`python3 -m src.judge_cli`로 실행한다. 답할 때마다 즉시 파일에 저장하므로 언제든
+`python3 -m src.judge_cli`로 실행하면 results/judge_sheet.csv를, `--file results/spot_check.csv`처럼
+지정하면 다른 판정 시트(같은 4열 형식)를 채운다. 답할 때마다 즉시 파일에 저장하므로 언제든
 Ctrl+C나 q로 멈추고 나중에 다시 실행해 이어서 할 수 있다 (비어 있는 score만 물어본다).
 어떤 방식이 이 후보를 뽑았는지는 보여주지 않는다 — 그건 judge_provenance.csv에만 있고
 채점 단계에서만 쓴다.
@@ -8,6 +9,7 @@ Ctrl+C나 q로 멈추고 나중에 다시 실행해 이어서 할 수 있다 (�
 
 from __future__ import annotations
 
+import argparse
 import csv
 from pathlib import Path
 
@@ -51,7 +53,11 @@ def format_prompt(row: dict[str, str], creators_by_id: dict[str, Creator], index
 
 def main() -> None:
     """비어 있는 score만 골라 하나씩 물어보고, 답할 때마다 바로 저장한다."""
-    path = RESULTS_DIR / "judge_sheet.csv"
+    parser = argparse.ArgumentParser(description="판정 시트를 터미널에서 채우는 도구")
+    parser.add_argument("--file", default=None, help="채울 판정 시트 경로 (기본: results/judge_sheet.csv)")
+    args = parser.parse_args()
+    path = Path(args.file) if args.file else RESULTS_DIR / "judge_sheet.csv"
+
     rows = load_rows(path)
     creators_by_id = {c.id: c for c in load_creators()}
 
@@ -77,7 +83,10 @@ def main() -> None:
             print("0, 1, 2, s(건너뛰기), q(종료) 중 하나를 입력하세요.")
 
     write_rows(rows, path)
-    print("모든 쌍의 판정이 끝났습니다. python3 -m src.pipeline score-judgments 를 실행하세요.")
+    if path.name == "spot_check.csv":
+        print("모든 쌍의 판정이 끝났습니다. python3 -m src.pipeline spot-check-report 를 실행하세요.")
+    else:
+        print("모든 쌍의 판정이 끝났습니다. python3 -m src.pipeline score-judgments 를 실행하세요.")
 
 
 if __name__ == "__main__":
