@@ -2,6 +2,10 @@
 
 Ticle(Cking) 2차 MVP **AI 크리에이터 추천**의 임베딩 모델과 추천 방식을 같은 데이터로 비교하는 Python 3.11+ 오프라인 벤치마크입니다. 앱·DB·배치와 무관하며, 결과는 **경향 확인용**이라 확정 성능 수치로 발표하지 않습니다. 모든 메서드는 역할을 설명하는 한글 docstring을 포함합니다.
 
+## 현재 채택안: bge-m3 + M4
+
+실행 결과와 선택 근거는 [`docs/embedding-method-selection.md`](docs/embedding-method-selection.md)에서 확인할 수 있습니다.
+
 ## 준비와 실행
 
 ```bash
