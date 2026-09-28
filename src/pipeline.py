@@ -24,6 +24,7 @@ from src.config import (
     JUDGE_TOP_K,
     LLM_CONSISTENCY_RUNS,
     LLM_TAG_MAX,
+    LLM_TEMPERATURE,
     LOCAL_EMBEDDING_MODELS,
     OPENAI_JUDGE_MODEL,
     OPENAI_JUDGE_MODEL_PRICE,
@@ -32,7 +33,7 @@ from src.config import (
     TOP_N_STORED,
 )
 from src.data import Creator, dev_creators, load_categories, load_creators, query_creators
-from src.judge import build_judge_pairs, load_existing_scores, shuffle_rows, write_judge_sheet, write_provenance
+from src.judge import build_judge_pairs, load_existing_scores, pair_text_hash, shuffle_rows, write_judge_sheet, write_provenance
 from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
 from src.spot_check import agreement_stats, select_pairwise_symmetric_disagreement
 from src.tagging import (
@@ -59,6 +60,20 @@ def _embedding_client(key: str):
     if key in LOCAL_EMBEDDING_MODELS:
         return LocalEmbeddingClient(key)
     raise ValueError(f"알 수 없는 임베딩 모델 키: {key}")
+
+
+def _embedding_model_identity(key: str) -> str:
+    """캐시 무효화 해시에 포함할, 이 키가 실제로 가리키는 모델·차원 설정이다.
+
+    (PR #5 재리뷰로 발견: 캐시 키가 "bge-m3" 같은 이름뿐이라, config.py에서 그 이름이
+    가리키는 실제 HF 모델·차원을 바꿔도 텍스트가 그대로면 오래된 캐시를 계속 썼다.)
+    """
+    if key == "text-embedding-3-small":
+        from src.config import OPENAI_EMBEDDING_DIM, OPENAI_EMBEDDING_MODEL
+
+        return f"{OPENAI_EMBEDDING_MODEL}:{OPENAI_EMBEDDING_DIM}"
+    spec = LOCAL_EMBEDDING_MODELS[key]
+    return f"{spec['model_name']}:{spec['dim']}"
 
 
 def _save_vectors(path: Path, ids: list[str], vectors: np.ndarray) -> None:
@@ -108,11 +123,12 @@ def cmd_embed(args: argparse.Namespace) -> None:
     category_codes = [c.code for c in categories]
     category_texts = [c.description for c in categories]
 
-    input_hash = _content_hash(*creator_texts, *category_texts)
-
     e4_path = RESULTS_DIR / "e4_embedding.json"
     e4_report: dict[str, dict] = json.loads(e4_path.read_text(encoding="utf-8")) if e4_path.exists() else {}
     for key in EMBEDDING_MODEL_KEYS:
+        # 키별로 해시가 다르다 — 어떤 실제 모델·차원을 가리키는지도 해시에 넣어, config.py에서
+        # 같은 키가 다른 모델을 가리키게 바꿔도(텍스트는 그대로라도) 캐시를 다시 계산하게 한다.
+        input_hash = _content_hash(_embedding_model_identity(key), *creator_texts, *category_texts)
         creators_path = CACHE_DIR / f"creators_{key}.npz"
         categories_path = CACHE_DIR / f"categories_{key}.npz"
         hash_path = CACHE_DIR / f"embed_{key}.input_hash"
@@ -157,16 +173,24 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     다시 호출하지 않고 읽어서 재사용한다 (리뷰 P2: 재실행 시 전체를 다시 태깅하던 문제
     수정. 크리에이터 단위 재개는 아니고 run 단위다. 리뷰 P1: 파일 존재만 보고 건너뛰면
     data/creators.csv를 바꿔도 오래된 캐시를 그대로 쓸 수 있었던 문제 수정 —
-    `--force`를 주면 전부 다시 계산한다).
+    `--force`를 주면 전부 다시 계산한다). 해시에는 실제 요청에 쓰이는 시스템 프롬프트·
+    temperature도 포함한다(재리뷰로 발견: LLM_TAG_MAX·LLM_TEMPERATURE를 바꿔도 캐시가
+    무효화되지 않았다 — SYSTEM_PROMPT가 LLM_TAG_MAX를 그대로 담고 있어 이거 하나로 충분).
     두 번 실행하는 것은 비결정성(consistency)을 재기 위함이며, 승자 모델의 태그는
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
+    from src.clients.openai_tagger import SYSTEM_PROMPT
+
     categories = load_categories()
     creators = load_creators()
     category_codes = [c.code for c in categories]
     dev_ids = {c.id for c in dev_creators(creators)}
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
-    input_hash = _content_hash(*(c.input_text() for c in creators), *category_codes)
+    input_hash = _content_hash(SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *category_codes)
+
+    selection_path = RESULTS_DIR / "llm_model_selection.json"
+    prev_selection = json.loads(selection_path.read_text(encoding="utf-8")) if selection_path.exists() else {}
+    prev_usage: dict[str, dict[str, int]] = prev_selection.get("token_usage", {})
 
     dev_metrics: dict[str, dict[str, float]] = {}
     usage_summary: dict[str, dict[str, int]] = {}
@@ -175,6 +199,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         safe_name = model_name.replace("/", "_")
         runs: list[dict[str, list[str]]] = []
         total_input_tokens = total_output_tokens = 0
+        any_recomputed = False
         for run_index in range(LLM_CONSISTENCY_RUNS):
             run_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.json"
             hash_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.input_hash"
@@ -182,6 +207,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
                 tags_by_id = json.loads(run_path.read_text(encoding="utf-8"))
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 캐시 사용 (재계산하려면 --force)")
             else:
+                any_recomputed = True
                 tags_by_id = {}
                 for creator in creators:
                     result = tagger.tag(creator.input_text())
@@ -204,7 +230,13 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         }
         second_run = {cid: frozenset(tags) for cid, tags in runs[1].items()}
         dev_metrics[model_name]["consistency"] = consistency_rate(first_run, second_run)
-        usage_summary[model_name] = {"input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
+        # 이번 실행에서 API를 한 번도 안 불렀으면(둘 다 캐시 히트) 0으로 덮어쓰지 않고
+        # 이전에 기록된 누적 사용량을 그대로 유지한다 (재리뷰로 발견: 캐시 재실행 때마다
+        # 0으로 덮여 실제 누적 비용을 잃어버렸다 — e4_embedding.json과 같은 보존 패턴).
+        if any_recomputed:
+            usage_summary[model_name] = {"input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
+        else:
+            usage_summary[model_name] = prev_usage.get(model_name, {"input_tokens": 0, "output_tokens": 0})
 
     selected = pick_llm_model(dev_metrics)
     selection = {"selected_model": selected, "dev_metrics": dev_metrics, "token_usage": usage_summary}
@@ -350,6 +382,7 @@ def cmd_judge_sheet(_: argparse.Namespace) -> None:
     """쿼리 30명의 설정별 상위 5명을 합집합으로 모아 블라인드 판정 시트를 만든다."""
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
+    text_by_id = {c.id: c.input_text() for c in creators}
 
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
@@ -359,7 +392,7 @@ def cmd_judge_sheet(_: argparse.Namespace) -> None:
         for qid in query_ids:
             top5_by_query[qid][method_id] = [tuple(item) for item in by_creator[qid][:JUDGE_TOP_K]]
 
-    rows, provenance = build_judge_pairs(top5_by_query)
+    rows, provenance = build_judge_pairs(top5_by_query, text_by_id)
     rows = shuffle_rows(rows, seed=JUDGE_SHUFFLE_SEED)
     write_judge_sheet(rows, RESULTS_DIR / "judge_sheet.csv")
     write_provenance(provenance, RESULTS_DIR / "judge_provenance.csv")
@@ -375,9 +408,10 @@ def cmd_auto_judge(_: argparse.Namespace) -> None:
     확인을 위해 일부를 직접 재판정해보는 것을 권장한다.
     """
     path = RESULTS_DIR / "judge_sheet.csv"
-    fieldnames = ["pair_id", "query_id", "candidate_id", "score"]
     with path.open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames  # 파일의 실제 헤더를 그대로 써서 text_hash 열을 지우지 않는다
+        rows = list(reader)
 
     creators_by_id = {c.id: c for c in load_creators()}
     judge = OpenAIJudge(model=OPENAI_JUDGE_MODEL)
@@ -531,6 +565,7 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
     """
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
+    text_by_id = {c.id: c.input_text() for c in creators}
 
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
@@ -553,7 +588,13 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
         pairs = random.Random(SPOT_CHECK_SAMPLE_SEED).sample(pairs, SPOT_CHECK_SAMPLE_SIZE)
 
     rows = [
-        {"pair_id": f"{qid}::{cid}", "query_id": qid, "candidate_id": cid, "score": ""}
+        {
+            "pair_id": f"{qid}::{cid}",
+            "query_id": qid,
+            "candidate_id": cid,
+            "score": "",
+            "text_hash": pair_text_hash(text_by_id[qid], text_by_id[cid]),
+        }
         for qid, cid in pairs
     ]
     write_judge_sheet_rows(rows, RESULTS_DIR / "spot_check.csv")
@@ -591,18 +632,24 @@ def cmd_spot_check_report(_: argparse.Namespace) -> None:
 
 
 def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
-    """spot_check.csv 등, judge_sheet.csv와 같은 4열 형식으로 판정 시트를 새로 쓴다.
+    """spot_check.csv 등, judge_sheet.csv와 같은 5열 형식(text_hash 포함)으로 판정 시트를 새로 쓴다.
 
-    같은 경로에 이미 채워진 판정이 있으면 pair_id가 같은 행은 그 점수를 이어받는다
-    (리뷰 P1과 동일한 문제: spot-check 재실행 시 기존 판정이 사라지던 것 수정).
+    같은 경로에 이미 채워진 판정이 있고 pair_id·text_hash가 둘 다 같으면 점수를 이어받는다
+    (리뷰 P1과 동일한 문제: spot-check 재실행 시 기존 판정이 사라지던 것 수정. 재리뷰 지적:
+    pair_id만 같다고 보존하면 크리에이터 텍스트가 바뀐 경우 예전 텍스트로 매긴 점수가 남을
+    수 있어, text_hash가 다르거나 비어 있으면 점수를 비워 재판정하게 한다). rows의 각 항목은
+    "text_hash" 키를 포함해야 한다.
     """
     existing = load_existing_scores(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score"])
+        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score", "text_hash"])
         writer.writeheader()
         for row in rows:
-            writer.writerow({**row, "score": existing.get(row["pair_id"], row["score"])})
+            text_hash = row.get("text_hash", "")
+            prev = existing.get(row["pair_id"])
+            keep = bool(text_hash) and prev is not None and prev[1] == text_hash
+            writer.writerow({**row, "score": prev[0] if keep else row["score"], "text_hash": text_hash})
 
 
 def main() -> None:
