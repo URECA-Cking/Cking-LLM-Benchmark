@@ -133,6 +133,84 @@ def test_cmd_tag_llm_recomputes_when_input_text_changes(tmp_path, monkeypatch) -
     assert call_count["n"] == first_calls * 2  # 캐시를 못 쓰고 전부 다시 태깅함
 
 
+def test_cmd_embed_recomputes_when_model_identity_changes(tmp_path, monkeypatch) -> None:
+    """재리뷰 회귀 테스트: 텍스트가 그대로여도 키가 가리키는 실제 모델·차원이 바뀌면 다시 계산해야 한다.
+
+    캐시 파일명은 "creators_bge-m3.npz"처럼 키 이름뿐이라, config.py에서 그 키가 가리키는
+    실제 모델을 바꿔도 텍스트가 안 바뀌었으면 예전 벡터를 계속 쓸 수 있었다.
+    """
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    call_count = {"n": 0}
+
+    def counting_client(key: str) -> _FakeEmbeddingClient:
+        call_count["n"] += 1
+        return _FakeEmbeddingClient()
+
+    monkeypatch.setattr(pipeline, "_embedding_client", counting_client)
+    monkeypatch.setattr(pipeline, "_embedding_model_identity", lambda key: "model-v1")
+
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+    first_call_count = call_count["n"]
+
+    monkeypatch.setattr(pipeline, "_embedding_model_identity", lambda key: "model-v2")  # 같은 키, 다른 실제 모델
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+
+    assert call_count["n"] > first_call_count  # 모델 정체가 바뀌어 캐시를 못 쓰고 다시 계산함
+
+
+def test_cmd_tag_llm_recomputes_when_system_prompt_changes(tmp_path, monkeypatch) -> None:
+    """재리뷰 회귀 테스트: LLM_TAG_MAX 등 요청 설정이 바뀌어도(=SYSTEM_PROMPT 변경) 다시 태깅해야 한다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+    call_count = {"n": 0}
+
+    class _CountingTagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            call_count["n"] += 1
+            return TagResult(tags=(), input_tokens=1, output_tokens=1)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _CountingTagger)
+    monkeypatch.setattr("src.clients.openai_tagger.SYSTEM_PROMPT", "프롬프트 v1")
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+    first_calls = call_count["n"]
+
+    monkeypatch.setattr("src.clients.openai_tagger.SYSTEM_PROMPT", "프롬프트 v2 (예: LLM_TAG_MAX 변경)")
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+
+    assert call_count["n"] == first_calls * 2  # 프롬프트가 바뀌어 캐시를 못 씀
+
+
+def test_cmd_tag_llm_preserves_token_usage_when_fully_cached(tmp_path, monkeypatch) -> None:
+    """재리뷰 회귀 테스트: 캐시 재사용만 있었던 실행은 누적 토큰 사용량을 0으로 덮으면 안 된다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+
+    class _CountingTagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            return TagResult(tags=(), input_tokens=5, output_tokens=2)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _CountingTagger)
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+    first_usage = json.loads((tmp_path / "llm_model_selection.json").read_text(encoding="utf-8"))["token_usage"]
+    assert first_usage["fake-model"]["input_tokens"] > 0
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))  # 이번엔 전부 캐시 히트, 새 API 호출 없음
+    second_usage = json.loads((tmp_path / "llm_model_selection.json").read_text(encoding="utf-8"))["token_usage"]
+
+    assert second_usage == first_usage  # 0으로 덮이지 않고 이전 누적치를 유지
+
+
 def test_cmd_tag_llm_skips_completed_runs_when_cache_exists(tmp_path, monkeypatch) -> None:
     """리뷰 P2 회귀 테스트: run 파일이 이미 있으면 그 run은 다시 태깅하지 않는다."""
     monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)

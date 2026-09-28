@@ -60,6 +60,19 @@ def _embedding_client(key: str):
     raise ValueError(f"알 수 없는 임베딩 모델 키: {key}")
 
 
+def _embedding_model_identity(key: str) -> str:
+    """캐시 무효화 해시에 포함할, 이 키가 실제로 가리키는 모델·차원 설정이다.
+
+    (재리뷰로 발견: 캐시 키가 "bge-m3" 같은 이름뿐이라, config.py에서 그 이름이
+    가리키는 실제 모델·차원을 바꿔도 텍스트가 그대로면 오래된 캐시를 계속 썼다.)
+    """
+    from src.config import BGE_EMBEDDING_DIM, BGE_MODEL_NAME, OPENAI_EMBEDDING_DIM, OPENAI_EMBEDDING_MODEL
+
+    if key == "text-embedding-3-small":
+        return f"{OPENAI_EMBEDDING_MODEL}:{OPENAI_EMBEDDING_DIM}"
+    return f"{BGE_MODEL_NAME}:{BGE_EMBEDDING_DIM}"
+
+
 def _save_vectors(path: Path, ids: list[str], vectors: np.ndarray) -> None:
     """id 순서와 벡터를 함께 저장해, 나중에 순서가 어긋나지 않게 한다."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,11 +120,12 @@ def cmd_embed(args: argparse.Namespace) -> None:
     category_codes = [c.code for c in categories]
     category_texts = [c.description for c in categories]
 
-    input_hash = _content_hash(*creator_texts, *category_texts)
-
     e4_path = RESULTS_DIR / "e4_embedding.json"
     e4_report: dict[str, dict] = json.loads(e4_path.read_text(encoding="utf-8")) if e4_path.exists() else {}
     for key in EMBEDDING_MODEL_KEYS:
+        # 키별로 해시가 다르다 — 어떤 실제 모델·차원을 가리키는지도 해시에 넣어, config.py에서
+        # 같은 키가 다른 모델을 가리키게 바꿔도(텍스트는 그대로라도) 캐시를 다시 계산하게 한다.
+        input_hash = _content_hash(_embedding_model_identity(key), *creator_texts, *category_texts)
         creators_path = CACHE_DIR / f"creators_{key}.npz"
         categories_path = CACHE_DIR / f"categories_{key}.npz"
         hash_path = CACHE_DIR / f"embed_{key}.input_hash"
@@ -156,16 +170,25 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     다시 호출하지 않고 읽어서 재사용한다 (리뷰 P2: 재실행 시 전체를 다시 태깅하던 문제
     수정. 크리에이터 단위 재개는 아니고 run 단위다. 리뷰 P1: 파일 존재만 보고 건너뛰면
     data/creators.csv를 바꿔도 오래된 캐시를 그대로 쓸 수 있었던 문제 수정 —
-    `--force`를 주면 전부 다시 계산한다).
+    `--force`를 주면 전부 다시 계산한다). 해시에는 실제 요청에 쓰이는 시스템 프롬프트·
+    temperature도 포함한다(재리뷰로 발견: LLM_TAG_MAX·LLM_TEMPERATURE를 바꿔도 캐시가
+    무효화되지 않았다 — SYSTEM_PROMPT가 LLM_TAG_MAX를 그대로 담고 있어 이거 하나로 충분).
     두 번 실행하는 것은 비결정성(consistency)을 재기 위함이며, 승자 모델의 태그는
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
+    from src.clients.openai_tagger import SYSTEM_PROMPT
+    from src.config import LLM_TEMPERATURE
+
     categories = load_categories()
     creators = load_creators()
     category_codes = [c.code for c in categories]
     dev_ids = {c.id for c in dev_creators(creators)}
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
-    input_hash = _content_hash(*(c.input_text() for c in creators), *category_codes)
+    input_hash = _content_hash(SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *category_codes)
+
+    selection_path = RESULTS_DIR / "llm_model_selection.json"
+    prev_selection = json.loads(selection_path.read_text(encoding="utf-8")) if selection_path.exists() else {}
+    prev_usage: dict[str, dict[str, int]] = prev_selection.get("token_usage", {})
 
     dev_metrics: dict[str, dict[str, float]] = {}
     usage_summary: dict[str, dict[str, int]] = {}
@@ -174,6 +197,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         safe_name = model_name.replace("/", "_")
         runs: list[dict[str, list[str]]] = []
         total_input_tokens = total_output_tokens = 0
+        any_recomputed = False
         for run_index in range(LLM_CONSISTENCY_RUNS):
             run_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.json"
             hash_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.input_hash"
@@ -181,6 +205,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
                 tags_by_id = json.loads(run_path.read_text(encoding="utf-8"))
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 캐시 사용 (재계산하려면 --force)")
             else:
+                any_recomputed = True
                 tags_by_id = {}
                 for creator in creators:
                     result = tagger.tag(creator.input_text())
@@ -203,7 +228,13 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         }
         second_run = {cid: frozenset(tags) for cid, tags in runs[1].items()}
         dev_metrics[model_name]["consistency"] = consistency_rate(first_run, second_run)
-        usage_summary[model_name] = {"input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
+        # 이번 실행에서 API를 한 번도 안 불렀으면(둘 다 캐시 히트) 0으로 덮어쓰지 않고
+        # 이전에 기록된 누적 사용량을 그대로 유지한다 (재리뷰로 발견: 캐시 재실행 때마다
+        # 0으로 덮여 실제 누적 비용을 잃어버렸다 — e4_embedding.json과 같은 보존 패턴).
+        if any_recomputed:
+            usage_summary[model_name] = {"input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
+        else:
+            usage_summary[model_name] = prev_usage.get(model_name, {"input_tokens": 0, "output_tokens": 0})
 
     selected = pick_llm_model(dev_metrics)
     selection = {"selected_model": selected, "dev_metrics": dev_metrics, "token_usage": usage_summary}
