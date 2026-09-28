@@ -211,6 +211,36 @@ def test_cmd_tag_llm_preserves_token_usage_when_fully_cached(tmp_path, monkeypat
     assert second_usage == first_usage  # 0으로 덮이지 않고 이전 누적치를 유지
 
 
+def test_cmd_tag_llm_sums_token_usage_when_only_some_runs_recomputed(tmp_path, monkeypatch) -> None:
+    """PR #5 재리뷰 회귀 테스트: run 일부만 다시 계산해도 전체(양쪽 run 합) 토큰 사용량을 보고해야 한다.
+
+    "새로 쓴 토큰만 기록"하는 이전 방식은 run 하나만 캐시에서 빠져 다시 계산되면, 캐시로
+    읽은 다른 run의 과거 사용량이 통째로 빠져 기록이 실제보다 줄어들었다.
+    """
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+
+    class _CountingTagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            return TagResult(tags=(), input_tokens=2, output_tokens=1)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _CountingTagger)
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))  # run0·run1 둘 다 새로 계산
+    full_usage = json.loads((tmp_path / "llm_model_selection.json").read_text(encoding="utf-8"))["token_usage"]["fake-model"]
+
+    (tmp_path / "llm_tags_fake-model_run1.json").unlink()  # run1만 캐시에서 지워 다시 계산되게 함
+    (tmp_path / "llm_tags_fake-model_run1.input_hash").unlink()
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+    partial_recompute_usage = json.loads((tmp_path / "llm_model_selection.json").read_text(encoding="utf-8"))["token_usage"]["fake-model"]
+
+    assert partial_recompute_usage == full_usage  # run0(캐시)+run1(재계산) 합이 원래 전체와 같아야 함
+
+
 def test_cmd_tag_llm_skips_completed_runs_when_cache_exists(tmp_path, monkeypatch) -> None:
     """리뷰 P2 회귀 테스트: run 파일이 이미 있으면 그 run은 다시 태깅하지 않는다."""
     monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)

@@ -176,6 +176,11 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     `--force`를 주면 전부 다시 계산한다). 해시에는 실제 요청에 쓰이는 시스템 프롬프트·
     temperature도 포함한다(재리뷰로 발견: LLM_TAG_MAX·LLM_TEMPERATURE를 바꿔도 캐시가
     무효화되지 않았다 — SYSTEM_PROMPT가 LLM_TAG_MAX를 그대로 담고 있어 이거 하나로 충분).
+    토큰 사용량은 run 단위 사이드카(`*.token_usage.json`)에 저장해두고, 캐시를 쓰든 새로
+    계산하든 매 run의 사용량을 항상 더한다 (재리뷰로 발견: run 중 일부만 재계산하면
+    캐시로 읽은 run의 과거 사용량이 통째로 빠져 기록이 실제보다 줄어들었다 — "이번에
+    새로 쓴 토큰만 더한다"는 이전 방식은 완전 캐시 히트든 부분 캐시 히트든 둘 다 부정확
+    했다. run별로 저장해두면 어느 조합이든 합산만 하면 항상 정확하다).
     두 번 실행하는 것은 비결정성(consistency)을 재기 위함이며, 승자 모델의 태그는
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
@@ -188,10 +193,6 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
     input_hash = _content_hash(SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *category_codes)
 
-    selection_path = RESULTS_DIR / "llm_model_selection.json"
-    prev_selection = json.loads(selection_path.read_text(encoding="utf-8")) if selection_path.exists() else {}
-    prev_usage: dict[str, dict[str, int]] = prev_selection.get("token_usage", {})
-
     dev_metrics: dict[str, dict[str, float]] = {}
     usage_summary: dict[str, dict[str, int]] = {}
     for model_name in OPENAI_LLM_MODEL_CANDIDATES:
@@ -199,26 +200,31 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         safe_name = model_name.replace("/", "_")
         runs: list[dict[str, list[str]]] = []
         total_input_tokens = total_output_tokens = 0
-        any_recomputed = False
         for run_index in range(LLM_CONSISTENCY_RUNS):
             run_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.json"
             hash_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.input_hash"
+            usage_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.token_usage.json"
             if not args.force and run_path.exists() and _cached_hash_matches(hash_path, input_hash):
                 tags_by_id = json.loads(run_path.read_text(encoding="utf-8"))
+                run_usage = json.loads(usage_path.read_text(encoding="utf-8")) if usage_path.exists() else {"input_tokens": 0, "output_tokens": 0}
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 캐시 사용 (재계산하려면 --force)")
             else:
-                any_recomputed = True
                 tags_by_id = {}
+                run_input_tokens = run_output_tokens = 0
                 for creator in creators:
                     result = tagger.tag(creator.input_text())
                     tags_by_id[creator.id] = list(result.tags)
-                    total_input_tokens += result.input_tokens
-                    total_output_tokens += result.output_tokens
+                    run_input_tokens += result.input_tokens
+                    run_output_tokens += result.output_tokens
+                run_usage = {"input_tokens": run_input_tokens, "output_tokens": run_output_tokens}
                 with run_path.open("w", encoding="utf-8") as f:
                     json.dump(tags_by_id, f, ensure_ascii=False, indent=2)
                 hash_path.write_text(input_hash, encoding="utf-8")
+                usage_path.write_text(json.dumps(run_usage), encoding="utf-8")
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 완료")
             runs.append(tags_by_id)
+            total_input_tokens += run_usage["input_tokens"]
+            total_output_tokens += run_usage["output_tokens"]
 
         first_run = {cid: frozenset(tags) for cid, tags in runs[0].items()}
         dev_tags = {cid: tags for cid, tags in first_run.items() if cid in dev_ids}
@@ -230,13 +236,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
         }
         second_run = {cid: frozenset(tags) for cid, tags in runs[1].items()}
         dev_metrics[model_name]["consistency"] = consistency_rate(first_run, second_run)
-        # 이번 실행에서 API를 한 번도 안 불렀으면(둘 다 캐시 히트) 0으로 덮어쓰지 않고
-        # 이전에 기록된 누적 사용량을 그대로 유지한다 (재리뷰로 발견: 캐시 재실행 때마다
-        # 0으로 덮여 실제 누적 비용을 잃어버렸다 — e4_embedding.json과 같은 보존 패턴).
-        if any_recomputed:
-            usage_summary[model_name] = {"input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
-        else:
-            usage_summary[model_name] = prev_usage.get(model_name, {"input_tokens": 0, "output_tokens": 0})
+        usage_summary[model_name] = {"input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
 
     selected = pick_llm_model(dev_metrics)
     selection = {"selected_model": selected, "dev_metrics": dev_metrics, "token_usage": usage_summary}
