@@ -16,13 +16,14 @@ from pathlib import Path
 
 import numpy as np
 
-from src.clients import BgeEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger
+from src.clients import LocalEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger
 from src.config import (
     CACHE_DIR,
     JUDGE_SHUFFLE_SEED,
     JUDGE_TOP_K,
     LLM_CONSISTENCY_RUNS,
     LLM_TAG_MAX,
+    LOCAL_EMBEDDING_MODELS,
     OPENAI_JUDGE_MODEL,
     OPENAI_JUDGE_MODEL_PRICE,
     OPENAI_LLM_MODEL_CANDIDATES,
@@ -46,7 +47,7 @@ from src.tagging import (
     unclassified_rate,
 )
 
-EMBEDDING_MODEL_KEYS = ("text-embedding-3-small", "bge-m3")
+EMBEDDING_MODEL_KEYS = ("text-embedding-3-small", "bge-m3", "kure-v1", "qwen3-embedding-0.6b")
 BONUS_GRID = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
@@ -54,8 +55,8 @@ def _embedding_client(key: str):
     """설정 키로 임베딩 클라이언트를 만든다."""
     if key == "text-embedding-3-small":
         return OpenAIEmbeddingClient()
-    if key == "bge-m3":
-        return BgeEmbeddingClient()
+    if key in LOCAL_EMBEDDING_MODELS:
+        return LocalEmbeddingClient(key)
     raise ValueError(f"알 수 없는 임베딩 모델 키: {key}")
 
 
@@ -72,7 +73,7 @@ def _load_vectors(path: Path) -> tuple[list[str], np.ndarray]:
 
 
 def cmd_embed(args: argparse.Namespace) -> None:
-    """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 두 임베딩 모델로 인코딩한다.
+    """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 EMBEDDING_MODEL_KEYS의 모델들로 인코딩한다.
 
     모델별로 저장된 벡터 파일이 이미 있으면 API를 다시 부르지 않고 건너뛴다
     (리뷰 P2: 재실행 시 무조건 다시 호출하던 문제 수정). `--force`를 주면 강제로 다시 계산한다.
@@ -255,7 +256,7 @@ def cmd_select_params(_: argparse.Namespace) -> None:
 
 
 def cmd_candidates(_: argparse.Namespace) -> None:
-    """11개 설정 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
+    """설정(임베딩 모델 x 방식) 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
     categories = load_categories()
     creators = load_creators()
     declared_by_id = {c.id: frozenset(c.declared) for c in creators}
@@ -391,7 +392,7 @@ def cmd_report(_: argparse.Namespace) -> None:
         confusions = sorted(confusion_pairs(test_ranked, test_gold).items(), key=lambda kv: -kv[1])[:5]
         print(f"   주요 혼동 쌍(정답->예측1등): {confusions}")
 
-    print("\n=== E3. 대표 사례 (top-5, 11개 설정 전체) ===")
+    print("\n=== E3. 대표 사례 (top-5, 설정 전체) ===")
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
 
