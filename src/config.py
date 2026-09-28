@@ -43,6 +43,10 @@ LOCAL_EMBEDDING_MODELS = {
     "qwen3-embedding-0.6b": {"model_name": "Qwen/Qwen3-Embedding-0.6B", "dim": 1024},
 }
 
+# M5(bge-m3 M2 + 재정렬)용 cross-encoder 리랭커. 임베딩처럼 벡터를 미리 만들어두지 않고
+# (쿼리, 후보) 쌍을 직접 채점하므로 M2가 이미 추린 후보군(TOP_N_STORED)에만 적용한다.
+RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+
 # M4 LLM 태깅 후보. dev 정확도로 하나를 골라 OPENAI_LLM_MODEL_SELECTED에 기록한다.
 OPENAI_LLM_MODEL_CANDIDATES = {
     "gpt-5.4-nano-2026-03-17": {"input_price": 0.20, "output_price": 1.25, "supports_temperature_zero": True},

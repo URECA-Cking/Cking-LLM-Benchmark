@@ -265,6 +265,34 @@ def test_cmd_spot_check_samples_when_pool_exceeds_sample_size(tmp_path, monkeypa
     assert {r["pair_id"] for r in rows_again} == {r["pair_id"] for r in rows}
 
 
+class _FakeReranker:
+    """(쿼리, 후보) 텍스트를 그대로 점수로 쓴다 — 후보 텍스트 끝 숫자가 클수록 높은 점수."""
+
+    def score(self, pairs: list[tuple[str, str]]) -> list[float]:
+        return [float(candidate_text[-1]) for _, candidate_text in pairs]
+
+
+def test_rerank_bge_m2_candidates_reorders_pool_by_reranker_score() -> None:
+    ids = ["q", "a1", "a2", "a3"]
+    # 코사인 기준으로는 a1 > a2 > a3 순이지만, 가짜 리랭커는 텍스트 끝자리로 점수를 매겨 뒤집는다.
+    # 대각선은 -inf로 둬 top_n이 자기 자신을 제외하게 한다(실제 cosine_matrix와 동일한 관례).
+    cosine = np.array(
+        [
+            [-np.inf, 0.9, 0.8, 0.7],
+            [0.9, -np.inf, 0.5, 0.5],
+            [0.8, 0.5, -np.inf, 0.5],
+            [0.7, 0.5, 0.5, -np.inf],
+        ]
+    )
+    text_by_id = {"q": "query text 0", "a1": "candidate text 1", "a2": "candidate text 2", "a3": "candidate text 9"}
+
+    result = pipeline._rerank_bge_m2_candidates(ids, cosine, text_by_id, _FakeReranker(), pool_size=3)
+
+    ranked_ids = [cid for cid, _ in result["q"]]
+    assert ranked_ids == ["a3", "a2", "a1"]  # 코사인 순위가 아니라 리랭커 점수 순
+    assert result["q"][0][1] == 9.0
+
+
 def test_save_and_load_vectors_round_trip(tmp_path) -> None:
     path = tmp_path / "vectors.npz"
     ids = ["a", "b", "c"]

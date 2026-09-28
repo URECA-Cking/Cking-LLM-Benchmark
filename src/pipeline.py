@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.clients import LocalEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger
+from src.clients import LocalEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger, RerankerClient
 from src.config import (
     CACHE_DIR,
     JUDGE_SHUFFLE_SEED,
@@ -280,6 +280,23 @@ def cmd_select_params(_: argparse.Namespace) -> None:
         json.dump(params, f, ensure_ascii=False, indent=2)
 
 
+def _rerank_bge_m2_candidates(
+    ids: list[str], cosine: np.ndarray, text_by_id: dict[str, str], reranker: RerankerClient, pool_size: int
+) -> dict[str, list[list]]:
+    """M2(bge-m3) 코사인으로 추린 후보(pool_size명)를 cross-encoder로 다시 채점·정렬한다 (M5).
+
+    리랭커는 100x100 행렬을 만들지 않는다 — 이미 추린 소수 후보에만 쌍별로 추론한다.
+    """
+    result: dict[str, list[list]] = {}
+    for i, qid in enumerate(ids):
+        pool = top_n(cosine, ids, i, pool_size)
+        pairs = [(text_by_id[qid], text_by_id[cid]) for cid, _ in pool]
+        scores = reranker.score(pairs)
+        ranked = sorted(zip((cid for cid, _ in pool), scores), key=lambda item: -item[1])
+        result[qid] = [[cid, score] for cid, score in ranked]
+    return result
+
+
 def cmd_candidates(_: argparse.Namespace) -> None:
     """설정(임베딩 모델 x 방식) 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
     categories = load_categories()
@@ -318,6 +335,11 @@ def cmd_candidates(_: argparse.Namespace) -> None:
 
         for method_id, matrix in matrices.items():
             all_candidates[method_id] = {cid: top_n(matrix, ids, i, TOP_N_STORED) for i, cid in enumerate(ids)}
+
+        if key == "bge-m3":
+            text_by_id = {c.id: c.input_text() for c in creators}
+            reranker = RerankerClient()
+            all_candidates["M5_bge-m3"] = _rerank_bge_m2_candidates(ids, cosine, text_by_id, reranker, TOP_N_STORED)
 
     with (RESULTS_DIR / "candidates.json").open("w", encoding="utf-8") as f:
         json.dump(all_candidates, f, ensure_ascii=False, indent=2)
