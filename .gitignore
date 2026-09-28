@@ -1,0 +1,13 @@
+# 시크릿
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# 모델 호출 결과 캐시 (재생성 가능, 크기 큼)
+cache/
+
+# OS
+.DS_Store
