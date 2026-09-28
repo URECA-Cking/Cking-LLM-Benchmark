@@ -31,7 +31,7 @@ from src.config import (
     TOP_N_STORED,
 )
 from src.data import Creator, dev_creators, load_categories, load_creators, query_creators
-from src.judge import build_judge_pairs, load_existing_scores, shuffle_rows, write_judge_sheet, write_provenance
+from src.judge import build_judge_pairs, load_existing_scores, pair_text_hash, shuffle_rows, write_judge_sheet, write_provenance
 from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
 from src.spot_check import agreement_stats, select_pairwise_symmetric_disagreement
 from src.tagging import (
@@ -327,6 +327,7 @@ def cmd_judge_sheet(_: argparse.Namespace) -> None:
     """쿼리 30명의 설정별 상위 5명을 합집합으로 모아 블라인드 판정 시트를 만든다."""
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
+    text_by_id = {c.id: c.input_text() for c in creators}
 
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
@@ -336,7 +337,7 @@ def cmd_judge_sheet(_: argparse.Namespace) -> None:
         for qid in query_ids:
             top5_by_query[qid][method_id] = [tuple(item) for item in by_creator[qid][:JUDGE_TOP_K]]
 
-    rows, provenance = build_judge_pairs(top5_by_query)
+    rows, provenance = build_judge_pairs(top5_by_query, text_by_id)
     rows = shuffle_rows(rows, seed=JUDGE_SHUFFLE_SEED)
     write_judge_sheet(rows, RESULTS_DIR / "judge_sheet.csv")
     write_provenance(provenance, RESULTS_DIR / "judge_provenance.csv")
@@ -352,9 +353,10 @@ def cmd_auto_judge(_: argparse.Namespace) -> None:
     확인을 위해 일부를 직접 재판정해보는 것을 권장한다.
     """
     path = RESULTS_DIR / "judge_sheet.csv"
-    fieldnames = ["pair_id", "query_id", "candidate_id", "score"]
     with path.open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames  # 파일의 실제 헤더를 그대로 써서 text_hash 열을 지우지 않는다
+        rows = list(reader)
 
     creators_by_id = {c.id: c for c in load_creators()}
     judge = OpenAIJudge(model=OPENAI_JUDGE_MODEL)
@@ -508,6 +510,7 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
     """
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
+    text_by_id = {c.id: c.input_text() for c in creators}
 
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
@@ -530,7 +533,13 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
         pairs = random.Random(SPOT_CHECK_SAMPLE_SEED).sample(pairs, SPOT_CHECK_SAMPLE_SIZE)
 
     rows = [
-        {"pair_id": f"{qid}::{cid}", "query_id": qid, "candidate_id": cid, "score": ""}
+        {
+            "pair_id": f"{qid}::{cid}",
+            "query_id": qid,
+            "candidate_id": cid,
+            "score": "",
+            "text_hash": pair_text_hash(text_by_id[qid], text_by_id[cid]),
+        }
         for qid, cid in pairs
     ]
     write_judge_sheet_rows(rows, RESULTS_DIR / "spot_check.csv")
@@ -568,18 +577,24 @@ def cmd_spot_check_report(_: argparse.Namespace) -> None:
 
 
 def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
-    """spot_check.csv 등, judge_sheet.csv와 같은 4열 형식으로 판정 시트를 새로 쓴다.
+    """spot_check.csv 등, judge_sheet.csv와 같은 5열 형식(text_hash 포함)으로 판정 시트를 새로 쓴다.
 
-    같은 경로에 이미 채워진 판정이 있으면 pair_id가 같은 행은 그 점수를 이어받는다
-    (리뷰 P1과 동일한 문제: spot-check 재실행 시 기존 판정이 사라지던 것 수정).
+    같은 경로에 이미 채워진 판정이 있고 pair_id·text_hash가 둘 다 같으면 점수를 이어받는다
+    (리뷰 P1과 동일한 문제: spot-check 재실행 시 기존 판정이 사라지던 것 수정. 재리뷰 지적:
+    pair_id만 같다고 보존하면 크리에이터 텍스트가 바뀐 경우 예전 텍스트로 매긴 점수가 남을
+    수 있어, text_hash가 다르거나 비어 있으면 점수를 비워 재판정하게 한다). rows의 각 항목은
+    "text_hash" 키를 포함해야 한다.
     """
     existing = load_existing_scores(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score"])
+        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score", "text_hash"])
         writer.writeheader()
         for row in rows:
-            writer.writerow({**row, "score": existing.get(row["pair_id"], row["score"])})
+            text_hash = row.get("text_hash", "")
+            prev = existing.get(row["pair_id"])
+            keep = bool(text_hash) and prev is not None and prev[1] == text_hash
+            writer.writerow({**row, "score": prev[0] if keep else row["score"], "text_hash": text_hash})
 
 
 def main() -> None:

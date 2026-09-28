@@ -174,7 +174,7 @@ class _FakeJudge:
 
 def _write_sheet(path, rows: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score"])
+        writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score", "text_hash"])
         writer.writeheader()
         writer.writerows(rows)
 
@@ -203,21 +203,21 @@ def test_cmd_auto_judge_fills_only_empty_scores_and_writes_report(tmp_path, monk
 
 
 def test_write_judge_sheet_rows_preserves_existing_scores(tmp_path) -> None:
-    """리뷰 P1 회귀 테스트: spot-check 재실행도 이미 채운 판정을 잃으면 안 된다."""
+    """리뷰 P1 회귀 테스트: spot-check 재실행도 이미 채운 판정을 잃으면 안 된다(텍스트가 안 바뀌었다면)."""
     path = tmp_path / "spot_check.csv"
     _write_sheet(
         path,
         [
-            {"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": "1"},
-            {"pair_id": "q1::b", "query_id": "q1", "candidate_id": "b", "score": ""},
+            {"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": "1", "text_hash": "hash-a"},
+            {"pair_id": "q1::b", "query_id": "q1", "candidate_id": "b", "score": "", "text_hash": "hash-b"},
         ],
     )
 
     pipeline.write_judge_sheet_rows(
         [
-            {"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": ""},
-            {"pair_id": "q1::b", "query_id": "q1", "candidate_id": "b", "score": ""},
-            {"pair_id": "q1::c", "query_id": "q1", "candidate_id": "c", "score": ""},
+            {"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": "", "text_hash": "hash-a"},
+            {"pair_id": "q1::b", "query_id": "q1", "candidate_id": "b", "score": "", "text_hash": "hash-b"},
+            {"pair_id": "q1::c", "query_id": "q1", "candidate_id": "c", "score": "", "text_hash": "hash-c"},
         ],
         path,
     )
@@ -226,6 +226,24 @@ def test_write_judge_sheet_rows_preserves_existing_scores(tmp_path) -> None:
     assert result["q1::a"] == "1"  # 기존 판정 보존
     assert result["q1::b"] == ""
     assert result["q1::c"] == ""
+
+
+def test_write_judge_sheet_rows_clears_score_when_text_hash_changes(tmp_path) -> None:
+    """PR #5 재리뷰 회귀 테스트: pair_id가 같아도 text_hash가 다르면 예전 점수를 버려야 한다.
+
+    예: X01의 bio가 바뀌어도 id는 그대로라, pair_id만 보면 예전 텍스트로 매긴 점수가
+    새 텍스트에도 그대로 쓰인 것처럼 남을 수 있었다.
+    """
+    path = tmp_path / "spot_check.csv"
+    _write_sheet(path, [{"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": "2", "text_hash": "hash-old"}])
+
+    pipeline.write_judge_sheet_rows(
+        [{"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": "", "text_hash": "hash-new"}],
+        path,
+    )
+
+    result = {r["pair_id"]: r["score"] for r in csv.DictReader(path.open(encoding="utf-8"))}
+    assert result["q1::a"] == ""  # 텍스트가 바뀌어 재판정 대상이 됨
 
 
 def test_cmd_spot_check_samples_when_pool_exceeds_sample_size(tmp_path, monkeypatch) -> None:
@@ -240,19 +258,31 @@ def test_cmd_spot_check_samples_when_pool_exceeds_sample_size(tmp_path, monkeypa
         )
         for i in range(3)
     ]
-    monkeypatch.setattr(pipeline, "load_creators", lambda: fake_queries)
+
+    def _fake_candidate(cid: str) -> Creator:
+        return Creator(
+            id=cid, name=cid, bio=f"bio of {cid}", events=(), subtopic="", gold=(), declared=(),
+            written_by="test", note="", split="test", is_query=False,
+        )
 
     candidates: dict[str, dict[str, list[list]]] = {
         pipeline.SPOT_CHECK_TARGET: {},
         pipeline.SPOT_CHECK_BASELINES[0]: {},
         pipeline.SPOT_CHECK_BASELINES[1]: {},
     }
+    candidate_ids: set[str] = set()
     for i, q in enumerate(fake_queries):
         # target과 baseline이 완전히 다른 후보를 골라, 쿼리당 여러 불일치 쌍이 나오게 한다.
-        candidates[pipeline.SPOT_CHECK_TARGET][q.id] = [[f"a{i}{j}", 1.0] for j in range(5)]
+        a_ids = [f"a{i}{j}" for j in range(5)]
+        b_ids = [f"b{i}{j}" for j in range(5)]
+        candidates[pipeline.SPOT_CHECK_TARGET][q.id] = [[cid, 1.0] for cid in a_ids]
         for baseline in pipeline.SPOT_CHECK_BASELINES:
-            candidates[baseline][q.id] = [[f"b{i}{j}", 1.0] for j in range(5)]
+            candidates[baseline][q.id] = [[cid, 1.0] for cid in b_ids]
+        candidate_ids.update(a_ids + b_ids)
     (tmp_path / "candidates.json").write_text(json.dumps(candidates), encoding="utf-8")
+
+    all_fake_creators = fake_queries + [_fake_candidate(cid) for cid in candidate_ids]
+    monkeypatch.setattr(pipeline, "load_creators", lambda: all_fake_creators)
 
     pipeline.cmd_spot_check(None)
 
