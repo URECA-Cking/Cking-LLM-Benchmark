@@ -18,9 +18,13 @@ CREATORS_CSV = DATA_DIR / "creators.csv"
 SPLIT_CSV = DATA_DIR / "split.csv"
 
 # 실험 착수 시 확정한 데이터. 값이 바뀌면 README와 함께 갱신한다.
-CREATORS_CSV_SHA256 = "70472395d9154f1c51a161d89514664d2cb03188a34a50a7216c99999ca8f5dd"
-# 2026-09-28: 85개 행에서 누락됐던 declared 칸(빈 문자열)을 명시적으로 채운 서식 수정.
-# gold·declared 값 자체는 바뀌지 않았다 (csv.DictReader가 None -> ""로 취급하던 것을 파일에 반영).
+CREATORS_CSV_SHA256 = "e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a"
+# 2026-09-28 (1차): 85개 행에서 누락됐던 declared 칸(빈 문자열)을 명시적으로 채운 서식 수정.
+# 2026-09-28 (2차, 리뷰 P2): csv 모듈이 기본으로 쓰는 CRLF 줄바꿈을 LF로 정규화(.gitattributes 추가).
+# Windows 클론에서 Git 자동 줄바꿈 변환과 겹쳐 무결성 검사가 실패하는 문제였다.
+# 2026-09-28 (3차, 리뷰 P2): X01·X02의 bio에 경품 문구를 직접 포함시켰다. events는 bio가 있으면
+# input_text()에 전달되지 않아, "경품 잡음에 강하다"던 E3 사례가 실제로는 잡음을 넣어본 적이 없었다.
+# 세 수정 모두 X01·X02 bio 외 gold·declared 값은 바뀌지 않았다.
 SPLIT_CSV_SHA256 = "cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6"
 
 TAXONOMY_VERSION = "v0.1"

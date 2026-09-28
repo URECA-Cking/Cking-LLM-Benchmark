@@ -35,6 +35,32 @@ def select_disagreement_pairs(
     return pairs
 
 
+def select_pairwise_symmetric_disagreement(
+    candidates: dict[str, dict[str, list[list]]],
+    query_ids: Iterable[str],
+    method_a: str,
+    method_b: str,
+    k: int = 5,
+) -> list[tuple[str, str]]:
+    """method_a·method_b의 top-k가 서로 다른 (query, candidate) 쌍을 **양쪽** 차집합으로 모은다.
+
+    `select_disagreement_pairs`(target − baseline 합집합)는 "M4=A, M3=B, R2=A"처럼 다른 baseline이
+    같은 후보를 가지고 있으면 실제 차이를 놓친다(리뷰 P2). 이 함수는 두 방식을 정확히 한 쌍씩 비교해
+    한쪽에만 있는 후보(대칭차집합, A만 또는 B만)를 전부 잡아낸다 — A가 B에서 뺀 것과 더한 것 둘 다.
+    """
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for query_id in query_ids:
+        top_a = {item[0] for item in candidates[method_a][query_id][:k]}
+        top_b = {item[0] for item in candidates[method_b][query_id][:k]}
+        for candidate_id in top_a ^ top_b:
+            pair = (query_id, candidate_id)
+            if pair not in seen:
+                seen.add(pair)
+                pairs.append(pair)
+    return pairs
+
+
 def agreement_stats(human: dict[tuple[str, str], int], auto: dict[tuple[str, str], int]) -> dict[str, float]:
     """같은 쌍에 대한 사람 점수와 자동 점수를 비교해 일치율을 계산한다."""
     keys = [k for k in human if k in auto]

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
 from pathlib import Path
 
 import numpy as np
@@ -29,9 +30,9 @@ from src.config import (
     TOP_N_STORED,
 )
 from src.data import Creator, dev_creators, load_categories, load_creators, query_creators
-from src.judge import build_judge_pairs, shuffle_rows, write_judge_sheet, write_provenance
+from src.judge import build_judge_pairs, load_existing_scores, shuffle_rows, write_judge_sheet, write_provenance
 from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
-from src.spot_check import agreement_stats, select_disagreement_pairs
+from src.spot_check import agreement_stats, select_pairwise_symmetric_disagreement
 from src.tagging import (
     confusion_pairs,
     consistency_rate,
@@ -70,12 +71,14 @@ def _load_vectors(path: Path) -> tuple[list[str], np.ndarray]:
     return list(data["ids"]), data["vectors"]
 
 
-def cmd_embed(_: argparse.Namespace) -> None:
+def cmd_embed(args: argparse.Namespace) -> None:
     """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 두 임베딩 모델로 인코딩한다.
 
+    모델별로 저장된 벡터 파일이 이미 있으면 API를 다시 부르지 않고 건너뛴다
+    (리뷰 P2: 재실행 시 무조건 다시 호출하던 문제 수정). `--force`를 주면 강제로 다시 계산한다.
     카테고리 이름 자체는 크리에이터 입력 텍스트에 없으므로, zero-shot 태깅이 자기
     분야를 되맞히는 순환이 생기지 않는다. 소요 시간·벡터 크기·비용은 E4(운영 지표)로
-    `results/e4_embedding.json`에 남긴다.
+    `results/e4_embedding.json`에 남긴다(이번 실행에서 새로 계산한 모델만 기록됨).
     """
     import time
 
@@ -88,8 +91,15 @@ def cmd_embed(_: argparse.Namespace) -> None:
     category_codes = [c.code for c in categories]
     category_texts = [c.description for c in categories]
 
-    e4_report: dict[str, dict] = {}
+    e4_path = RESULTS_DIR / "e4_embedding.json"
+    e4_report: dict[str, dict] = json.loads(e4_path.read_text(encoding="utf-8")) if e4_path.exists() else {}
     for key in EMBEDDING_MODEL_KEYS:
+        creators_path = CACHE_DIR / f"creators_{key}.npz"
+        categories_path = CACHE_DIR / f"categories_{key}.npz"
+        if not args.force and creators_path.exists() and categories_path.exists():
+            print(f"[embed] {key}: 캐시된 벡터 사용 (재계산하려면 --force)")
+            continue
+
         client = _embedding_client(key)
         started = time.perf_counter()
         creator_vectors = client.embed(creator_texts)
@@ -98,8 +108,8 @@ def cmd_embed(_: argparse.Namespace) -> None:
         category_tokens = getattr(client, "last_input_tokens", None)
         elapsed_seconds = time.perf_counter() - started
 
-        _save_vectors(CACHE_DIR / f"creators_{key}.npz", creator_ids, creator_vectors)
-        _save_vectors(CACHE_DIR / f"categories_{key}.npz", category_codes, category_vectors)
+        _save_vectors(creators_path, creator_ids, creator_vectors)
+        _save_vectors(categories_path, category_codes, category_vectors)
 
         total_tokens = None if creator_tokens is None or category_tokens is None else creator_tokens + category_tokens
         cost_usd = None if total_tokens is None else total_tokens / 1_000_000 * OPENAI_EMBEDDING_PRICE_PER_1M
@@ -115,13 +125,16 @@ def cmd_embed(_: argparse.Namespace) -> None:
             f"dim={creator_vectors.shape[1]}, {elapsed_seconds:.1f}초"
         )
 
-    with (RESULTS_DIR / "e4_embedding.json").open("w", encoding="utf-8") as f:
+    with e4_path.open("w", encoding="utf-8") as f:
         json.dump(e4_report, f, ensure_ascii=False, indent=2)
 
 
-def cmd_tag_llm(_: argparse.Namespace) -> None:
+def cmd_tag_llm(args: argparse.Namespace) -> None:
     """LLM 태깅 후보 모델들을 크리에이터 전원에게 2회씩 돌리고, dev 정확도로 하나를 고른다.
 
+    run 파일(`llm_tags_{model}_run{n}.json`)이 이미 있으면 그 run은 다시 호출하지 않고
+    읽어서 재사용한다 (리뷰 P2: 재실행 시 전체를 다시 태깅하던 문제 수정. 크리에이터
+    단위 재개는 아니고 run 단위다 — `--force`를 주면 전부 다시 계산한다).
     두 번 실행하는 것은 비결정성(consistency)을 재기 위함이며, 승자 모델의 태그는
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
@@ -135,22 +148,25 @@ def cmd_tag_llm(_: argparse.Namespace) -> None:
     usage_summary: dict[str, dict[str, int]] = {}
     for model_name in OPENAI_LLM_MODEL_CANDIDATES:
         tagger = OpenAITagger(model=model_name, category_codes=category_codes)
+        safe_name = model_name.replace("/", "_")
         runs: list[dict[str, list[str]]] = []
         total_input_tokens = total_output_tokens = 0
         for run_index in range(LLM_CONSISTENCY_RUNS):
-            tags_by_id: dict[str, list[str]] = {}
-            for creator in creators:
-                result = tagger.tag(creator.input_text())
-                tags_by_id[creator.id] = list(result.tags)
-                total_input_tokens += result.input_tokens
-                total_output_tokens += result.output_tokens
+            run_path = CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.json"
+            if not args.force and run_path.exists():
+                tags_by_id = json.loads(run_path.read_text(encoding="utf-8"))
+                print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 캐시 사용 (재계산하려면 --force)")
+            else:
+                tags_by_id = {}
+                for creator in creators:
+                    result = tagger.tag(creator.input_text())
+                    tags_by_id[creator.id] = list(result.tags)
+                    total_input_tokens += result.input_tokens
+                    total_output_tokens += result.output_tokens
+                with run_path.open("w", encoding="utf-8") as f:
+                    json.dump(tags_by_id, f, ensure_ascii=False, indent=2)
+                print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 완료")
             runs.append(tags_by_id)
-            print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 완료")
-
-        safe_name = model_name.replace("/", "_")
-        for run_index, tags_by_id in enumerate(runs):
-            with (CACHE_DIR / f"llm_tags_{safe_name}_run{run_index}.json").open("w", encoding="utf-8") as f:
-                json.dump(tags_by_id, f, ensure_ascii=False, indent=2)
 
         first_run = {cid: frozenset(tags) for cid, tags in runs[0].items()}
         dev_tags = {cid: tags for cid, tags in first_run.items() if cid in dev_ids}
@@ -191,12 +207,18 @@ def _zero_shot_tags_for_key(key: str, creators: list[Creator], categories, tau_c
 
 
 def cmd_select_params(_: argparse.Namespace) -> None:
-    """zero-shot tau와, 세 태그 소스(zero-shot, LLM, 입력분야) 각각의 bonus를 dev로 고정한다."""
+    """zero-shot tau와, 세 태그 소스(zero-shot, LLM, 입력분야) 각각의 bonus를 dev로만 고정한다.
+
+    bonus 선택은 dev 크리에이터끼리의 후보 pool·정답만 사용한다 (dev×dev 부분 행렬).
+    test 크리에이터가 후보나 relevance 정답으로 섞이면, 쿼리를 dev로 제한해도 test 라벨이
+    선택에 영향을 주는 누수가 생기기 때문이다 (2026-09-28 리뷰로 발견, dev 입력은 그대로
+    두고 test gold만 바꿔도 선택 bonus가 달라지는 것으로 재현됨).
+    """
     categories = load_categories()
     creators = load_creators()
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
     declared_by_id = {c.id: frozenset(c.declared) for c in creators}
-    dev_ids_ordered = [c.id for c in dev_creators(creators)]
+    dev_id_set = {c.id for c in dev_creators(creators)}
 
     with (RESULTS_DIR / "llm_model_selection.json").open(encoding="utf-8") as f:
         llm_selection = json.load(f)
@@ -210,15 +232,20 @@ def cmd_select_params(_: argparse.Namespace) -> None:
     for key in EMBEDDING_MODEL_KEYS:
         ids, _, zero_shot_tags, tau = _zero_shot_tags_for_key(key, creators, categories)
         _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-        cosine = cosine_matrix(vectors)
 
-        zero_shot_tag_sets = [zero_shot_tags[cid] for cid in ids]
-        llm_tag_sets = [llm_tags_by_id[cid] for cid in ids]
-        declared_sets = [declared_by_id[cid] for cid in ids]
+        # dev만 남긴 부분 행렬로 bonus를 고른다. test 벡터·gold는 이 시점에 전혀 등장하지 않는다.
+        dev_index = [i for i, cid in enumerate(ids) if cid in dev_id_set]
+        dev_ids_ordered = [ids[i] for i in dev_index]
+        dev_cosine = cosine_matrix(vectors[dev_index])
 
-        bonus_m3 = select_bonus(cosine, ids, zero_shot_tag_sets, gold_by_id, dev_ids_ordered, BONUS_GRID)
-        bonus_m4 = select_bonus(cosine, ids, llm_tag_sets, gold_by_id, dev_ids_ordered, BONUS_GRID)
-        bonus_r2 = select_bonus(cosine, ids, declared_sets, gold_by_id, dev_ids_ordered, BONUS_GRID)
+        dev_zero_shot_tag_sets = [zero_shot_tags[cid] for cid in dev_ids_ordered]
+        dev_llm_tag_sets = [llm_tags_by_id[cid] for cid in dev_ids_ordered]
+        dev_declared_sets = [declared_by_id[cid] for cid in dev_ids_ordered]
+        dev_gold_by_id = {cid: gold_by_id[cid] for cid in dev_ids_ordered}
+
+        bonus_m3 = select_bonus(dev_cosine, dev_ids_ordered, dev_zero_shot_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
+        bonus_m4 = select_bonus(dev_cosine, dev_ids_ordered, dev_llm_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
+        bonus_r2 = select_bonus(dev_cosine, dev_ids_ordered, dev_declared_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
 
         params["per_embedding"][key] = {"tau": tau, "bonus_m3": bonus_m3, "bonus_m4": bonus_m4, "bonus_r2": bonus_r2}
         print(f"[select-params] {key}: tau={tau:.4f} bonus_m3={bonus_m3} bonus_m4={bonus_m4} bonus_r2={bonus_r2}")
@@ -440,14 +467,19 @@ def cmd_score_judgments(_: argparse.Namespace) -> None:
 
 SPOT_CHECK_TARGET = "M4_bge-m3"
 SPOT_CHECK_BASELINES = ["M3_bge-m3", "R2_bge-m3"]
+SPOT_CHECK_SAMPLE_SIZE = 30  # 141쌍 전부는 부담이 커서 무작위 표본만 사람이 본다 (2026-09-28 결정)
+SPOT_CHECK_SAMPLE_SEED = 20260928
 
 
 def cmd_spot_check(_: argparse.Namespace) -> None:
-    """자동 판정 전체(556쌍) 대신, target_method가 baseline과 다르게 고른 후보만 골라
+    """target_method와 각 baseline을 양쪽 차집합(대칭차집합)으로 비교해 다른 후보만 골라
 
-    소규모 시트(results/spot_check.csv)를 만든다. 이 쌍들이 target_method 점수를
-    baseline보다 높게 만드는 실제 원인이라, 여기만 사람이 다시 봐도 결정에 필요한
-    확인은 대부분 된다. `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
+    소규모 시트(results/spot_check.csv)를 만든다. target−baseline 합집합만 보던 이전 방식은
+    "M4=A, M3=B, R2=A"처럼 다른 baseline이 같은 후보를 갖고 있으면 실제 차이를 놓쳤다
+    (리뷰 P2). 지금은 M4 vs M3, M4 vs R2를 각각 정확히 비교해 두 방향(더한 것·뺀 것)을
+    모두 잡는다. 전체 쌍이 SPOT_CHECK_SAMPLE_SIZE보다 많으면 고정 시드로 무작위 표본만
+    남긴다(전수 조사가 아니라 표본 조사임을 결과에 함께 적어야 한다).
+    `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
     """
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
@@ -455,15 +487,27 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
 
-    pairs = select_disagreement_pairs(all_candidates, query_ids, SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, k=JUDGE_TOP_K)
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for baseline in SPOT_CHECK_BASELINES:
+        for pair in select_pairwise_symmetric_disagreement(all_candidates, query_ids, SPOT_CHECK_TARGET, baseline, k=JUDGE_TOP_K):
+            if pair not in seen:
+                seen.add(pair)
+                pairs.append(pair)
+
+    total_found = len(pairs)
+    if total_found > SPOT_CHECK_SAMPLE_SIZE:
+        pairs = random.Random(SPOT_CHECK_SAMPLE_SEED).sample(pairs, SPOT_CHECK_SAMPLE_SIZE)
+
     rows = [
         {"pair_id": f"{qid}::{cid}", "query_id": qid, "candidate_id": cid, "score": ""}
         for qid, cid in pairs
     ]
     write_judge_sheet_rows(rows, RESULTS_DIR / "spot_check.csv")
+    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > len(rows) else ""
     print(
-        f"[spot-check] {SPOT_CHECK_TARGET}가 {SPOT_CHECK_BASELINES}와 다르게 고른 {len(rows)}쌍을 "
-        f"results/spot_check.csv에 저장했습니다.\n"
+        f"[spot-check] {SPOT_CHECK_TARGET}를 {SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
+        f"다른 {len(rows)}쌍{sample_note}을 results/spot_check.csv에 저장했습니다.\n"
         f"python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 "
         f"python3 -m src.pipeline spot-check-report 를 실행하세요."
     )
@@ -494,12 +538,18 @@ def cmd_spot_check_report(_: argparse.Namespace) -> None:
 
 
 def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
-    """spot_check.csv 등, judge_sheet.csv와 같은 4열 형식으로 판정 시트를 새로 쓴다."""
+    """spot_check.csv 등, judge_sheet.csv와 같은 4열 형식으로 판정 시트를 새로 쓴다.
+
+    같은 경로에 이미 채워진 판정이 있으면 pair_id가 같은 행은 그 점수를 이어받는다
+    (리뷰 P1과 동일한 문제: spot-check 재실행 시 기존 판정이 사라지던 것 수정).
+    """
+    existing = load_existing_scores(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["pair_id", "query_id", "candidate_id", "score"])
         writer.writeheader()
-        writer.writerows(rows)
+        for row in rows:
+            writer.writerow({**row, "score": existing.get(row["pair_id"], row["score"])})
 
 
 def main() -> None:
@@ -519,7 +569,11 @@ def main() -> None:
         "spot-check-report": cmd_spot_check_report,
     }
     for name in stages:
-        sub.add_parser(name)
+        stage_parser = sub.add_parser(name)
+        if name in ("embed", "tag-llm"):
+            stage_parser.add_argument(
+                "--force", action="store_true", help="캐시된 결과가 있어도 API를 다시 호출해 새로 계산한다"
+            )
     args = parser.parse_args()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)

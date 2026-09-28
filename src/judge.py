@@ -45,14 +45,29 @@ def shuffle_rows(rows: list[JudgeRow], seed: int) -> list[JudgeRow]:
     return shuffled
 
 
+def load_existing_scores(path: Path) -> dict[str, str]:
+    """이미 있는 판정 시트에서 pair_id별 score를 읽는다. 파일이 없으면 빈 dict를 반환한다."""
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8") as f:
+        return {row["pair_id"]: row["score"] for row in csv.DictReader(f) if row["score"].strip()}
+
+
 def write_judge_sheet(rows: list[JudgeRow], path: Path) -> None:
-    """판정자가 0/1/2점을 적어 넣을 CSV를 만든다. score 열은 비워 둔다."""
+    """판정자가 0/1/2점을 적어 넣을 CSV를 만든다.
+
+    같은 경로에 이미 채워진 판정이 있으면 pair_id가 같은 행은 그 점수를 그대로 이어받는다
+    (리뷰 P1: 재실행 시 기존 사람 판정·유료 자동 판정이 사라지던 문제 수정). 새로 생긴
+    pair_id만 빈 칸으로 남는다.
+    """
+    existing = load_existing_scores(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["pair_id", "query_id", "candidate_id", "score"])
         for row in rows:
-            writer.writerow([row.pair_id, row.query_id, row.candidate_id, row.score])
+            score = existing.get(row.pair_id, row.score)
+            writer.writerow([row.pair_id, row.query_id, row.candidate_id, score])
 
 
 def write_provenance(provenance: dict[str, list[str]], path: Path) -> None:

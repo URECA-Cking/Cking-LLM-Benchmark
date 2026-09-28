@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 
@@ -9,7 +10,8 @@ import numpy as np
 
 import src.pipeline as pipeline
 from src.clients.openai_judge import JudgeResult
-from src.data import load_categories, load_creators
+from src.clients.openai_tagger import TagResult
+from src.data import Creator, load_categories, load_creators
 
 
 class _FakeEmbeddingClient:
@@ -33,7 +35,7 @@ def test_cmd_embed_writes_vectors_for_all_creators_and_categories(tmp_path, monk
     monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
     monkeypatch.setattr(pipeline, "_embedding_client", lambda key: _FakeEmbeddingClient())
 
-    pipeline.cmd_embed(None)
+    pipeline.cmd_embed(argparse.Namespace(force=False))
 
     e4 = json.loads((tmp_path / "e4_embedding.json").read_text(encoding="utf-8"))
     for key in pipeline.EMBEDDING_MODEL_KEYS:
@@ -52,6 +54,56 @@ def test_cmd_embed_writes_vectors_for_all_creators_and_categories(tmp_path, monk
         assert category_vectors.shape == (10, 8)
         # 정규화됐으므로 각 행의 길이는 1이어야 한다.
         assert np.allclose(np.linalg.norm(creator_vectors, axis=1), 1.0, atol=1e-5)
+
+
+def test_cmd_embed_skips_api_call_when_cache_exists(tmp_path, monkeypatch) -> None:
+    """리뷰 P2 회귀 테스트: 캐시된 벡터가 있으면 재실행해도 embed API를 다시 부르지 않는다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    call_count = {"n": 0}
+
+    def counting_client(key: str) -> _FakeEmbeddingClient:
+        call_count["n"] += 1
+        return _FakeEmbeddingClient()
+
+    monkeypatch.setattr(pipeline, "_embedding_client", counting_client)
+
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+    first_call_count = call_count["n"]
+    pipeline.cmd_embed(argparse.Namespace(force=False))  # 재실행
+
+    assert call_count["n"] == first_call_count  # 캐시가 있어 클라이언트를 다시 만들지 않음
+
+    pipeline.cmd_embed(argparse.Namespace(force=True))  # --force는 다시 계산
+    assert call_count["n"] > first_call_count
+
+
+def test_cmd_tag_llm_skips_completed_runs_when_cache_exists(tmp_path, monkeypatch) -> None:
+    """리뷰 P2 회귀 테스트: run 파일이 이미 있으면 그 run은 다시 태깅하지 않는다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+    call_count = {"n": 0}
+
+    class _CountingTagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            call_count["n"] += 1
+            return TagResult(tags=(), input_tokens=1, output_tokens=1)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _CountingTagger)
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+    first_calls = call_count["n"]
+    assert first_calls == 100 * pipeline.LLM_CONSISTENCY_RUNS  # 크리에이터 100명 × run 수
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))  # 재실행
+    assert call_count["n"] == first_calls  # run 파일이 있어 다시 호출하지 않음
+
+    pipeline.cmd_tag_llm(argparse.Namespace(force=True))
+    assert call_count["n"] == first_calls * 2  # --force는 다시 계산
 
 
 class _FakeJudge:
@@ -93,6 +145,69 @@ def test_cmd_auto_judge_fills_only_empty_scores_and_writes_report(tmp_path, monk
     report = json.loads((tmp_path / "auto_judge_report.json").read_text(encoding="utf-8"))
     assert report["judged_count"] == 1  # 이미 채워진 행은 다시 호출하지 않음
     assert report["estimated_cost_usd"] > 0
+
+
+def test_write_judge_sheet_rows_preserves_existing_scores(tmp_path) -> None:
+    """리뷰 P1 회귀 테스트: spot-check 재실행도 이미 채운 판정을 잃으면 안 된다."""
+    path = tmp_path / "spot_check.csv"
+    _write_sheet(
+        path,
+        [
+            {"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": "1"},
+            {"pair_id": "q1::b", "query_id": "q1", "candidate_id": "b", "score": ""},
+        ],
+    )
+
+    pipeline.write_judge_sheet_rows(
+        [
+            {"pair_id": "q1::a", "query_id": "q1", "candidate_id": "a", "score": ""},
+            {"pair_id": "q1::b", "query_id": "q1", "candidate_id": "b", "score": ""},
+            {"pair_id": "q1::c", "query_id": "q1", "candidate_id": "c", "score": ""},
+        ],
+        path,
+    )
+
+    result = {r["pair_id"]: r["score"] for r in csv.DictReader(path.open(encoding="utf-8"))}
+    assert result["q1::a"] == "1"  # 기존 판정 보존
+    assert result["q1::b"] == ""
+    assert result["q1::c"] == ""
+
+
+def test_cmd_spot_check_samples_when_pool_exceeds_sample_size(tmp_path, monkeypatch) -> None:
+    """리뷰 P1 회귀 테스트: 141쌍처럼 표본 크기를 넘으면 SPOT_CHECK_SAMPLE_SIZE로 무작위로 잘라낸다."""
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "SPOT_CHECK_SAMPLE_SIZE", 5)
+
+    fake_queries = [
+        Creator(
+            id=f"q{i}", name=f"q{i}", bio="", events=(), subtopic="", gold=(), declared=(),
+            written_by="test", note="", split="test", is_query=True,
+        )
+        for i in range(3)
+    ]
+    monkeypatch.setattr(pipeline, "load_creators", lambda: fake_queries)
+
+    candidates: dict[str, dict[str, list[list]]] = {
+        pipeline.SPOT_CHECK_TARGET: {},
+        pipeline.SPOT_CHECK_BASELINES[0]: {},
+        pipeline.SPOT_CHECK_BASELINES[1]: {},
+    }
+    for i, q in enumerate(fake_queries):
+        # target과 baseline이 완전히 다른 후보를 골라, 쿼리당 여러 불일치 쌍이 나오게 한다.
+        candidates[pipeline.SPOT_CHECK_TARGET][q.id] = [[f"a{i}{j}", 1.0] for j in range(5)]
+        for baseline in pipeline.SPOT_CHECK_BASELINES:
+            candidates[baseline][q.id] = [[f"b{i}{j}", 1.0] for j in range(5)]
+    (tmp_path / "candidates.json").write_text(json.dumps(candidates), encoding="utf-8")
+
+    pipeline.cmd_spot_check(None)
+
+    rows = list(csv.DictReader((tmp_path / "spot_check.csv").open(encoding="utf-8")))
+    assert len(rows) == 5  # 표본 크기로 잘림 (전체는 3쿼리 * 10쌍 = 30쌍)
+
+    # 시드가 고정돼 있으므로 같은 입력이면 같은 표본이 나와야 한다(재현성).
+    pipeline.cmd_spot_check(None)
+    rows_again = list(csv.DictReader((tmp_path / "spot_check.csv").open(encoding="utf-8")))
+    assert {r["pair_id"] for r in rows_again} == {r["pair_id"] for r in rows}
 
 
 def test_save_and_load_vectors_round_trip(tmp_path) -> None:
