@@ -2,7 +2,7 @@
 
 Ticle(Cking) 2차 MVP **AI 크리에이터 추천**의 임베딩 모델과 추천 방식을 같은 데이터로 비교하는 Python 3.11+ 오프라인 벤치마크입니다. 앱·DB·배치와 무관한 독립 실험 저장소이며, 결과는 **경향 확인용**이라 확정 성능 수치로 발표하지 않습니다. 모든 함수는 역할을 설명하는 한글 docstring을 포함합니다.
 
-## 현재 채택안: 
+## 현재 채택안: `bge-m3` + M4 또는 M3 (공동 1순위 후보, 확정 채택 아님)
 
 실행 결과와 선택 근거는 [`docs/embedding-method-selection.md`](docs/embedding-method-selection.md)에서 확인할 수 있습니다. 처음 이 저장소를 여는 사람은 **직접 실행해보지 않아도** 이 문서만 읽으면 결론을 알 수 있습니다.
 
@@ -58,11 +58,11 @@ python3 -m pytest -q
 ```
 
 ```
-...........................................  [100%]
-43 passed in 3~4s
+................................................................  [100%]
+64 passed in 3~4s
 ```
 
-**43개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**64개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -83,7 +83,7 @@ python3 -m pytest -q
 
 ## 4. 단계별 실행
 
-각 명령은 `results/`(git에 안 올라감) 아래에 결과를 저장합니다. **한 번 실행한 단계는 결과가 캐시되어, 같은 단계를 다시 실행해도 API를 다시 부르지 않습니다** — 중간에 실패해도 처음부터 다시 할 필요 없습니다.
+각 명령은 `results/`(git에 안 올라감) 아래에 결과를 저장합니다. **`embed`·`tag-llm`은 결과 파일이 이미 있으면 재실행해도 API를 다시 부르지 않고 건너뜁니다** — 캐시를 무시하고 새로 계산하려면 `--force`를 붙입니다. 나머지 단계(`select-params`~`report`)는 API를 호출하지 않는 순수 계산이라 매번 다시 실행해도 비용이 들지 않습니다.
 
 ### ① embed — 임베딩 생성 (API 호출, 약 $0.0001, 5초)
 
@@ -96,7 +96,7 @@ python3 -m src.pipeline embed
 [embed] bge-m3: 크리에이터 100명, 카테고리 10개, dim=1024, 1.7초
 ```
 
-`bge-m3`를 **처음 실행할 때만** 모델 가중치(약 2.3GB)를 자동으로 내려받습니다. 몇 분 걸릴 수 있습니다.
+`bge-m3`를 **처음 실행할 때만** 모델 가중치(약 2.3GB)를 자동으로 내려받습니다. 몇 분 걸릴 수 있습니다. 이미 계산된 벡터가 있으면 `[embed] {모델}: 캐시된 벡터 사용 (재계산하려면 --force)`만 찍고 끝납니다.
 
 ### ② tag-llm — LLM 태깅 모델 선택 (API 호출, 약 $0.02, 5~6분)
 
@@ -104,7 +104,7 @@ python3 -m src.pipeline embed
 python3 -m src.pipeline tag-llm
 ```
 
-크리에이터 100명을 **후보 LLM 2종 × 2회씩(총 400번)** 태깅하고, dev 30명 정확도로 더 나은 모델을 자동으로 고릅니다. 2회 태깅하는 이유는 같은 입력에 매번 같은 태그가 나오는지(일관성)를 확인하기 위해서입니다.
+크리에이터 100명을 **후보 LLM 2종 × 2회씩(총 400번)** 태깅하고, dev 30명 정확도로 더 나은 모델을 자동으로 고릅니다. 2회 태깅하는 이유는 같은 입력에 매번 같은 태그가 나오는지(일관성)를 확인하기 위해서입니다. run 파일이 이미 있으면 그 run은 다시 태깅하지 않고 넘어갑니다(`--force`로 재계산).
 
 ```
 [tag-llm] gpt-5.4-nano-2026-03-17 run 1/2 완료
@@ -121,8 +121,8 @@ python3 -m src.pipeline select-params
 ```
 
 ```
-[select-params] text-embedding-3-small: tau=0.2707 bonus_m3=0.1 bonus_m4=0.3 bonus_r2=0.3
-[select-params] bge-m3: tau=0.4801 bonus_m3=0.2 bonus_m4=0.2 bonus_r2=0.2
+[select-params] text-embedding-3-small: tau=0.2707 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
+[select-params] bge-m3: tau=0.4801 bonus_m3=0.1 bonus_m4=0.2 bonus_r2=0.2
 ```
 
 ### ④ candidates — 유사 크리에이터 후보 계산 (API 호출 없음, 몇 초)
@@ -142,7 +142,7 @@ python3 -m src.pipeline judge-sheet
 ```
 
 ```
-[judge-sheet] 556쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
+[judge-sheet] 559쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
 ```
 
 이 시점의 `results/judge_sheet.csv`는 `score` 열이 전부 빈칸입니다. **다음 5장에서 이 빈칸을 채우는 방법을 고릅니다.**
@@ -159,7 +159,7 @@ python3 -m src.pipeline score-judgments
 === E2. 방식별 평균 관련도@5 / nDCG@5 / 무관 비율@5 (test 쿼리 30명) ===
    M1_text-embedding-3-small: 관련도=0.147 [0.060, 0.240]  nDCG=0.146  무관비율=0.867
    ...
-   M4_bge-m3: 관련도=0.507 [0.353, 0.660]  nDCG=0.567  무관비율=0.567
+   M4_bge-m3: 관련도=0.487 [0.330, 0.640]  nDCG=0.553  무관비율=0.587
    ...
 ```
 
@@ -188,7 +188,7 @@ python3 -m src.pipeline report
 
 ## 5. 판정하기 (E2)
 
-`judge-sheet` 직후 `results/judge_sheet.csv`는 556쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
+`judge-sheet` 직후 `results/judge_sheet.csv`는 559쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
 
 ### 방법 A. 자동 판정 (추천 — 대부분 이 방법으로 충분)
 
@@ -196,29 +196,29 @@ python3 -m src.pipeline report
 python3 -m src.pipeline auto-judge
 ```
 
-LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 556쌍을 대신 채점합니다. **비용 약 $0.14, 소요 약 7~8분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
+LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 559쌍을 대신 채점합니다. **비용 약 $0.14, 소요 약 7~8분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
 
 ```
-[auto-judge] 전체 556쌍 중 0쌍 완료, 556쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
-[auto-judge] 50/556 완료
+[auto-judge] 전체 559쌍 중 0쌍 완료, 559쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
+[auto-judge] 50/559 완료
 ...
 [auto-judge] 완료. 비용 약 $0.1393. 일부를 src.judge_cli로 직접 재판정해 일치율을 확인하는 것을 권장합니다.
 ```
 
 ### 방법 B. 자동 판정 신뢰도 확인 (선택, 권장 — 10~15분)
 
-방법 A 다음에 하면 좋습니다. **결정을 실제로 가르는 12쌍만** 사람이 직접 봐서 자동 판정을 신뢰할 수 있는지 확인합니다.
+방법 A 다음에 하면 좋습니다. M4가 M3·R2 각각과 **top-5를 다르게 고른 쌍**(양쪽 차집합)을 모으면 보통 100쌍을 넘습니다. 전부 보기엔 부담이 커서, 고정 시드로 무작위 **30쌍만** 추려 사람이 직접 봐서 자동 판정을 신뢰할 수 있는지 확인합니다.
 
 ```bash
 python3 -m src.pipeline spot-check
 ```
 
 ```
-[spot-check] M4_bge-m3가 ['M3_bge-m3', 'R2_bge-m3']와 다르게 고른 12쌍을 results/spot_check.csv에 저장했습니다.
+[spot-check] M4_bge-m3를 ['M3_bge-m3', 'R2_bge-m3']와 각각 양쪽 차집합으로 비교해 다른 30쌍 (전체 139쌍 중 무작위 표본)을 results/spot_check.csv에 저장했습니다.
 python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 python3 -m src.pipeline spot-check-report 를 실행하세요.
 ```
 
-안내대로 대화형 CLI로 12쌍을 직접 채점합니다 (아래 "대화형 판정 CLI 사용법" 참고).
+안내대로 대화형 CLI로 30쌍을 직접 채점합니다 (아래 "대화형 판정 CLI 사용법" 참고).
 
 ```bash
 python3 -m src.judge_cli --file results/spot_check.csv
@@ -231,17 +231,17 @@ python3 -m src.pipeline spot-check-report
 ```
 
 ```
-=== spot-check 일치율 (M4_bge-m3 vs ['M3_bge-m3', 'R2_bge-m3']만 고른 후보 12쌍) ===
-   완전 일치율: 0.75
+=== spot-check 일치율 (M4_bge-m3 vs ['M3_bge-m3', 'R2_bge-m3']만 고른 후보 30쌍) ===
+   완전 일치율: 0.77
    ±1 이내 일치율: 1.00
-   평균 절대 오차: 0.25
-   불일치: B08::B05  사람=1  자동=0
+   평균 절대 오차: 0.23
+   불일치: F02::X03  사람=2  자동=1
    ...
 ```
 
 `±1 이내 일치율`이 1.0에 가까우면(즉 사람과 자동 판정이 2점 이상 차이나는 극단적 불일치가 없으면) 방법 A의 결과를 신뢰할 근거가 됩니다.
 
-### 방법 C. 556쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
+### 방법 C. 559쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
 
 빠르게 확인하고 싶다면 방법 A만으로 충분합니다. 하지만 **사람 판정만으로 결과를 내고 싶다면** 이 방법을 씁니다.
 
@@ -254,9 +254,9 @@ python3 -m src.judge_cli
 `judge_cli`는 쌍 하나씩 소개글을 보여주고 점수를 입력받습니다. **`judge_sheet.csv`와 `spot_check.csv` 둘 다 이 도구로 채웁니다** — 어떤 파일을 채울지는 `--file` 옵션으로 정합니다(생략하면 `results/judge_sheet.csv`).
 
 ```
-전체 556쌍 중 0쌍 완료, 556쌍 남음
+전체 559쌍 중 0쌍 완료, 559쌍 남음
 
-[1/556] 쿼리 B02 데일리메이크업쌤
+[1/559] 쿼리 B02 데일리메이크업쌤
   소개: 출근 전 10분이면 끝나는 데일리 메이크업을 알려드려요. ...
   후보 B01 피부과가고싶은날
   소개: 민감성 피부 스킨케어 루틴이랑 성분 분석해요. ...
@@ -311,7 +311,7 @@ python3 -m src.judge_cli
 - 임베딩 입력에 카테고리 이름을 넣지 않습니다 (zero-shot 태깅이 자기 분야를 되맞히는 순환 방지)
 
 ```
-creators.csv sha256 70472395d9154f1c51a161d89514664d2cb03188a34a50a7216c99999ca8f5dd
+creators.csv sha256 e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
 ```
 

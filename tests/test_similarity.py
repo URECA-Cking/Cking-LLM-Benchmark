@@ -96,3 +96,41 @@ def test_select_bonus_prefers_bonus_that_improves_gold_precision() -> None:
 
     assert bonus == 0.0
 
+
+
+def test_restricting_candidate_pool_to_dev_prevents_test_label_leakage() -> None:
+    """cmd_select_params 수정 검증(리뷰 P1): 후보 pool에 test가 섞이면 test 크리에이터의
+    gold만 바꿔도 선택되는 bonus가 달라진다(누수). pool을 dev만으로 제한하면 영향이 없다.
+
+    d1(쿼리, dev)·d2(dev, d1과 태그 미공유)·t1(test, d1과 태그 공유). d1-d2 코사인이 더 높지만
+    bonus=0.5면 d1-t1이 역전한다. d2는 gold를 절대 공유하지 않게 해, "bonus가 올려주는 후보(t1)의
+    gold가 쿼리와 맞는가"만으로 승부가 갈리게 만든다.
+    """
+    vectors = np.array([[1.0, 0.0], [0.99, 0.0], [0.8, 0.6]], dtype=np.float32)  # d1, d2, t1
+    tag_sets = [frozenset({"X"}), frozenset(), frozenset({"X"})]  # d1-t1만 태그 공유
+    query_ids = ["d1"]
+    candidate_bonuses = [0.0, 0.5]
+
+    def leaky_selected_bonus(t1_gold: frozenset[str]) -> float:
+        ids = ["d1", "d2", "t1"]
+        gold_by_id = {"d1": frozenset({"A"}), "d2": frozenset({"C"}), "t1": t1_gold}
+        cosine = cosine_matrix(vectors)
+        return select_bonus(cosine, ids, tag_sets, gold_by_id, query_ids, candidate_bonuses, k=1)
+
+    def dev_only_selected_bonus(t1_gold: frozenset[str]) -> float:
+        # t1_gold는 dev-only pool에 아예 등장하지 않으므로 결과에 영향을 줄 수 없다.
+        del t1_gold
+        dev_index = [0, 1]
+        ids = ["d1", "d2"]
+        gold_by_id = {"d1": frozenset({"A"}), "d2": frozenset({"C"})}
+        cosine = cosine_matrix(vectors[dev_index])
+        dev_tag_sets = [tag_sets[i] for i in dev_index]
+        return select_bonus(cosine, ids, dev_tag_sets, gold_by_id, query_ids, candidate_bonuses, k=1)
+
+    leaky_when_t1_unrelated = leaky_selected_bonus(frozenset({"B"}))
+    leaky_when_t1_relevant = leaky_selected_bonus(frozenset({"A"}))
+    assert leaky_when_t1_unrelated != leaky_when_t1_relevant  # 누수 재현
+
+    fixed_when_t1_unrelated = dev_only_selected_bonus(frozenset({"B"}))
+    fixed_when_t1_relevant = dev_only_selected_bonus(frozenset({"A"}))
+    assert fixed_when_t1_unrelated == fixed_when_t1_relevant  # 수정 후 test gold와 무관
