@@ -12,7 +12,24 @@ cp .env.example .env
 # OPENAI_API_KEY 설정
 ```
 
-`bge-m3`는 첫 실행 때 약 2.3GB를 내려받습니다. 실행 명령은 파이프라인 구현(#1) 후 이 절에 추가합니다.
+`bge-m3`는 첫 실행 때 약 2.3GB를 내려받습니다.
+
+## 파이프라인 실행
+
+순서대로 실행합니다. `embed`와 `tag-llm`은 OpenAI API를 실제로 호출하므로(비용은 합쳐서 1달러 미만 수준), 실행 전 `.env`의 `OPENAI_API_KEY`와 예상 비용을 확인하세요.
+
+```bash
+python3 -m src.pipeline embed             # 두 임베딩 모델로 카테고리·크리에이터 100명 인코딩 (API 호출)
+python3 -m src.pipeline tag-llm           # LLM 후보 모델을 전원에게 2회씩 태깅, dev 정확도로 하나 선택 (API 호출)
+python3 -m src.pipeline select-params     # zero-shot tau와 M3·M4·R2 bonus를 dev로 결정 (API 호출 없음)
+python3 -m src.pipeline candidates        # 11개 설정 × 크리에이터 100명의 상위 20명 계산 (API 호출 없음)
+python3 -m src.pipeline judge-sheet       # 쿼리 30명의 상위 5명을 합집합으로 모은 블라인드 판정 시트 생성
+python3 -m src.pipeline report            # 사람 판정 없이 계산되는 E1(태깅 정확도)·E3(대표 사례) 출력
+# results/judge_sheet.csv의 score 열(0/1/2)을 직접 채운 뒤:
+python3 -m src.pipeline score-judgments   # E2(관련도·nDCG·무관 비율·짝비교) 계산
+```
+
+각 단계의 산출물은 `results/`(git 제외)에 쌓입니다. `results/cache/`에는 임베딩 벡터와 LLM 태깅 원본이 저장되어, 같은 단계를 다시 돌려도 API를 재호출하지 않습니다.
 
 ## 코드 규칙
 
@@ -77,6 +94,6 @@ M1~M3·R2는 모델 2종 각각, M4의 LLM 태그는 1회 생성해 두 모델�
 - 임베딩 입력에 카테고리 이름을 넣지 않습니다 (zero-shot 태깅이 자기 분야를 되맞히는 순환 방지)
 
 ```
-creators.csv sha256 7caea476c6f813efafb8a9d3d7e4d616460a22dfddf9a06813db86b05ed06493
+creators.csv sha256 70472395d9154f1c51a161d89514664d2cb03188a34a50a7216c99999ca8f5dd
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
 ```
