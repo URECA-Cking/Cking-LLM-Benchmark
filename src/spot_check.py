@@ -53,7 +53,9 @@ def select_pairwise_symmetric_disagreement(
     for query_id in query_ids:
         top_a = {item[0] for item in candidates[method_a][query_id][:k]}
         top_b = {item[0] for item in candidates[method_b][query_id][:k]}
-        for candidate_id in top_a ^ top_b:
+        # set 순회 순서는 프로세스의 해시 시드에 따라 달라져, 고정 시드로 뽑는 표본이
+        # 실행마다 바뀔 수 있었다(PR #5 리뷰로 발견, PYTHONHASHSEED별 재현 확인됨). sorted로 고정한다.
+        for candidate_id in sorted(top_a ^ top_b):
             pair = (query_id, candidate_id)
             if pair not in seen:
                 seen.add(pair)

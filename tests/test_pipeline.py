@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from dataclasses import replace
 
 import numpy as np
 
@@ -76,6 +77,60 @@ def test_cmd_embed_skips_api_call_when_cache_exists(tmp_path, monkeypatch) -> No
 
     pipeline.cmd_embed(argparse.Namespace(force=True))  # --force는 다시 계산
     assert call_count["n"] > first_call_count
+
+
+def test_cmd_embed_recomputes_when_input_text_changes(tmp_path, monkeypatch) -> None:
+    """PR #5 리뷰 P1 회귀 테스트: 캐시 파일이 있어도 data/creators.csv가 바뀌면 다시 계산해야 한다.
+
+    파일 존재 여부만 보고 건너뛰면, 이전 실행에서 남은 results/cache가 새 입력(예: X01/X02
+    bio 수정)을 반영하지 않은 채 재사용될 수 있었다.
+    """
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "_embedding_client", lambda key: _FakeEmbeddingClient())
+
+    original_creators = load_creators()
+    monkeypatch.setattr(pipeline, "load_creators", lambda: original_creators)
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+    before_ids, before_vectors = pipeline._load_vectors(tmp_path / f"creators_{pipeline.EMBEDDING_MODEL_KEYS[0]}.npz")
+
+    changed_creators = [replace(original_creators[0], bio=original_creators[0].bio + " 경품은 닌텐도 스위치입니다")] + list(original_creators[1:])
+    monkeypatch.setattr(pipeline, "load_creators", lambda: changed_creators)
+    pipeline.cmd_embed(argparse.Namespace(force=False))  # 캐시 파일은 그대로 있지만 입력이 바뀜
+    after_ids, after_vectors = pipeline._load_vectors(tmp_path / f"creators_{pipeline.EMBEDDING_MODEL_KEYS[0]}.npz")
+
+    assert before_ids == after_ids
+    assert not np.allclose(before_vectors[0], after_vectors[0])  # 바뀐 크리에이터만 벡터가 달라짐
+    assert np.allclose(before_vectors[1], after_vectors[1])  # 나머지는 그대로
+
+
+def test_cmd_tag_llm_recomputes_when_input_text_changes(tmp_path, monkeypatch) -> None:
+    """PR #5 리뷰 P1 회귀 테스트: run 파일이 있어도 입력 텍스트가 바뀌면 다시 태깅해야 한다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+    call_count = {"n": 0}
+
+    class _CountingTagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            call_count["n"] += 1
+            return TagResult(tags=(), input_tokens=1, output_tokens=1)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _CountingTagger)
+
+    original_creators = load_creators()
+    monkeypatch.setattr(pipeline, "load_creators", lambda: original_creators)
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+    first_calls = call_count["n"]
+
+    changed_creators = [replace(original_creators[0], bio=original_creators[0].bio + " 변경됨")] + list(original_creators[1:])
+    monkeypatch.setattr(pipeline, "load_creators", lambda: changed_creators)
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))  # run 파일은 있지만 입력이 바뀜
+
+    assert call_count["n"] == first_calls * 2  # 캐시를 못 쓰고 전부 다시 태깅함
 
 
 def test_cmd_tag_llm_skips_completed_runs_when_cache_exists(tmp_path, monkeypatch) -> None:
