@@ -683,31 +683,37 @@ def cmd_spot_check_report(_: argparse.Namespace) -> None:
     _print_spot_check_report(SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, RESULTS_DIR / "spot_check.csv")
 
 
-def cmd_spot_check_models(_: argparse.Namespace) -> None:
-    """MODEL_SPOT_CHECK_TARGET·_BASELINES 기준으로 results/spot_check_models.csv를 만든다.
+def _model_spot_check_args(args: argparse.Namespace) -> tuple[str, list[str], Path]:
+    """--target/--baseline/--out이 없으면 기본값(M3_bge-m3 vs M2_kure-v1, spot_check_models.csv)을 쓴다."""
+    target = getattr(args, "target", None) or MODEL_SPOT_CHECK_TARGET
+    baselines = getattr(args, "baseline", None) or MODEL_SPOT_CHECK_BASELINES
+    out = getattr(args, "out", None)
+    return target, baselines, RESULTS_DIR / (out or "spot_check_models.csv")
 
-    bge-m3와 KURE-v1 중 하나를 고를 때, 두 임베딩이 실제로 다르게 추천한 쌍만 사람이 보게
-    한다(이슈 #8). `python3 -m src.judge_cli --file results/spot_check_models.csv`로 채운다.
+
+def cmd_spot_check_models(args: argparse.Namespace) -> None:
+    """두 설정이 실제로 다르게 추천한 쌍만 뽑아 사람 판정 시트를 만든다 (이슈 #8).
+
+    기본은 bge-m3 vs KURE-v1(MODEL_SPOT_CHECK_TARGET·_BASELINES → results/spot_check_models.csv).
+    `--target M4_bge-m3 --baseline M4_qwen3-embedding-0.6b --out spot_check_m4_qwen3.csv`처럼
+    다른 조합도 지정할 수 있다. `python3 -m src.judge_cli --file results/<out>`으로 채운다.
     """
-    saved, total_found = _build_spot_check_rows(
-        MODEL_SPOT_CHECK_TARGET,
-        MODEL_SPOT_CHECK_BASELINES,
-        SPOT_CHECK_SAMPLE_SIZE,
-        SPOT_CHECK_SAMPLE_SEED,
-        RESULTS_DIR / "spot_check_models.csv",
-    )
+    target, baselines, out_path = _model_spot_check_args(args)
+    saved, total_found = _build_spot_check_rows(target, baselines, SPOT_CHECK_SAMPLE_SIZE, SPOT_CHECK_SAMPLE_SEED, out_path)
     sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > saved else ""
+    flags = "" if out_path.name == "spot_check_models.csv" else f" --target {target} --baseline {' --baseline '.join(baselines)} --out {out_path.name}"
     print(
-        f"[spot-check-models] {MODEL_SPOT_CHECK_TARGET}를 {MODEL_SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
-        f"다른 {saved}쌍{sample_note}을 results/spot_check_models.csv에 저장했습니다.\n"
-        f"python3 -m src.judge_cli --file results/spot_check_models.csv 로 채운 뒤 "
-        f"python3 -m src.pipeline spot-check-models-report 를 실행하세요."
+        f"[spot-check-models] {target}를 {baselines}와 각각 양쪽 차집합으로 비교해 "
+        f"다른 {saved}쌍{sample_note}을 results/{out_path.name}에 저장했습니다.\n"
+        f"python3 -m src.judge_cli --file results/{out_path.name} 로 채운 뒤 "
+        f"python3 -m src.pipeline spot-check-models-report{flags} 를 실행하세요."
     )
 
 
-def cmd_spot_check_models_report(_: argparse.Namespace) -> None:
-    """results/spot_check_models.csv 기준으로 MODEL_SPOT_CHECK_TARGET·_BASELINES 일치율을 출력한다."""
-    _print_spot_check_report(MODEL_SPOT_CHECK_TARGET, MODEL_SPOT_CHECK_BASELINES, RESULTS_DIR / "spot_check_models.csv")
+def cmd_spot_check_models_report(args: argparse.Namespace) -> None:
+    """spot-check-models와 같은 --target/--baseline/--out으로 사람·자동 판정 일치율을 출력한다."""
+    target, baselines, out_path = _model_spot_check_args(args)
+    _print_spot_check_report(target, baselines, out_path)
 
 
 def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
@@ -864,6 +870,10 @@ def main() -> None:
     }
     for name in stages:
         stage_parser = sub.add_parser(name)
+        if name in ("spot-check-models", "spot-check-models-report"):
+            stage_parser.add_argument("--target", help="비교의 기준 설정 (예: M4_bge-m3)")
+            stage_parser.add_argument("--baseline", action="append", help="비교 대상 설정, 여러 번 지정 가능 (예: M4_qwen3-embedding-0.6b)")
+            stage_parser.add_argument("--out", help="results/ 아래에 저장할 파일명 (기본 spot_check_models.csv)")
         if name in ("embed", "tag-llm"):
             stage_parser.add_argument(
                 "--force", action="store_true", help="캐시된 결과가 있어도 API를 다시 호출해 새로 계산한다"

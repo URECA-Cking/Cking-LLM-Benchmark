@@ -507,3 +507,15 @@ def test_query_prompted_vectors_target_ids_overrides_default_query_rows(monkeypa
     result = pipeline._query_prompted_vectors("fake-key", ids, vectors, creators, target_ids={"c1"})
 
     assert np.allclose(result[0], [1.0, 0.0]) and np.allclose(result[1], [0.0, 0.0])
+
+
+def test_model_spot_check_args_default_and_override(tmp_path, monkeypatch) -> None:
+    import argparse
+
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+
+    default = pipeline._model_spot_check_args(argparse.Namespace())
+    custom = pipeline._model_spot_check_args(argparse.Namespace(target="A", baseline=["B", "C"], out="x.csv"))
+
+    assert default == (pipeline.MODEL_SPOT_CHECK_TARGET, pipeline.MODEL_SPOT_CHECK_BASELINES, tmp_path / "spot_check_models.csv")
+    assert custom == ("A", ["B", "C"], tmp_path / "x.csv")
