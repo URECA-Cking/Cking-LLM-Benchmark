@@ -967,24 +967,28 @@ def cmd_memory(args: argparse.Namespace) -> None:
     import subprocess
     import sys
 
-    from src.measure_memory import RERANKER_KEY
+    from src.measure_memory import M5_KEY, RERANKER_KEY
 
     device = getattr(args, "device", None) or "cpu"
     e4_path = RESULTS_DIR / "e4_embedding.json"
     e4_report: dict[str, dict] = json.loads(e4_path.read_text(encoding="utf-8")) if e4_path.exists() else {}
-    for name in [*LOCAL_EMBEDDING_MODELS, RERANKER_KEY]:
+    entry_keys = {RERANKER_KEY: "bge-reranker-v2-m3", M5_KEY: "M5_bge-m3+reranker"}
+    for name in [*LOCAL_EMBEDDING_MODELS, RERANKER_KEY, M5_KEY]:
         completed = subprocess.run(
-            [sys.executable, "-m", "src.measure_memory", name, "--device", device], capture_output=True, text=True, check=True
+            [sys.executable, "-m", "src.measure_memory", name, "--device", device], capture_output=True, text=True, check=False
         )
+        if completed.returncode != 0:
+            # 앞서 끝낸 모델의 측정값은 이미 저장돼 있다. 실패한 모델의 오류 출력을 그대로 보여준다.
+            raise RuntimeError(f"{name} 메모리 측정이 실패했습니다(종료 코드 {completed.returncode}):\n{completed.stderr.strip()[-2000:]}")
         result = json.loads(completed.stdout.strip().splitlines()[-1])
-        entry_key = "bge-reranker-v2-m3" if name == RERANKER_KEY else name
+        entry_key = entry_keys.get(name, name)
         e4_report.setdefault(entry_key, {}).setdefault("memory", {})[device] = result
+        with e4_path.open("w", encoding="utf-8") as f:  # 모델마다 저장해 중간에 실패해도 끝낸 결과를 잃지 않는다
+            json.dump(e4_report, f, ensure_ascii=False, indent=2)
         print(
             f"[memory] {entry_key} ({device}): 로드 직후 {result['peak_after_load_mb']:.0f}MB, "
             f"처리 후 최대 {result['peak_after_run_mb']:.0f}MB (기준 {result['baseline_mb']:.0f}MB)"
         )
-    with e4_path.open("w", encoding="utf-8") as f:
-        json.dump(e4_report, f, ensure_ascii=False, indent=2)
 
 
 def main() -> None:

@@ -14,6 +14,7 @@ import resource
 import sys
 
 RERANKER_KEY = "reranker"
+M5_KEY = "m5"  # bge-m3 임베딩과 리랭커를 한 프로세스에 함께 올린 조건(M5 서버 구성)
 MEASURE_PAIRS = 100  # 리랭커 측정용으로 채점하는 (쿼리, 후보) 쌍 수(M5는 쿼리당 20쌍씩 채점한다)
 
 
@@ -35,11 +36,20 @@ def measure(name: str, device: str) -> dict:
     texts = [c.input_text() for c in load_creators()]
     baseline = peak_rss_mb()  # torch·sentence-transformers를 불러온 직후, 모델을 올리기 전
     kwargs = {} if device == "auto" else {"device": device}
+    pairs = [(texts[i % len(texts)], texts[(i * 7 + 3) % len(texts)]) for i in range(MEASURE_PAIRS)]
     if name == RERANKER_KEY:
         model = CrossEncoder(RERANKER_MODEL_NAME, **kwargs)
         after_load = peak_rss_mb()
-        RerankerClient(model=model).score([(texts[i % len(texts)], texts[(i * 7 + 3) % len(texts)]) for i in range(MEASURE_PAIRS)])
+        RerankerClient(model=model).score(pairs)
         model_name = RERANKER_MODEL_NAME
+    elif name == M5_KEY:
+        # M5는 bge-m3 임베딩으로 후보를 뽑고 리랭커로 다시 채점하므로 둘을 한 프로세스에 함께 올린다
+        embedder = SentenceTransformer(LOCAL_EMBEDDING_MODELS["bge-m3"]["model_name"], **kwargs)
+        model = CrossEncoder(RERANKER_MODEL_NAME, **kwargs)
+        after_load = peak_rss_mb()
+        LocalEmbeddingClient("bge-m3", model=embedder).embed(texts)
+        RerankerClient(model=model).score(pairs)
+        model_name = f"{LOCAL_EMBEDDING_MODELS['bge-m3']['model_name']} + {RERANKER_MODEL_NAME}"
     else:
         model_name = LOCAL_EMBEDDING_MODELS[name]["model_name"]
         model = SentenceTransformer(model_name, **kwargs)
@@ -55,7 +65,7 @@ def measure(name: str, device: str) -> dict:
         "peak_after_run_mb": round(after_run, 1),
         "load_delta_mb": round(after_load - baseline, 1),
         "run_delta_mb": round(after_run - after_load, 1),
-        "items": len(texts) if name != RERANKER_KEY else MEASURE_PAIRS,
+        "items": MEASURE_PAIRS if name == RERANKER_KEY else len(texts),  # m5는 임베딩 100건 + 리랭커 100쌍을 모두 처리
         "platform": platform.platform(),
         "torch": torch.__version__,
     }
