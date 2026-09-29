@@ -515,10 +515,10 @@ def test_model_spot_check_args_default_and_override(tmp_path, monkeypatch) -> No
     monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
 
     default = pipeline._model_spot_check_args(argparse.Namespace())
-    custom = pipeline._model_spot_check_args(argparse.Namespace(target="A", baseline=["B", "C"], out="x.csv"))
+    custom = pipeline._model_spot_check_args(argparse.Namespace(target="A", baseline=["B", "C"], out="spot_check_x.csv"))
 
     assert default == (pipeline.MODEL_SPOT_CHECK_TARGET, pipeline.MODEL_SPOT_CHECK_BASELINES, tmp_path / "spot_check_models.csv")
-    assert custom == ("A", ["B", "C"], tmp_path / "x.csv")
+    assert custom == ("A", ["B", "C"], tmp_path / "spot_check_x.csv")
 
 
 def test_model_spot_check_args_rejects_path_outside_results(tmp_path, monkeypatch) -> None:
@@ -528,7 +528,7 @@ def test_model_spot_check_args_rejects_path_outside_results(tmp_path, monkeypatc
 
     monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
 
-    for bad in ("../README.md", "sub/x.csv", "/tmp/x.csv", "notes.txt"):
+    for bad in ("../README.md", "sub/x.csv", "/tmp/x.csv", "notes.txt", "judge_sheet.csv", "spot_check.csv", "candidates.csv", "spot_check_x.txt"):
         with pytest.raises(ValueError):
             pipeline._model_spot_check_args(argparse.Namespace(out=bad))
 

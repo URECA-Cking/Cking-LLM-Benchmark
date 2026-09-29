@@ -688,9 +688,9 @@ def _model_spot_check_args(args: argparse.Namespace) -> tuple[str, list[str], Pa
     target = getattr(args, "target", None) or MODEL_SPOT_CHECK_TARGET
     baselines = getattr(args, "baseline", None) or MODEL_SPOT_CHECK_BASELINES
     out = getattr(args, "out", None)
-    if out is not None and (Path(out).name != out or not out.endswith(".csv")):
-        # ../README.md 같은 경로로 results/ 밖 파일을 판정 시트로 덮어쓰지 못하게 한다
-        raise ValueError(f"--out은 results/ 안의 .csv 파일명만 받습니다: {out!r}")
+    if out is not None and (Path(out).name != out or out == "spot_check.csv" or not (out.startswith("spot_check") and out.endswith(".csv"))):
+        # ../README.md처럼 results/ 밖 파일이나 judge_sheet.csv 같은 기존 판정 원본을 덮어쓰지 못하게, spot_check*.csv만 받는다(spot_check.csv는 spot-check 명령 전용이라 제외)
+        raise ValueError(f"--out은 results/ 안의 spot_check*.csv 파일명만 받습니다: {out!r}")
     return target, baselines, RESULTS_DIR / (out or "spot_check_models.csv")
 
 
