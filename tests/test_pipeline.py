@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 
@@ -102,6 +103,159 @@ def test_cmd_embed_recomputes_when_input_text_changes(tmp_path, monkeypatch) -> 
     assert before_ids == after_ids
     assert not np.allclose(before_vectors[0], after_vectors[0])  # 바뀐 크리에이터만 벡터가 달라짐
     assert np.allclose(before_vectors[1], after_vectors[1])  # 나머지는 그대로
+
+
+def test_cmd_embed_does_not_trust_a_half_updated_cache_after_failed_force(tmp_path, monkeypatch) -> None:
+    """--force 중 두 번째 벡터 파일 저장이 실패해도, 섞인 벡터(새 크리에이터 + 이전 카테고리)를 캐시로 쓰면 안 된다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "EMBEDDING_MODEL_KEYS", ("bge-m3",))
+    dim = {"value": 8}
+    call_count = {"n": 0}
+
+    def client_factory(key: str) -> _FakeEmbeddingClient:
+        call_count["n"] += 1
+        return _FakeEmbeddingClient(dim["value"])
+
+    monkeypatch.setattr(pipeline, "_embedding_client", client_factory)
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+
+    real_save, saved = pipeline._save_vectors, []
+
+    def save_then_fail_on_second(path, ids, vectors):
+        saved.append(path.name)
+        if len(saved) == 2:  # 크리에이터 파일은 새 벡터로 바뀌었고 카테고리 파일 저장에서 실패
+            raise OSError("disk full")
+        real_save(path, ids, vectors)
+
+    dim["value"] = 4  # 다시 계산하면 이전과 다른 벡터가 나오도록
+    monkeypatch.setattr(pipeline, "_save_vectors", save_then_fail_on_second)
+    try:
+        pipeline.cmd_embed(argparse.Namespace(force=True))
+    except OSError:
+        pass
+    else:
+        raise AssertionError("두 번째 저장 실패가 전파되어야 한다")
+    monkeypatch.setattr(pipeline, "_save_vectors", real_save)
+
+    calls_before_retry = call_count["n"]
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+
+    assert call_count["n"] == calls_before_retry + 1  # 섞인 캐시를 재사용하지 않고 다시 계산함
+    _, creator_vectors = pipeline._load_vectors(tmp_path / "creators_bge-m3.npz")
+    _, category_vectors = pipeline._load_vectors(tmp_path / "categories_bge-m3.npz")
+    assert creator_vectors.shape[1] == category_vectors.shape[1] == 4
+
+
+def test_cmd_tag_llm_does_not_trust_a_run_whose_token_usage_was_not_saved_after_failed_force(tmp_path, monkeypatch) -> None:
+    """--force 중 run 파일은 새로 쓰였는데 토큰 사용량 저장이 실패하면, 이전 사용량과 섞인 run을 캐시로 쓰면 안 된다."""
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+    usage = {"tokens": 2}
+    call_count = {"n": 0}
+
+    class _CountingTagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            call_count["n"] += 1
+            return TagResult(tags=(), input_tokens=usage["tokens"], output_tokens=0)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _CountingTagger)
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+
+    real_write_text = Path.write_text
+
+    def fail_on_usage(self, *args, **kwargs):
+        if self.name.endswith(".token_usage.json"):
+            raise OSError("disk full")
+        return real_write_text(self, *args, **kwargs)
+
+    usage["tokens"] = 9
+    monkeypatch.setattr(Path, "write_text", fail_on_usage)
+    try:
+        pipeline.cmd_tag_llm(argparse.Namespace(force=True))
+    except OSError:
+        pass
+    else:
+        raise AssertionError("사용량 저장 실패가 전파되어야 한다")
+    monkeypatch.setattr(Path, "write_text", real_write_text)
+
+    calls_before_retry = call_count["n"]
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+
+    assert call_count["n"] == calls_before_retry + 100  # 실패한 run0만 다시 태깅함 (run1은 이전 캐시)
+    run_usage = json.loads((tmp_path / "llm_tags_fake-model_run0.token_usage.json").read_text(encoding="utf-8"))
+    assert run_usage["input_tokens"] == 100 * 9  # 새 run과 맞는 사용량
+
+
+def test_downstream_steps_do_not_read_a_half_updated_embedding_cache(tmp_path, monkeypatch) -> None:
+    """리뷰 P1: embed --force가 크리에이터 파일만 새로 쓰고 실패한 뒤에도 select-params 같은 후속 단계가 섞인 벡터를 읽으면 안 된다."""
+    import pytest
+
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "EMBEDDING_MODEL_KEYS", ("bge-m3",))
+    dim = {"value": 8}
+    monkeypatch.setattr(pipeline, "_embedding_client", lambda key: _FakeEmbeddingClient(dim["value"]))
+    creators, categories = pipeline.load_creators(), pipeline.load_categories()
+    pipeline.cmd_embed(argparse.Namespace(force=False))
+    pipeline._zero_shot_tags_for_key("bge-m3", creators, categories)  # 완료된 캐시는 정상적으로 읽힌다
+
+    real_save, saved = pipeline._save_vectors, []
+
+    def save_then_fail_on_second(path, ids, vectors):
+        saved.append(path.name)
+        if len(saved) == 2:  # 크리에이터 파일만 새 벡터로 바뀌고 카테고리 파일 저장에서 실패
+            raise OSError("disk full")
+        real_save(path, ids, vectors)
+
+    dim["value"] = 4
+    monkeypatch.setattr(pipeline, "_save_vectors", save_then_fail_on_second)
+    with pytest.raises(OSError):
+        pipeline.cmd_embed(argparse.Namespace(force=True))
+    monkeypatch.setattr(pipeline, "_save_vectors", real_save)
+
+    with pytest.raises(RuntimeError, match="embed"):  # 섞인 벡터로 계산하지 않고 embed를 다시 하라고 안내한다
+        pipeline._zero_shot_tags_for_key("bge-m3", creators, categories)
+
+
+def test_downstream_steps_do_not_read_a_llm_tag_run_that_was_not_finished(tmp_path, monkeypatch) -> None:
+    """리뷰 P1: tag-llm --force가 run 파일을 쓰고 사용량 저장에서 실패한 뒤 후속 단계가 그 run의 태그를 읽으면 안 된다."""
+    import pytest
+
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "OPENAI_LLM_MODEL_CANDIDATES", {"fake-model": {}})
+
+    class _Tagger:
+        def __init__(self, model: str, category_codes: list[str]) -> None:
+            pass
+
+        def tag(self, input_text: str) -> TagResult:
+            return TagResult(tags=(), input_tokens=1, output_tokens=0)
+
+    monkeypatch.setattr(pipeline, "OpenAITagger", _Tagger)
+    (tmp_path / "selected_params.json").write_text(json.dumps({"llm_model": "fake-model", "per_embedding": {}}), encoding="utf-8")
+    pipeline.cmd_tag_llm(argparse.Namespace(force=False))
+    pipeline._load_params_and_llm_tags()  # 완료된 run은 정상적으로 읽힌다
+
+    real_write_text = Path.write_text
+
+    def fail_on_usage(self, *args, **kwargs):
+        if self.name.endswith(".token_usage.json"):
+            raise OSError("disk full")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_on_usage)
+    with pytest.raises(OSError):
+        pipeline.cmd_tag_llm(argparse.Namespace(force=True))
+    monkeypatch.setattr(Path, "write_text", real_write_text)
+
+    with pytest.raises(RuntimeError, match="tag-llm"):
+        pipeline._load_params_and_llm_tags()
 
 
 def test_cmd_tag_llm_recomputes_when_input_text_changes(tmp_path, monkeypatch) -> None:

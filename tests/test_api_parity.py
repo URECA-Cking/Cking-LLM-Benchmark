@@ -151,6 +151,8 @@ def _write_params_and_llm_tags(dir_, creators) -> None:
         json.dumps({"llm_model": "m", "per_embedding": {"bge-m3": per_embedding}}), encoding="utf-8"
     )
     (dir_ / "llm_tags_m_run0.json").write_text(json.dumps({c.id: ["FOOD"] for c in creators}), encoding="utf-8")
+    # tag-llm은 run 파일을 다 쓴 뒤에 입력 해시를 남기고, 읽는 쪽은 그 해시를 확인한다
+    (dir_ / "llm_tags_m_run0.input_hash").write_text(pipeline._llm_tags_input_hash(creators, pipeline.load_categories()), encoding="utf-8")
 
 
 class _FakeApiClient:

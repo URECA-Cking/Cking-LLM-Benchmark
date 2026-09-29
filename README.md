@@ -6,6 +6,8 @@ Ticle(Cking) 2차 MVP **AI 크리에이터 추천**의 임베딩 모델과 추�
 
 실행 결과와 선택 근거는 [`docs/embedding-method-selection.md`](docs/embedding-method-selection.md)에서 확인할 수 있습니다. 처음 이 저장소를 여는 사람은 **직접 실행해보지 않아도** 이 문서만 읽으면 결론을 알 수 있습니다.
 
+**서버는 로컬 모델 대신 API(DeepInfra `BAAI/bge-m3`)로 진행합니다.** 같은 모델이고 벡터·유사도가 사실상 같으며, 임베딩을 저장해 쓰고 tau·bonus·컷오프를 API 벡터로 다시 고른 값(`api-select-params`)을 쓰는 것이 전제입니다. 자세한 근거와 조건은 결과 문서의 "로컬 ↔ API bge-m3 동등성" 절을 참고하세요.
+
 ## 목차
 
 1. [사전 준비물](#1-사전-준비물)
@@ -59,10 +61,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-140 passed in 3~5s
+147 passed in 3~5s
 ```
 
-**140개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**147개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -83,7 +85,7 @@ python3 -m pytest -q
 
 ## 4. 단계별 실행
 
-각 명령은 `results/`(git에 안 올라감) 아래에 결과를 저장합니다. **`embed`·`tag-llm`은 결과 파일이 이미 있으면 재실행해도 API를 다시 부르지 않고 건너뜁니다** — 캐시를 무시하고 새로 계산하려면 `--force`를 붙입니다. 나머지 단계(`select-params`~`report`)는 API를 호출하지 않는 순수 계산이라 매번 다시 실행해도 비용이 들지 않습니다.
+각 명령은 `results/`(git에 안 올라감) 아래에 결과를 저장합니다. **`embed`·`tag-llm`은 저장이 끝난 결과(입력 해시가 남아 있고 현재 데이터와 맞는 것)가 이미 있으면 재실행해도 API를 다시 부르지 않고 건너뜁니다** — 캐시를 무시하고 새로 계산하려면 `--force`를 붙입니다. 나머지 단계(`select-params`~`report`)는 API를 호출하지 않는 순수 계산이라 매번 다시 실행해도 비용이 들지 않으며, 위 두 단계가 **끝까지 저장한 캐시만** 읽습니다. `--force` 갱신이 도중에 실패했다면 후속 단계가 섞인 캐시를 쓰지 않고 다시 실행하라고 안내합니다.
 
 ### ① embed — 임베딩 생성 (API 호출, 약 $0.0001, 5초)
 
@@ -344,6 +346,7 @@ python3 -m src.judge_cli
 | `ValueError: 데이터 파일이 실험 착수 시 확정본과 다릅니다` | `data/creators.csv` 또는 `data/split.csv`를 수정함 | 의도한 수정이 아니면 `git checkout -- data/`로 되돌림. 의도한 수정이면 `src/config.py`의 hash를 갱신 |
 | `tag-llm`에서 특정 모델이 400 에러 | 그 모델이 `temperature=0`을 지원하지 않음 (예: `gpt-5-nano`) | 이미 후보에서 제외되어 있음. 새 모델을 추가할 때는 `src/config.py`에서 먼저 단독 테스트 |
 | `score-judgments`에서 `ValueError: 판정이 비어 있는 행이 있습니다` | `judge_sheet.csv`를 다 안 채움 | 5장의 방법 A/B/C 중 하나로 마저 채움 |
+| `RuntimeError: ... 임베딩 캐시가 없거나, 저장이 끝나지 않았거나, 현재 데이터와 다릅니다` / `llm_tags_..._run0.json이 없거나, 저장이 끝나지 않았거나...` | 후속 단계(`select-params` 등)는 `embed`·`tag-llm`이 **끝까지 저장하고 남기는 입력 해시**가 맞을 때만 캐시를 읽습니다. `--force` 갱신이 도중에 실패했거나 데이터가 바뀌면 해시가 없어 막습니다 | 안내대로 `python3 -m src.pipeline embed`(또는 `tag-llm`)를 다시 실행 (API 벡터는 `api-select-params --force`) |
 | 로컬 모델 다운로드가 느리거나 멈춤 | 첫 실행 때 bge-m3·kure-v1·qwen3-embedding-0.6b·bge-reranker-v2-m3 가중치(합쳐서 약 8GB)를 Hugging Face에서 내려받는 중 | 네트워크 확인 후 재실행 (다운로드는 이어받기됨) |
 
 ## 7. 데이터 설명
