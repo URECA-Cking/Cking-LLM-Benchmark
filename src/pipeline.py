@@ -691,6 +691,10 @@ def _model_spot_check_args(args: argparse.Namespace) -> tuple[str, list[str], Pa
     if out is not None and (Path(out).name != out or out == "spot_check.csv" or not (out.startswith("spot_check") and out.endswith(".csv"))):
         # ../README.md처럼 results/ 밖 파일이나 judge_sheet.csv 같은 기존 판정 원본을 덮어쓰지 못하게, spot_check*.csv만 받는다(spot_check.csv는 spot-check 명령 전용이라 제외)
         raise ValueError(f"--out은 results/ 안의 spot_check*.csv 파일명만 받습니다: {out!r}")
+    is_default_comparison = target == MODEL_SPOT_CHECK_TARGET and baselines == MODEL_SPOT_CHECK_BASELINES
+    if not is_default_comparison and (out is None or out == "spot_check_models.csv"):
+        # 다른 비교를 기본 파일에 쓰면 기존 사람 판정 중 새 표본과 안 겹치는 행이 사라진다
+        raise ValueError("기본 비교(M3_bge-m3 vs M2_kure-v1)가 아닌 비교는 --out으로 별도 파일명(spot_check_*.csv)을 지정해야 합니다.")
     return target, baselines, RESULTS_DIR / (out or "spot_check_models.csv")
 
 

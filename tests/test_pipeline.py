@@ -533,13 +533,29 @@ def test_model_spot_check_args_rejects_path_outside_results(tmp_path, monkeypatc
             pipeline._model_spot_check_args(argparse.Namespace(out=bad))
 
 
-def test_cmd_spot_check_models_keeps_compare_flags_when_out_is_default_name(tmp_path, monkeypatch, capsys) -> None:
-    """사용자 지정 비교를 기본 파일명으로 저장해도 안내 명령에는 --target/--baseline이 남아야 한다."""
+def test_cmd_spot_check_models_prints_compare_flags_for_custom_comparison(tmp_path, monkeypatch, capsys) -> None:
+    """사용자 지정 비교의 안내 명령에는 --target/--baseline/--out이 모두 남아야 한다."""
     import argparse
 
     monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
     monkeypatch.setattr(pipeline, "_build_spot_check_rows", lambda *a, **k: (0, 0))
 
-    pipeline.cmd_spot_check_models(argparse.Namespace(target="A", baseline=["B"], out="spot_check_models.csv"))
+    pipeline.cmd_spot_check_models(argparse.Namespace(target="A", baseline=["B"], out="spot_check_a_b.csv"))
 
-    assert "--target A --baseline B --out spot_check_models.csv" in capsys.readouterr().out
+    assert "--target A --baseline B --out spot_check_a_b.csv" in capsys.readouterr().out
+
+
+def test_model_spot_check_args_requires_separate_file_for_non_default_comparison(tmp_path, monkeypatch) -> None:
+    """다른 비교를 기본 파일(spot_check_models.csv)에 쓰면 기존 사람 판정이 사라지므로 별도 --out이 필요하다."""
+    import argparse
+
+    import pytest
+
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+
+    with pytest.raises(ValueError):
+        pipeline._model_spot_check_args(argparse.Namespace(target="A", baseline=["B"]))
+    with pytest.raises(ValueError):
+        pipeline._model_spot_check_args(argparse.Namespace(target="A", baseline=["B"], out="spot_check_models.csv"))
+    with pytest.raises(ValueError):
+        pipeline._model_spot_check_args(argparse.Namespace(baseline=["B"]))
