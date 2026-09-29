@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from src import pipeline
-from src.api_parity import compare_embeddings
+from src.api_parity import compare_decisions, compare_embeddings
 from src.clients import OpenAIEmbeddingClient
 from src.clients.base import normalize_rows
 
@@ -23,7 +23,7 @@ def test_identical_vectors_are_equivalent() -> None:
 
     report = _compare(creators, creators.copy(), categories, categories.copy())
 
-    assert report["equivalent"] is True
+    assert report["similarity_equivalent"] is True
     assert report["creator_similarity_max_abs_diff"] == pytest.approx(0.0, abs=1e-6)
     assert report["top5_overlap_mean"] == 1.0 and report["top1_agreement"] == 1.0
     assert report["self_cosine_min"] == pytest.approx(1.0, abs=1e-6)
@@ -34,11 +34,11 @@ def test_tiny_noise_stays_equivalent_but_large_noise_does_not() -> None:
     rng = np.random.default_rng(5)
 
     tiny = normalize_rows(creators + rng.normal(scale=1e-4, size=creators.shape).astype(np.float32))
-    assert _compare(creators, tiny, categories, categories)["equivalent"] is True
+    assert _compare(creators, tiny, categories, categories)["similarity_equivalent"] is True
 
     large = normalize_rows(creators + rng.normal(scale=0.5, size=creators.shape).astype(np.float32))
     report = _compare(creators, large, categories, categories)
-    assert report["equivalent"] is False
+    assert report["similarity_equivalent"] is False
     assert report["creator_similarity_max_abs_diff"] > 0.01
 
 
@@ -50,7 +50,54 @@ def test_category_similarity_drift_alone_breaks_equivalence() -> None:
 
     assert report["top5_overlap_mean"] == 1.0
     assert report["category_similarity_max_abs_diff"] > 0.01
-    assert report["equivalent"] is False
+    assert report["similarity_equivalent"] is False
+
+
+def _decisions(local_c, api_c, local_k, api_k, tau, cutoff):
+    n, codes = len(local_c), ["A", "B", "C"]
+    return compare_decisions(
+        [f"C{i}" for i in range(n)], local_c, api_c, local_k, api_k, codes, [frozenset({"A"})] * n,
+        tau=tau, max_tags=3, bonuses={"M3": 0.1, "M4": 0.2}, cutoffs={m: cutoff for m in ("M1", "M2", "M3", "M4")}, k=5,
+    )
+
+
+def test_identical_vectors_make_identical_decisions() -> None:
+    creators, categories = _random_unit(10, 8, 12), _random_unit(3, 8, 13)
+
+    report = _decisions(creators, creators.copy(), categories, categories.copy(), tau=0.1, cutoff=0.1)
+
+    assert report["decisions_identical"] is True
+    assert report["zero_shot_tag_mismatch"]["count"] == 0
+    assert all(v["count"] == 0 for v in report["candidates_after_cutoff_mismatch"].values())
+
+
+def test_tag_flip_at_tau_is_caught_even_though_similarity_is_equivalent() -> None:
+    creators, categories = _random_unit(10, 8, 14), _random_unit(3, 8, 15)
+    top = int(np.argmax(categories @ creators[0]))
+    tau = float(categories[top] @ creators[0])  # tau가 어떤 크리에이터의 실제 점수와 같다 → 그 크리에이터는 경계에 있다
+    api_creators = creators.copy()
+    api_creators[0] = normalize_rows((creators[0] - 1e-3 * categories[top])[None, :])[0]  # 유사도는 0.001만 낮아진다
+
+    similarity = _compare(creators, api_creators, categories, categories)
+    decisions = _decisions(creators, api_creators, categories, categories, tau=tau, cutoff=-1.0)
+
+    assert similarity["similarity_equivalent"] is True
+    assert decisions["zero_shot_tag_mismatch"] == {"count": 1, "creators": ["C0"]}
+    assert decisions["decisions_identical"] is False
+
+
+def test_candidate_dropped_at_cutoff_is_caught() -> None:
+    creators, categories = _random_unit(10, 8, 16), _random_unit(3, 8, 17)
+    scores = creators @ creators[0]
+    neighbor = int(np.argsort(-np.where(np.arange(10) == 0, -np.inf, scores))[2])  # 로컬에서 3위 후보
+    cutoff = float(scores[neighbor])  # 컷오프가 그 후보의 점수와 같다 → 로컬은 통과, API는 미세하게 낮아져 탈락
+    api_creators = creators.copy()
+    api_creators[neighbor] = normalize_rows((creators[neighbor] - 1e-3 * creators[0])[None, :])[0]
+
+    report = _decisions(creators, api_creators, categories, categories, tau=0.1, cutoff=cutoff)
+
+    assert "C0" in report["candidates_after_cutoff_mismatch"]["M2"]["creators"]
+    assert report["decisions_identical"] is False
 
 
 def test_client_sends_configured_model_name() -> None:
@@ -80,6 +127,14 @@ def _write_local_cache(cache_dir, creators, categories, creator_vectors, categor
     (cache_dir / "embed_bge-m3.input_hash").write_text(input_hash, encoding="utf-8")
 
 
+def _write_params_and_llm_tags(dir_, creators) -> None:
+    per_embedding = {"tau": 0.0, "bonus_m3": 0.1, "bonus_m4": 0.2, **{f"cutoff_m{i}": 0.0 for i in range(1, 5)}}
+    (dir_ / "selected_params.json").write_text(
+        json.dumps({"llm_model": "m", "per_embedding": {"bge-m3": per_embedding}}), encoding="utf-8"
+    )
+    (dir_ / "llm_tags_m_run0.json").write_text(json.dumps({c.id: ["FOOD"] for c in creators}), encoding="utf-8")
+
+
 class _FakeApiClient:
     """로컬 캐시와 같은 벡터를 돌려주는 API 대역이다. 호출 순서대로 크리에이터 → 카테고리 벡터를 준다."""
 
@@ -100,11 +155,12 @@ def test_cmd_api_parity_uses_cache_and_writes_report(tmp_path, monkeypatch) -> N
     creators, categories = pipeline.load_creators(), pipeline.load_categories()
     creator_vectors, category_vectors = _random_unit(len(creators), 8, 8), _random_unit(len(categories), 8, 9)
     _write_local_cache(tmp_path, creators, categories, creator_vectors, category_vectors)
+    _write_params_and_llm_tags(tmp_path, creators)
 
     pipeline.cmd_api_parity(SimpleNamespace(), api_client=_FakeApiClient(creator_vectors, category_vectors))
 
     saved = json.loads((tmp_path / "api_parity.json").read_text(encoding="utf-8"))
-    assert saved["equivalent"] is True and saved["creator_count"] == len(creators)
+    assert saved["similarity_equivalent"] is True and saved["creator_count"] == len(creators)
     assert saved["input_tokens"] == 200 and saved["cost_usd"] == pytest.approx(200 / 1_000_000 * 0.01)
 
 
@@ -126,3 +182,13 @@ def test_api_client_requires_deepinfra_key(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="DEEPINFRA_API_KEY"):
         pipeline._api_bge_m3_client()
+
+
+def test_cmd_api_parity_stops_before_api_when_selected_params_are_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    creators, categories = pipeline.load_creators(), pipeline.load_categories()
+    _write_local_cache(tmp_path, creators, categories, _random_unit(len(creators), 8, 18), _random_unit(len(categories), 8, 19))
+
+    with pytest.raises(RuntimeError, match="select-params"):
+        pipeline.cmd_api_parity(SimpleNamespace(), api_client=_FakeApiClient())

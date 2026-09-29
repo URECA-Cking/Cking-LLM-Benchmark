@@ -49,8 +49,9 @@ OPENAI_EMBEDDING_PRICE_PER_1M = 0.02  # USD / 1,000,000 input tokens
 API_BGE_M3_BASE_URL = "https://api.deepinfra.com/v1/openai"
 API_BGE_M3_MODEL = "BAAI/bge-m3"
 API_BGE_M3_PRICE_PER_1M = 0.01  # USD / 1,000,000 input tokens
-# 로컬↔API 동등성 판정 기준. 서버 정밀도(fp16 등) 차이로 유사도가 흔들려도 bonus 그리드 간격(0.1)보다
-# 한 자릿수 작고 상위 5 이웃이 거의 그대로면, 로컬에서 고른 tau·bonus·컷오프를 그대로 써도 된다고 본다
+# 로컬↔API 유사도 동등성 판정 기준. 서버 정밀도(fp16 등) 차이로 유사도가 흔들려도 bonus 그리드 간격(0.1)보다
+# 한 자릿수 작고 상위 5 이웃이 거의 그대로면 "유사도가 같다"고 본다. 이 기준은 tau·컷오프 같은 경계 판정의
+# 결과까지 보장하지 않아, 파라미터 재사용 여부는 같은 파라미터로 태그·후보를 직접 비교해(compare_decisions) 따로 본다
 PARITY_MAX_ABS_DIFF = 0.01
 PARITY_MIN_TOP5_OVERLAP = 0.95
 

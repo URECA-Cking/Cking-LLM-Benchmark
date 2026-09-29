@@ -2,13 +2,16 @@
 
 서버 정밀도(fp16 등) 차이로 벡터가 미세하게 다르면 로컬에서 고른 tau·bonus·컷오프가 어긋날 수 있어,
 추천에 실제로 쓰는 값(크리에이터끼리·크리에이터↔카테고리 유사도, 상위 이웃 순위)으로 차이를 잰다.
+유사도가 거의 같아도 tau·컷오프는 "이상이면 통과"라는 경계 판정이라, 경계에 놓인 크리에이터는 아주 작은 차이로도
+결과가 바뀐다. 그래서 같은 파라미터로 태그 집합과 컷오프 뒤 상위 후보를 직접 비교하는 단계(compare_decisions)를 따로 둔다.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from src.similarity import cosine_matrix
+from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, top_n
+from src.tagging import rank_all
 
 
 def _max_abs_diff(a: np.ndarray, b: np.ndarray) -> float:
@@ -48,7 +51,64 @@ def compare_embeddings(
         f"top{k}_overlap_min": float(overlaps.min()),
         "top1_agreement": float(np.mean(local_top[:, 0] == api_top[:, 0])),
     }
-    report["equivalent"] = bool(
+    report["similarity_equivalent"] = bool(
         max(creator_diff, category_diff) <= max_abs_diff_limit and overlaps.mean() >= min_top_k_overlap
     )
     return report
+
+
+def compare_decisions(
+    creator_ids: list[str],
+    local_creators: np.ndarray,
+    api_creators: np.ndarray,
+    local_categories: np.ndarray,
+    api_categories: np.ndarray,
+    category_codes: list[str],
+    llm_tag_sets: list[frozenset[str]],
+    tau: float,
+    max_tags: int,
+    bonuses: dict[str, float],
+    cutoffs: dict[str, float],
+    k: int,
+) -> dict:
+    """같은 tau·bonus·컷오프로 로컬·API 벡터의 zero-shot 태그와 컷오프 뒤 상위 k 후보를 비교한다.
+
+    태그는 점수가 tau 이상인지, 후보는 점수가 컷오프 이상인지로 정해져서 경계 근처에서는 미세한 차이로도 뒤집힌다.
+    M1~M4(bge-m3 임베딩과 tau·bonus·컷오프를 쓰는 방식)만 본다. M5는 리랭커 점수가 따로 필요해 포함하지 않는다.
+    """
+
+    def tags(creators: np.ndarray, categories: np.ndarray) -> list[frozenset[str]]:
+        return [r.assigned(tau, max_tags) for r in rank_all(creators, categories, category_codes)]
+
+    def matrices(creators: np.ndarray, zero_shot: list[frozenset[str]]) -> dict[str, np.ndarray]:
+        cosine = cosine_matrix(creators)
+        return {
+            "M1": jaccard_matrix(zero_shot),
+            "M2": cosine,
+            "M3": cosine_with_tag_bonus(cosine, zero_shot, bonuses["M3"]),
+            "M4": cosine_with_tag_bonus(cosine, llm_tag_sets, bonuses["M4"]),
+        }
+
+    local_tags, api_tags = tags(local_creators, local_categories), tags(api_creators, api_categories)
+    local_matrices, api_matrices = matrices(local_creators, local_tags), matrices(api_creators, api_tags)
+
+    def kept(matrix: np.ndarray, row: int, cutoff: float) -> set[str]:
+        return {cid for cid, score in top_n(matrix, creator_ids, row, k) if score >= cutoff}
+
+    def summarize(changed: list[str]) -> dict:
+        return {"count": len(changed), "creators": changed}
+
+    tag_mismatch = [cid for cid, a, b in zip(creator_ids, local_tags, api_tags) if a != b]
+    candidate_mismatch = {
+        method: [
+            cid
+            for row, cid in enumerate(creator_ids)
+            if kept(local_matrices[method], row, cutoffs[method]) != kept(api_matrices[method], row, cutoffs[method])
+        ]
+        for method in local_matrices
+    }
+    return {
+        "zero_shot_tag_mismatch": summarize(tag_mismatch),
+        "candidates_after_cutoff_mismatch": {method: summarize(ids) for method, ids in candidate_mismatch.items()},
+        "decisions_identical": not tag_mismatch and not any(candidate_mismatch.values()),
+    }
