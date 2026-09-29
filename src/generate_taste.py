@@ -131,6 +131,41 @@ def estimate_cost(model: str, calls: int) -> float:
     return calls * (per_in * price["input_price"] + per_out * price["output_price"]) / 1_000_000
 
 
+def _prompt_hash(prompt: str) -> str:
+    """시스템·사용자 프롬프트와 길이 요구(STYLE_GUIDE)의 해시다. 생성 조건이 바뀌면 캐시를 다시 쓰지 않는다."""
+    import hashlib
+
+    return hashlib.sha256(f"{SYSTEM_PROMPT}\x1f{prompt}".encode("utf-8")).hexdigest()[:16]
+
+
+def _plan(profiles: list[Profile], names: dict[str, str], cache_dir) -> list[tuple[Profile, str, dict | None]]:
+    """프로필마다 (프로필, 프롬프트, 재사용할 캐시 결과 또는 None)을 만든다.
+
+    캐시는 저장된 프롬프트 해시가 지금 프롬프트와 같을 때만 재사용한다(프롬프트를 바꾸거나 앞선 프로필이 다시
+    만들어져 avoid 문구가 달라지면 새로 만든다). 프롬프트 해시가 없는 예전 캐시도 다시 만든다.
+    """
+    plan: list[tuple[Profile, str, dict | None]] = []
+    previous_by_gold: dict[str, str | None] = {}  # None이면 앞선 프로필이 새로 만들어져 결과를 아직 모른다
+    for profile in profiles:
+        single = len(profile.gold) == 1
+        previous = previous_by_gold.get(profile.gold[0], "") if single else ""
+        stale_previous = single and previous is None
+        prompt = build_prompt(names, profile, previous or "")
+        cached = None
+        path = cache_dir / f"{profile.profile_id}.json"
+        if path.exists() and not stale_previous:
+            entry = json.loads(path.read_text(encoding="utf-8"))
+            if entry.get("prompt_hash") == _prompt_hash(prompt):
+                cached = entry["result"]
+                errors = [e for e in validate(cached) if not e.startswith(SOFT_PREFIX)]
+                if errors:
+                    raise ValueError(f"{path.name} 캐시가 현재 검증 규칙을 통과하지 못합니다({errors}). 지우고 다시 만드세요.")
+        plan.append((profile, prompt, cached))
+        if single:
+            previous_by_gold[profile.gold[0]] = cached["sentence"].strip() if cached is not None else None
+    return plan
+
+
 def main() -> None:
     """프로필별로 쿼리를 만들어(캐시가 있으면 재사용) taste_queries.csv로 합친다."""
     parser = argparse.ArgumentParser(description="사용자 취향 요약문 쿼리 생성")
@@ -150,7 +185,8 @@ def main() -> None:
         cached_model = json.loads(path.read_text(encoding="utf-8")).get("model")
         if cached_model != args.model:
             raise ValueError(f"{path.name}은 {cached_model}로 만든 캐시입니다. --model {args.model}로 쓰려면 results/cache/taste_gen/을 지우고 다시 만드세요.")
-    pending = [p for p in profiles if not (cache_dir / f"{p.profile_id}.json").exists()]
+    plan = _plan(profiles, names, cache_dir)
+    pending = [entry for entry in plan if entry[2] is None]
     print(f"[generate-taste] 프로필 {len(profiles)}개 x 표현 {len(STYLES)}종 = {len(profiles) * len(STYLES)}개, "
           f"남은 API 호출 {len(pending)}건, 예상 비용 약 ${estimate_cost(args.model, len(pending)):.2f} ({args.model})")
     if args.dry_run:
@@ -161,19 +197,21 @@ def main() -> None:
     total_in = total_out = 0
     rows: list[dict[str, str]] = []
     previous_by_gold: dict[str, str] = {}
-    for profile in profiles:
+    for profile, _, cached in plan:
         cache_path = cache_dir / f"{profile.profile_id}.json"
-        if cache_path.exists():
-            result = json.loads(cache_path.read_text(encoding="utf-8"))["result"]
-            errors = [e for e in validate(result) if not e.startswith(SOFT_PREFIX)]
-            if errors:
-                raise ValueError(f"{cache_path.name} 캐시가 현재 검증 규칙을 통과하지 못합니다({errors}). 지우고 다시 만드세요.")
+        if cached is not None:
+            result = cached
         else:
+            # 앞선 프로필이 새로 만들어졌다면 그 결과를 avoid에 반영해야 하므로 프롬프트를 여기서 다시 만든다
             previous = previous_by_gold.get(profile.gold[0], "") if len(profile.gold) == 1 else ""
-            result, in_tokens, out_tokens = _generate_profile(client, args.model, build_prompt(names, profile, previous))
+            prompt = build_prompt(names, profile, previous)
+            result, in_tokens, out_tokens = _generate_profile(client, args.model, prompt)
             total_in += in_tokens
             total_out += out_tokens
-            cache_path.write_text(json.dumps({"model": args.model, "result": result}, ensure_ascii=False, indent=2), encoding="utf-8")
+            cache_path.write_text(
+                json.dumps({"model": args.model, "prompt_hash": _prompt_hash(prompt), "result": result}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
             print(f"[generate-taste] {profile.profile_id} 완료")
         if len(profile.gold) == 1:
             previous_by_gold[profile.gold[0]] = result["sentence"].strip()

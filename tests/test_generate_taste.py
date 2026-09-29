@@ -112,3 +112,43 @@ def test_main_does_not_overwrite_existing_csv_without_force(tmp_path, monkeypatc
     gt.main()
 
     assert existing.read_text(encoding="utf-8") == "keep" and "이미 있어" in capsys.readouterr().out
+
+
+def _write_cache(path, prompt, result=None):
+    path.write_text(json.dumps({"model": "m", "prompt_hash": gt._prompt_hash(prompt), "result": result or _result()}, ensure_ascii=False), encoding="utf-8")
+
+
+def test_plan_reuses_cache_only_when_prompt_hash_matches(tmp_path) -> None:
+    names = {"FITNESS": "운동", "FOOD": "요리"}
+    profiles = gt.build_profiles(["FITNESS"])
+    _write_cache(tmp_path / "P01.json", gt.build_prompt(names, profiles[0], ""))
+    _write_cache(tmp_path / "P03.json", gt.build_prompt(names, profiles[2], ""))
+
+    plan = gt._plan(profiles, names, tmp_path)
+
+    assert plan[0][2] is not None  # 프롬프트가 같아 재사용
+    assert plan[1][2] is None  # 캐시 없음
+    assert plan[2][2] is not None  # 교차 프로필은 앞선 결과와 무관하게 재사용
+
+
+def test_plan_regenerates_when_prompt_changed_or_hash_missing(tmp_path, monkeypatch) -> None:
+    names = {"FITNESS": "운동", "FOOD": "요리"}
+    profiles = gt.build_profiles(["FITNESS"])
+    _write_cache(tmp_path / "P01.json", gt.build_prompt(names, profiles[0], ""))
+    (tmp_path / "P03.json").write_text(json.dumps({"model": "m", "result": _result()}), encoding="utf-8")  # 해시 없는 예전 캐시
+
+    monkeypatch.setitem(gt.STYLE_GUIDE, "sentence", "완전히 다른 길이 요구")  # 서비스 형식에 맞게 프롬프트를 바꾼 상황
+    plan = gt._plan(profiles, names, tmp_path)
+
+    assert plan[0][2] is None and plan[2][2] is None
+
+
+def test_plan_regenerates_dependent_profile_when_previous_is_regenerated(tmp_path) -> None:
+    names = {"FITNESS": "운동", "FOOD": "요리"}
+    profiles = gt.build_profiles(["FITNESS"])
+    first = _result(sentence="첫 사용자 문장이다.")
+    _write_cache(tmp_path / "P02.json", gt.build_prompt(names, profiles[1], first["sentence"]))  # P01의 옛 결과를 avoid로 쓴 캐시
+
+    plan = gt._plan(profiles, names, tmp_path)  # P01 캐시가 없어 새로 만들어지므로 P02의 avoid가 달라진다
+
+    assert plan[0][2] is None and plan[1][2] is None
