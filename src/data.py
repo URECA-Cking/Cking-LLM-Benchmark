@@ -7,7 +7,15 @@ import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.config import CATEGORIES_CSV, CREATORS_CSV, CREATORS_CSV_SHA256, SPLIT_CSV, SPLIT_CSV_SHA256
+from src.config import (
+    CATEGORIES_CSV,
+    CREATORS_CSV,
+    CREATORS_CSV_SHA256,
+    CREATORS_LARGE_CSV,
+    CREATORS_LARGE_CSV_SHA256,
+    SPLIT_CSV,
+    SPLIT_CSV_SHA256,
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,26 @@ def _split_codes(value: str | None) -> tuple[str, ...]:
     return tuple(code.strip() for code in value.split("|") if code.strip())
 
 
+def _creator_from_row(row: dict[str, str], split: str, is_query: bool) -> Creator:
+    """creators CSV 한 행을 Creator로 바꾼다. declared가 비어 있으면 gold와 같다고 본다."""
+    gold = _split_codes(row["gold"])
+    declared = _split_codes(row["declared"]) or gold
+    events = tuple(e.strip() for e in row["events"].split("/") if e.strip())
+    return Creator(
+        id=row["id"],
+        name=row["name"],
+        bio=row["bio"],
+        events=events,
+        subtopic=row["subtopic"],
+        gold=gold,
+        declared=declared,
+        written_by=row["written_by"],
+        note=row["note"],
+        split=split,
+        is_query=is_query,
+    )
+
+
 def load_creators() -> list[Creator]:
     """크리에이터 100명을 split.csv와 결합해 읽는다. 데이터 hash를 먼저 검증한다."""
     verify_data_hashes()
@@ -86,27 +114,25 @@ def load_creators() -> list[Creator]:
             split_row = split_by_id.get(row["id"])
             if split_row is None:
                 raise ValueError(f"split.csv에 {row['id']}가 없습니다.")
-            gold = _split_codes(row["gold"])
-            declared = _split_codes(row["declared"]) or gold
-            events = tuple(e.strip() for e in row["events"].split("/") if e.strip())
-            creators.append(
-                Creator(
-                    id=row["id"],
-                    name=row["name"],
-                    bio=row["bio"],
-                    events=events,
-                    subtopic=row["subtopic"],
-                    gold=gold,
-                    declared=declared,
-                    written_by=row["written_by"],
-                    note=row["note"],
-                    split=split_row["split"],
-                    is_query=split_row["query"].strip().upper() == "Y",
-                )
-            )
+            creators.append(_creator_from_row(row, split_row["split"], split_row["query"].strip().upper() == "Y"))
     if len(creators) != 100:
         raise ValueError(f"크리에이터는 100명이어야 하는데 {len(creators)}명입니다.")
     return creators
+
+
+def load_large_creators(
+    path: Path = CREATORS_LARGE_CSV, expected_sha256: str | None = CREATORS_LARGE_CSV_SHA256
+) -> list[Creator]:
+    """dev 규모 민감도 실험용 추가 크리에이터를 읽는다 (data/creators_large.csv, 전부 dev 후보 풀).
+
+    평가(test)에는 절대 쓰지 않는 별도 파일이라 기존 100명의 고정 hash·결과와 섞이지 않는다.
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"{path.name}이 없습니다. `python3 -m src.generate_large`로 먼저 만드세요.")
+    if expected_sha256 is not None and _sha256(path) != expected_sha256:
+        raise ValueError(f"{path.name}이 확정본과 다릅니다. 의도한 변경이면 src/config.py의 hash를 갱신하세요.")
+    with path.open(encoding="utf-8") as f:
+        return [_creator_from_row(row, "dev", False) for row in csv.DictReader(f)]
 
 
 def dev_creators(creators: list[Creator]) -> list[Creator]:

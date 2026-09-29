@@ -134,3 +134,16 @@ def test_restricting_candidate_pool_to_dev_prevents_test_label_leakage() -> None
     fixed_when_t1_unrelated = dev_only_selected_bonus(frozenset({"B"}))
     fixed_when_t1_relevant = dev_only_selected_bonus(frozenset({"A"}))
     assert fixed_when_t1_unrelated == fixed_when_t1_relevant  # 수정 후 test gold와 무관
+
+
+def test_cosine_matrix_with_query_vectors_keeps_candidate_side_original() -> None:
+    """쿼리 프롬프트 벡터는 행(쿼리 쪽)에만 쓰이고, 쿼리끼리 후보가 될 때도 열은 원래 벡터여야 한다."""
+    vectors = np.array([[1.0, 0.0], [0.6, 0.8], [0.0, 1.0]], dtype=np.float32)
+    query_vectors = vectors.copy()
+    query_vectors[0] = [0.0, 1.0]  # 0번 쿼리만 프롬프트 적용으로 방향이 바뀐 상황
+
+    matrix = cosine_matrix(vectors, query_vectors=query_vectors)
+
+    assert matrix[0, 1] == pytest.approx(0.8)  # 행 0은 쿼리 벡터로
+    assert matrix[1, 0] == pytest.approx(0.6)  # 열 0(후보)은 원래 벡터 [1, 0]으로 — 덮어쓰면 0.8이 된다
+    assert np.array_equal(cosine_matrix(vectors), cosine_matrix(vectors, query_vectors=None), equal_nan=True)

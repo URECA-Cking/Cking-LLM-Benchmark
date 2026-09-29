@@ -27,9 +27,13 @@ def jaccard_matrix(tag_sets: list[frozenset[str]]) -> np.ndarray:
     return matrix
 
 
-def cosine_matrix(vectors: np.ndarray) -> np.ndarray:
-    """정규화된 벡터 배열로 코사인 유사도 행렬을 만든다 (M2). 정규화 벡터의 내적 = 코사인."""
-    matrix = vectors @ vectors.T
+def cosine_matrix(vectors: np.ndarray, query_vectors: np.ndarray | None = None) -> np.ndarray:
+    """정규화된 벡터 배열로 코사인 유사도 행렬을 만든다 (M2). 정규화 벡터의 내적 = 코사인.
+
+    query_vectors를 주면 행(쿼리 쪽)에는 그 벡터를, 열(후보 쪽)에는 원래 vectors를 쓴다. 쿼리
+    프롬프트를 적용한 벡터가 후보로 참조되지 않게 하려는 것이라 이때 행렬은 비대칭일 수 있다.
+    """
+    matrix = (vectors if query_vectors is None else query_vectors) @ vectors.T
     _mask_diagonal(matrix)
     return matrix
 

@@ -59,10 +59,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-65 passed in 3~4s
+94 passed in 3~5s
 ```
 
-**65개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**94개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -123,11 +123,19 @@ python3 -m src.pipeline select-params
 ```
 
 ```
-[select-params] text-embedding-3-small: tau=0.2707 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
+[select-params] text-embedding-3-small: tau=0.2706 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
 [select-params] bge-m3: tau=0.4801 bonus_m3=0.1 bonus_m4=0.2 bonus_r2=0.2
 [select-params] kure-v1: tau=0.4745 bonus_m3=0.1 bonus_m4=0.1 bonus_r2=0.1
-[select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.3 bonus_m4=0.3 bonus_r2=0.3
+[select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.2 bonus_m4=0.2 bonus_r2=0.2
 ```
+
+### 선택: dev-sensitivity — dev 규모 민감도 (API 호출 약 1센트, 수 분)
+
+```bash
+python3 -m src.pipeline dev-sensitivity
+```
+
+기존 dev 30명 + 합성 300명에서 크기별(30/60/120/240) 부분표본으로 tau·bonus를 골라 보고 얼마나 흔들리는지 `results/dev_sensitivity.json`에 저장합니다. ①~③을 먼저 실행해야 합니다. 결과 해석은 `docs/embedding-method-selection.md`의 "dev 규모 민감도" 절을 참고하세요.
 
 ### ④ candidates — 유사 크리에이터 후보 계산 (API 호출 없음, 몇 초)
 
@@ -146,7 +154,7 @@ python3 -m src.pipeline judge-sheet
 ```
 
 ```
-[judge-sheet] 680쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
+[judge-sheet] 681쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
 ```
 
 이 시점의 `results/judge_sheet.csv`는 `score` 열이 전부 빈칸입니다. **다음 5장에서 이 빈칸을 채우는 방법을 고릅니다.**
@@ -161,9 +169,9 @@ python3 -m src.pipeline score-judgments
 
 ```
 === E2. 방식별 평균 관련도@5 / nDCG@5 / 무관 비율@5 (test 쿼리 30명) ===
-   M1_text-embedding-3-small: 관련도=0.147 [0.060, 0.240]  nDCG=0.146  무관비율=0.867
+   M1_text-embedding-3-small: 관련도=0.147 [0.060, 0.240]  nDCG=0.143  무관비율=0.867
    ...
-   M4_bge-m3: 관련도=0.487 [0.333, 0.640]  nDCG=0.535  무관비율=0.587
+   M4_bge-m3: 관련도=0.487 [0.333, 0.640]  nDCG=0.541  무관비율=0.587
    ...
 ```
 
@@ -175,7 +183,7 @@ python3 -m src.pipeline report
 
 ```
 === E1. zero-shot 태깅 정확도 (test) ===
--- text-embedding-3-small (tau=0.2707)
+-- text-embedding-3-small (tau=0.2706)
    Top-1 정확도: 0.729
    Top-3 포함률: 0.886
    ...
@@ -195,7 +203,7 @@ python3 -m src.pipeline report
 
 ## 5. 판정하기 (E2)
 
-`judge-sheet` 직후 `results/judge_sheet.csv`는 680쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
+`judge-sheet` 직후 `results/judge_sheet.csv`는 681쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
 
 ### 방법 A. 자동 판정 (추천 — 대부분 이 방법으로 충분)
 
@@ -203,11 +211,11 @@ python3 -m src.pipeline report
 python3 -m src.pipeline auto-judge
 ```
 
-LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 680쌍을 대신 채점합니다. **비용 약 $0.17, 소요 약 9~10분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
+LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 681쌍을 대신 채점합니다. **비용 약 $0.17, 소요 약 9~10분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
 
 ```
-[auto-judge] 전체 680쌍 중 0쌍 완료, 680쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
-[auto-judge] 50/680 완료
+[auto-judge] 전체 681쌍 중 0쌍 완료, 681쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
+[auto-judge] 50/681 완료
 ...
 [auto-judge] 완료. 비용 약 $0.17. 일부를 src.judge_cli로 직접 재판정해 일치율을 확인하는 것을 권장합니다.
 ```
@@ -248,7 +256,7 @@ python3 -m src.pipeline spot-check-report
 
 `±1 이내 일치율`이 1.0에 가까우면(즉 사람과 자동 판정이 2점 이상 차이나는 극단적 불일치가 없으면) 방법 A의 결과를 신뢰할 근거가 됩니다.
 
-### 방법 C. 680쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
+### 방법 C. 681쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
 
 빠르게 확인하고 싶다면 방법 A만으로 충분합니다. 하지만 **사람 판정만으로 결과를 내고 싶다면** 이 방법을 씁니다.
 
@@ -261,9 +269,9 @@ python3 -m src.judge_cli
 `judge_cli`는 쌍 하나씩 소개글을 보여주고 점수를 입력받습니다. **`judge_sheet.csv`와 `spot_check.csv` 둘 다 이 도구로 채웁니다** — 어떤 파일을 채울지는 `--file` 옵션으로 정합니다(생략하면 `results/judge_sheet.csv`).
 
 ```
-전체 680쌍 중 0쌍 완료, 680쌍 남음
+전체 681쌍 중 0쌍 완료, 681쌍 남음
 
-[1/680] 쿼리 B02 데일리메이크업쌤
+[1/681] 쿼리 B02 데일리메이크업쌤
   소개: 출근 전 10분이면 끝나는 데일리 메이크업을 알려드려요. ...
   후보 B01 피부과가고싶은날
   소개: 민감성 피부 스킨케어 루틴이랑 성분 분석해요. ...
@@ -301,6 +309,7 @@ python3 -m src.judge_cli
 | `data/categories.csv` | 카테고리 10개 + zero-shot 태깅용 설명문 (taxonomy v0.1) |
 | `data/creators.csv` | 가상 크리에이터 100명 (일반 85 + 어려운 사례 X01~X15) |
 | `data/split.csv` | dev 30 / test 70, `query=Y`인 test 30명이 평가 쿼리 |
+| `data/creators_large.csv` | dev 규모 민감도 실험용 합성 300명(`python3 -m src.generate_large`로 생성, 평가에는 쓰지 않음) |
 
 `creators.csv` 컬럼
 
@@ -320,6 +329,7 @@ python3 -m src.judge_cli
 ```
 creators.csv sha256 e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
+creators_large.csv sha256 152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac
 ```
 
 ## 8. 비교 대상 방식

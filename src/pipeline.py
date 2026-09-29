@@ -32,7 +32,7 @@ from src.config import (
     RESULTS_DIR,
     TOP_N_STORED,
 )
-from src.data import Creator, dev_creators, load_categories, load_creators, query_creators
+from src.data import Creator, dev_creators, load_categories, load_creators, query_creators, test_creators
 from src.judge import build_judge_pairs, load_existing_scores, pair_text_hash, shuffle_rows, write_judge_sheet, write_provenance
 from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
 from src.spot_check import agreement_stats, select_pairwise_symmetric_disagreement
@@ -294,7 +294,9 @@ def cmd_select_params(_: argparse.Namespace) -> None:
         # dev만 남긴 부분 행렬로 bonus를 고른다. test 벡터·gold는 이 시점에 전혀 등장하지 않는다.
         dev_index = [i for i, cid in enumerate(ids) if cid in dev_id_set]
         dev_ids_ordered = [ids[i] for i in dev_index]
-        dev_cosine = cosine_matrix(vectors[dev_index])
+        # 평가(candidates)와 같은 조건으로 고르도록, 프롬프트가 있는 모델은 dev 행에도 쿼리 프롬프트를 적용한다
+        dev_query_vectors = _query_prompted_vectors(key, ids, vectors, creators, target_ids=dev_id_set)[dev_index]
+        dev_cosine = cosine_matrix(vectors[dev_index], query_vectors=dev_query_vectors)
 
         dev_zero_shot_tag_sets = [zero_shot_tags[cid] for cid in dev_ids_ordered]
         dev_llm_tag_sets = [llm_tags_by_id[cid] for cid in dev_ids_ordered]
@@ -329,6 +331,34 @@ def _rerank_bge_m2_candidates(
     return result
 
 
+def _query_prompted_vectors(
+    key: str, ids: list[str], vectors: np.ndarray, creators: list[Creator], target_ids: set[str] | None = None
+) -> np.ndarray:
+    """쿼리 쪽(행) 벡터를 반환한다. 원래 벡터 배열은 후보 쪽(열)으로 그대로 두고 바꾸지 않는다.
+
+    query_prompt_name이 등록된 모델(Qwen3)이면 평가 쿼리 30명의 행만 그 프롬프트로 다시
+    인코딩해 바꿔치기한 복사본을 돌려준다 — M2~M4/R2의 "쿼리가 후보를 찾는" 방향 유사도용이다
+    (이슈 #8, 리뷰로 발견: 공식 사용법은 검색 쿼리 쪽에 instruct 프롬프트를 쓰길 권장하는데
+    기존엔 접두어 없이 측정했다). 이 반환값을 `cosine_matrix(vectors, query_vectors=...)`의 행에만
+    쓰고 열에는 원래 vectors를 써야 한다 — 쿼리끼리 서로의 후보가 될 때도 후보로 참조되는 쪽은
+    프롬프트 없는 원래 임베딩이어야 하기 때문이다(재리뷰로 발견: 예전엔 하나의 배열을 덮어써
+    후보 쪽 벡터까지 바뀌었다). target_ids로 프롬프트를 적용할 행을 바꿀 수 있다 — 기본은 평가 쿼리 30명이고, select-params는 dev 크리에이터를 준다(평가와 같은 표현으로 bonus를 고르기 위함). query_prompt_name이 없는 모델은 vectors를 그대로 반환한다.
+    """
+    prompt_name = LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name")
+    if not prompt_name:
+        return vectors
+    query_ids = target_ids if target_ids is not None else {c.id for c in query_creators(creators)}
+    text_by_id = {c.id: c.input_text() for c in creators}
+    targets = [(i, cid) for i, cid in enumerate(ids) if cid in query_ids]
+    if not targets:
+        return vectors
+    query_vectors = LocalEmbeddingClient(key).embed([text_by_id[cid] for _, cid in targets], prompt_name=prompt_name)
+    vectors = vectors.copy()
+    for (i, _cid), qv in zip(targets, query_vectors):
+        vectors[i] = qv
+    return vectors
+
+
 def cmd_candidates(_: argparse.Namespace) -> None:
     """설정(임베딩 모델 x 방식) 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
     categories = load_categories()
@@ -349,7 +379,7 @@ def cmd_candidates(_: argparse.Namespace) -> None:
         p = params["per_embedding"][key]
         ids, _, zero_shot_tags, _ = _zero_shot_tags_for_key(key, creators, categories, tau_candidates=[p["tau"]])
         _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-        cosine = cosine_matrix(vectors)
+        cosine = cosine_matrix(vectors, query_vectors=_query_prompted_vectors(key, ids, vectors, creators))
 
         zero_shot_tag_sets = [zero_shot_tags[cid] for cid in ids]
         llm_tag_sets = [llm_tags_by_id[cid] for cid in ids]
@@ -552,16 +582,23 @@ SPOT_CHECK_BASELINES = ["M3_bge-m3", "R2_bge-m3"]
 SPOT_CHECK_SAMPLE_SIZE = 30  # 141쌍 전부는 부담이 커서 무작위 표본만 사람이 본다 (2026-09-28 결정)
 SPOT_CHECK_SAMPLE_SEED = 20260928
 
+# bge-m3와 KURE-v1 중 하나를 고를 때 실제로 추천이 갈리는 쌍만 사람이 보게 한다 (이슈 #8).
+# 각 임베딩의 현재 1순위 후보를 골랐다: M3_bge-m3(재현성 우선 픽), M2_kure-v1(태그 보정 없이도
+# 견고했던 KURE-v1의 대표 픽). 다른 조합을 보고 싶으면 이 두 값만 바꾸면 된다.
+MODEL_SPOT_CHECK_TARGET = "M3_bge-m3"
+MODEL_SPOT_CHECK_BASELINES = ["M2_kure-v1"]
 
-def cmd_spot_check(_: argparse.Namespace) -> None:
-    """target_method와 각 baseline을 양쪽 차집합(대칭차집합)으로 비교해 다른 후보만 골라
 
-    소규모 시트(results/spot_check.csv)를 만든다. target−baseline 합집합만 보던 이전 방식은
-    "M4=A, M3=B, R2=A"처럼 다른 baseline이 같은 후보를 갖고 있으면 실제 차이를 놓쳤다
-    (리뷰 P2). 지금은 M4 vs M3, M4 vs R2를 각각 정확히 비교해 두 방향(더한 것·뺀 것)을
-    모두 잡는다. 전체 쌍이 SPOT_CHECK_SAMPLE_SIZE보다 많으면 고정 시드로 무작위 표본만
-    남긴다(전수 조사가 아니라 표본 조사임을 결과에 함께 적어야 한다).
-    `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
+def _build_spot_check_rows(
+    target: str, baselines: list[str], sample_size: int, seed: int, out_path: Path
+) -> tuple[int, int]:
+    """target과 각 baseline을 양쪽 차집합(대칭차집합)으로 비교해 다른 후보만 골라
+
+    소규모 시트를 만든다. target−baseline 합집합만 보던 이전 방식은 "A=X, B=Y, C=X"처럼
+    다른 baseline이 같은 후보를 갖고 있으면 실제 차이를 놓쳤다(리뷰 P2). 지금은 각 baseline과
+    정확히 한 쌍씩 비교해 두 방향(더한 것·뺀 것)을 모두 잡는다. 전체 쌍이 sample_size보다
+    많으면 고정 시드로 무작위 표본만 남긴다(전수 조사가 아니라 표본 조사임을 결과에 함께
+    적어야 한다). 반환값은 (실제 저장한 쌍 수, 표본 뽑기 전 전체 쌍 수)다.
     """
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
@@ -572,20 +609,20 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
 
     pairs: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
-    for baseline in SPOT_CHECK_BASELINES:
-        for pair in select_pairwise_symmetric_disagreement(all_candidates, query_ids, SPOT_CHECK_TARGET, baseline, k=JUDGE_TOP_K):
+    for baseline in baselines:
+        for pair in select_pairwise_symmetric_disagreement(all_candidates, query_ids, target, baseline, k=JUDGE_TOP_K):
             if pair not in seen:
                 seen.add(pair)
                 pairs.append(pair)
 
     total_found = len(pairs)
-    if total_found > SPOT_CHECK_SAMPLE_SIZE:
-        # 정렬 후 샘플링해야 고정 시드가 실행마다 같은 30쌍을 뽑는다는 보장이 생긴다
+    if total_found > sample_size:
+        # 정렬 후 샘플링해야 고정 시드가 실행마다 같은 쌍을 뽑는다는 보장이 생긴다
         # (PR #5 리뷰로 발견: set 순회 순서가 해시 시드에 따라 달라져 pairs 자체가 이미
         # 비결정적이었다 — select_pairwise_symmetric_disagreement에서 sorted로 고쳤지만,
         # 여기서도 한 번 더 정렬해 이 함수만 보고도 재현성이 보장됨을 알 수 있게 한다).
         pairs = sorted(pairs)
-        pairs = random.Random(SPOT_CHECK_SAMPLE_SEED).sample(pairs, SPOT_CHECK_SAMPLE_SIZE)
+        pairs = random.Random(seed).sample(pairs, sample_size)
 
     rows = [
         {
@@ -597,24 +634,17 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
         }
         for qid, cid in pairs
     ]
-    write_judge_sheet_rows(rows, RESULTS_DIR / "spot_check.csv")
-    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > len(rows) else ""
-    print(
-        f"[spot-check] {SPOT_CHECK_TARGET}를 {SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
-        f"다른 {len(rows)}쌍{sample_note}을 results/spot_check.csv에 저장했습니다.\n"
-        f"python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 "
-        f"python3 -m src.pipeline spot-check-report 를 실행하세요."
-    )
+    write_judge_sheet_rows(rows, out_path)
+    return len(rows), total_found
 
 
-def cmd_spot_check_report(_: argparse.Namespace) -> None:
-    """spot_check.csv의 사람 점수와 judge_sheet.csv의 자동 판정 점수를 같은 쌍끼리 비교한다."""
-    spot_path = RESULTS_DIR / "spot_check.csv"
+def _print_spot_check_report(target: str, baselines: list[str], spot_path: Path) -> None:
+    """spot_path의 사람 점수와 judge_sheet.csv의 자동 판정 점수를 같은 쌍끼리 비교한다."""
     with spot_path.open(encoding="utf-8") as f:
         spot_rows = list(csv.DictReader(f))
     unscored = [r["pair_id"] for r in spot_rows if not r["score"].strip()]
     if unscored:
-        raise ValueError(f"아직 판정이 안 된 쌍이 있습니다: {unscored}. src.judge_cli --file results/spot_check.csv 로 먼저 채우세요.")
+        raise ValueError(f"아직 판정이 안 된 쌍이 있습니다: {unscored}. src.judge_cli --file {spot_path} 로 먼저 채우세요.")
     human = {(r["query_id"], r["candidate_id"]): int(r["score"]) for r in spot_rows}
 
     with (RESULTS_DIR / "judge_sheet.csv").open(encoding="utf-8") as f:
@@ -622,13 +652,76 @@ def cmd_spot_check_report(_: argparse.Namespace) -> None:
     auto = {(r["query_id"], r["candidate_id"]): int(r["score"]) for r in auto_rows if r["score"].strip()}
 
     stats = agreement_stats(human, auto)
-    print(f"=== spot-check 일치율 ({SPOT_CHECK_TARGET} vs {SPOT_CHECK_BASELINES}만 고른 후보 {stats['count']}쌍) ===")
+    print(f"=== spot-check 일치율 ({target} vs {baselines}만 고른 후보 {stats['count']}쌍) ===")
     print(f"   완전 일치율: {stats['exact_match_rate']:.2f}")
     print(f"   ±1 이내 일치율: {stats['within_1_rate']:.2f}")
     print(f"   평균 절대 오차: {stats['mean_abs_diff']:.2f}")
     for (qid, cid), auto_score in auto.items():
         if (qid, cid) in human and human[(qid, cid)] != auto_score:
             print(f"   불일치: {qid}::{cid}  사람={human[(qid, cid)]}  자동={auto_score}")
+
+
+def cmd_spot_check(_: argparse.Namespace) -> None:
+    """SPOT_CHECK_TARGET·SPOT_CHECK_BASELINES 기준으로 results/spot_check.csv를 만든다.
+
+    `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
+    """
+    saved, total_found = _build_spot_check_rows(
+        SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, SPOT_CHECK_SAMPLE_SIZE, SPOT_CHECK_SAMPLE_SEED, RESULTS_DIR / "spot_check.csv"
+    )
+    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > saved else ""
+    print(
+        f"[spot-check] {SPOT_CHECK_TARGET}를 {SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
+        f"다른 {saved}쌍{sample_note}을 results/spot_check.csv에 저장했습니다.\n"
+        f"python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 "
+        f"python3 -m src.pipeline spot-check-report 를 실행하세요."
+    )
+
+
+def cmd_spot_check_report(_: argparse.Namespace) -> None:
+    """results/spot_check.csv 기준으로 SPOT_CHECK_TARGET·SPOT_CHECK_BASELINES 일치율을 출력한다."""
+    _print_spot_check_report(SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, RESULTS_DIR / "spot_check.csv")
+
+
+def _model_spot_check_args(args: argparse.Namespace) -> tuple[str, list[str], Path]:
+    """--target/--baseline/--out이 없으면 기본값(M3_bge-m3 vs M2_kure-v1, spot_check_models.csv)을 쓴다."""
+    target = getattr(args, "target", None) or MODEL_SPOT_CHECK_TARGET
+    baselines = getattr(args, "baseline", None) or MODEL_SPOT_CHECK_BASELINES
+    out = getattr(args, "out", None)
+    if out is not None and (Path(out).name != out or out == "spot_check.csv" or not (out.startswith("spot_check") and out.endswith(".csv"))):
+        # ../README.md처럼 results/ 밖 파일이나 judge_sheet.csv 같은 기존 판정 원본을 덮어쓰지 못하게, spot_check*.csv만 받는다(spot_check.csv는 spot-check 명령 전용이라 제외)
+        raise ValueError(f"--out은 results/ 안의 spot_check*.csv 파일명만 받습니다: {out!r}")
+    is_default_comparison = target == MODEL_SPOT_CHECK_TARGET and baselines == MODEL_SPOT_CHECK_BASELINES
+    if not is_default_comparison and (out is None or out == "spot_check_models.csv"):
+        # 다른 비교를 기본 파일에 쓰면 기존 사람 판정 중 새 표본과 안 겹치는 행이 사라진다
+        raise ValueError("기본 비교(M3_bge-m3 vs M2_kure-v1)가 아닌 비교는 --out으로 별도 파일명(spot_check_*.csv)을 지정해야 합니다.")
+    return target, baselines, RESULTS_DIR / (out or "spot_check_models.csv")
+
+
+def cmd_spot_check_models(args: argparse.Namespace) -> None:
+    """두 설정이 실제로 다르게 추천한 쌍만 뽑아 사람 판정 시트를 만든다 (이슈 #8).
+
+    기본은 bge-m3 vs KURE-v1(MODEL_SPOT_CHECK_TARGET·_BASELINES → results/spot_check_models.csv).
+    `--target M4_bge-m3 --baseline M4_qwen3-embedding-0.6b --out spot_check_m4_qwen3.csv`처럼
+    다른 조합도 지정할 수 있다. `python3 -m src.judge_cli --file results/<out>`으로 채운다.
+    """
+    target, baselines, out_path = _model_spot_check_args(args)
+    saved, total_found = _build_spot_check_rows(target, baselines, SPOT_CHECK_SAMPLE_SIZE, SPOT_CHECK_SAMPLE_SEED, out_path)
+    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > saved else ""
+    is_default = target == MODEL_SPOT_CHECK_TARGET and baselines == MODEL_SPOT_CHECK_BASELINES and out_path.name == "spot_check_models.csv"
+    flags = "" if is_default else f" --target {target} --baseline {' --baseline '.join(baselines)} --out {out_path.name}"
+    print(
+        f"[spot-check-models] {target}를 {baselines}와 각각 양쪽 차집합으로 비교해 "
+        f"다른 {saved}쌍{sample_note}을 results/{out_path.name}에 저장했습니다.\n"
+        f"python3 -m src.judge_cli --file results/{out_path.name} 로 채운 뒤 "
+        f"python3 -m src.pipeline spot-check-models-report{flags} 를 실행하세요."
+    )
+
+
+def cmd_spot_check_models_report(args: argparse.Namespace) -> None:
+    """spot-check-models와 같은 --target/--baseline/--out으로 사람·자동 판정 일치율을 출력한다."""
+    target, baselines, out_path = _model_spot_check_args(args)
+    _print_spot_check_report(target, baselines, out_path)
 
 
 def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
@@ -652,6 +745,118 @@ def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
             writer.writerow({**row, "score": prev[0] if keep else row["score"], "text_hash": text_hash})
 
 
+SENSITIVITY_SIZES = [30, 60, 120, 240]
+SENSITIVITY_REPS = 20
+SENSITIVITY_SEED = 20260929
+
+
+def _large_llm_tags(creators: list[Creator], llm_model: str, category_codes: list[str]) -> dict[str, frozenset[str]]:
+    """합성 크리에이터를 선택된 LLM 태거로 1회 태깅한다. 입력·프롬프트 해시가 같으면 캐시를 쓴다."""
+    from src.clients.openai_tagger import SYSTEM_PROMPT
+
+    input_hash = _content_hash(llm_model, SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *category_codes)
+    path = CACHE_DIR / "large_llm_tags.json"
+    hash_path = CACHE_DIR / "large_llm_tags.input_hash"
+    if path.exists() and _cached_hash_matches(hash_path, input_hash):
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        tagger = OpenAITagger(model=llm_model, category_codes=category_codes)
+        raw = {c.id: list(tagger.tag(c.input_text()).tags) for c in creators}
+        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        hash_path.write_text(input_hash, encoding="utf-8")
+    return {cid: frozenset(tags) for cid, tags in raw.items()}
+
+
+def _large_vectors(key: str, creators: list[Creator]) -> np.ndarray:
+    """합성 크리에이터 벡터를 모델별로 캐시해 만든다. 텍스트·모델 설정이 바뀌면 다시 계산한다."""
+    texts = [c.input_text() for c in creators]
+    input_hash = _content_hash(_embedding_model_identity(key), *texts)
+    path = CACHE_DIR / f"large_creators_{key}.npz"
+    hash_path = CACHE_DIR / f"large_creators_{key}.input_hash"
+    if path.exists() and _cached_hash_matches(hash_path, input_hash):
+        return _load_vectors(path)[1]
+    vectors = _embedding_client(key).embed(texts)
+    _save_vectors(path, [c.id for c in creators], vectors)
+    hash_path.write_text(input_hash, encoding="utf-8")
+    return vectors
+
+
+def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
+    """dev 크기(30/60/120/240)별로 tau·bonus 선택이 얼마나 흔들리는지 잰다 (이슈 #8).
+
+    dev 후보 풀 = 기존 dev 30명 + 합성 300명. test = 기존 100명(쿼리 30명 포함)이며, test 성적은
+    LLM 판정 없는 gold 기준 대리 지표다. 쿼리 프롬프트가 있는 모델(Qwen3)은 평가와 같은 조건으로 dev·쿼리 행에 프롬프트를 적용한다.
+    기존 dev 30명 그대로 고른 값이 selected_params.json과 같은지도 확인해 함께 기록한다.
+    """
+    from src.data import load_large_creators
+    from src.sensitivity import CreatorSet, run_sensitivity, select_on_subset, summarize
+
+    categories = load_categories()
+    codes = [c.code for c in categories]
+    creators = load_creators()
+    large = load_large_creators()
+    dev_ids = {c.id for c in dev_creators(creators)}
+    query_ids = [c.id for c in query_creators(creators)]
+    test_ids = [c.id for c in test_creators(creators)]
+
+    selected = json.loads((RESULTS_DIR / "selected_params.json").read_text(encoding="utf-8"))
+    llm_model = selected["llm_model"]
+    safe_name = llm_model.replace("/", "_")
+    orig_llm = {cid: frozenset(t) for cid, t in json.loads((CACHE_DIR / f"llm_tags_{safe_name}_run0.json").read_text(encoding="utf-8")).items()}
+    large_llm = _large_llm_tags(large, llm_model, codes)
+
+    orig_gold = {c.id: frozenset(c.gold) for c in creators}
+    orig_declared = {c.id: frozenset(c.declared) for c in creators}
+    large_gold = {c.id: frozenset(c.gold) for c in large}
+    large_declared = {c.id: frozenset(c.declared) for c in large}
+
+    output: dict = {"sizes": SENSITIVITY_SIZES, "reps": SENSITIVITY_REPS, "seed": SENSITIVITY_SEED, "per_embedding": {}}
+    for key in EMBEDDING_MODEL_KEYS:
+        ids, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+        # 쿼리 프롬프트가 있는 모델(Qwen3)은 평가와 같은 조건으로 test 쿼리 행·dev 행에 프롬프트를 적용한다
+        prompted = bool(LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name"))
+        test_query_vectors = _query_prompted_vectors(key, list(ids), vectors, creators) if prompted else None
+        test = CreatorSet(list(ids), vectors, rank_all(vectors, category_vectors, codes), orig_gold, orig_llm, orig_declared, test_query_vectors)
+
+        dev_index = [i for i, cid in enumerate(ids) if cid in dev_ids]
+        large_vectors = _large_vectors(key, large)
+        pool_ids = [ids[i] for i in dev_index] + [c.id for c in large]
+        pool_vectors = np.vstack([vectors[dev_index], large_vectors])
+        pool_creators = [c for c in creators if c.id in dev_ids] + large
+        pool_query_vectors = _query_prompted_vectors(key, pool_ids, pool_vectors, pool_creators, target_ids=set(pool_ids)) if prompted else None
+        pool = CreatorSet(
+            pool_ids,
+            pool_vectors,
+            rank_all(pool_vectors, category_vectors, codes),
+            {**orig_gold, **large_gold},
+            {**orig_llm, **large_llm},
+            {**orig_declared, **large_declared},
+            pool_query_vectors,
+        )
+
+        tau, bonuses = select_on_subset(pool, list(range(len(dev_index))), BONUS_GRID, LLM_TAG_MAX)
+        expected = selected["per_embedding"][key]
+        matches = abs(tau - expected["tau"]) < 1e-9 and all(bonuses[n] == expected[n] for n in bonuses)
+        records = run_sensitivity(pool, test, test_ids, query_ids, SENSITIVITY_SIZES, SENSITIVITY_REPS, BONUS_GRID, LLM_TAG_MAX, SENSITIVITY_SEED)
+        output["per_embedding"][key] = {
+            "original_dev30": {"tau": tau, **bonuses, "matches_selected_params": matches},
+            "summary": summarize(records),
+        }
+        print(f"[dev-sensitivity] {key}: 기존 dev 30 재현={'OK' if matches else 'MISMATCH'}")
+        for row in output["per_embedding"][key]["summary"]:
+            print(
+                f"  size={row['size']:>3} tau={row['tau_mean']:.3f}±{row['tau_std']:.3f} "
+                f"m3={row['bonus_m3']['mode']}({row['bonus_m3']['mode_share']:.0%}) "
+                f"m4={row['bonus_m4']['mode']}({row['bonus_m4']['mode_share']:.0%}) "
+                f"r2={row['bonus_r2']['mode']}({row['bonus_r2']['mode_share']:.0%}) "
+                f"F1={row['test_tag_f1']['mean']:.3f}±{row['test_tag_f1']['std']:.3f} "
+                f"P@5 m3={row['p5_m3']['mean']:.3f} m4={row['p5_m4']['mean']:.3f} r2={row['p5_r2']['mean']:.3f}"
+            )
+    with (RESULTS_DIR / "dev_sensitivity.json").open("w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -667,9 +872,16 @@ def main() -> None:
         "score-judgments": cmd_score_judgments,
         "spot-check": cmd_spot_check,
         "spot-check-report": cmd_spot_check_report,
+        "spot-check-models": cmd_spot_check_models,
+        "spot-check-models-report": cmd_spot_check_models_report,
+        "dev-sensitivity": cmd_dev_sensitivity,
     }
     for name in stages:
         stage_parser = sub.add_parser(name)
+        if name in ("spot-check-models", "spot-check-models-report"):
+            stage_parser.add_argument("--target", help="비교의 기준 설정 (예: M4_bge-m3)")
+            stage_parser.add_argument("--baseline", action="append", help="비교 대상 설정, 여러 번 지정 가능 (예: M4_qwen3-embedding-0.6b)")
+            stage_parser.add_argument("--out", help="results/ 아래에 저장할 파일명 (기본 spot_check_models.csv)")
         if name in ("embed", "tag-llm"):
             stage_parser.add_argument(
                 "--force", action="store_true", help="캐시된 결과가 있어도 API를 다시 호출해 새로 계산한다"
