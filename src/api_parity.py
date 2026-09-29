@@ -71,7 +71,7 @@ def compare_decisions(
     cutoffs: dict[str, float],
     k: int,
 ) -> dict:
-    """같은 tau·bonus·컷오프로 로컬·API 벡터의 zero-shot 태그와 컷오프 뒤 상위 k 후보를 비교한다.
+    """같은 tau·bonus·컷오프로 로컬·API 벡터의 zero-shot 태그와 컷오프 뒤 상위 k 후보(순위 순서 포함)를 비교한다.
 
     태그는 점수가 tau 이상인지, 후보는 점수가 컷오프 이상인지로 정해져서 경계 근처에서는 미세한 차이로도 뒤집힌다.
     M1~M4(bge-m3 임베딩과 tau·bonus·컷오프를 쓰는 방식)만 본다. M5는 리랭커 점수가 따로 필요해 포함하지 않는다.
@@ -92,8 +92,9 @@ def compare_decisions(
     local_tags, api_tags = tags(local_creators, local_categories), tags(api_creators, api_categories)
     local_matrices, api_matrices = matrices(local_creators, local_tags), matrices(api_creators, api_tags)
 
-    def kept(matrix: np.ndarray, row: int, cutoff: float) -> set[str]:
-        return {cid for cid, score in top_n(matrix, creator_ids, row, k) if score >= cutoff}
+    def kept(matrix: np.ndarray, row: int, cutoff: float) -> list[str]:
+        """컷오프를 넘은 상위 k 후보를 순위 순서 그대로 돌려준다. 순서가 달라져도 다른 결과로 본다."""
+        return [cid for cid, score in top_n(matrix, creator_ids, row, k) if score >= cutoff]
 
     def summarize(changed: list[str]) -> dict:
         return {"count": len(changed), "creators": changed}

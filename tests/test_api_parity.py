@@ -100,6 +100,24 @@ def test_candidate_dropped_at_cutoff_is_caught() -> None:
     assert report["decisions_identical"] is False
 
 
+def test_rank_swap_among_candidates_counts_as_a_different_result() -> None:
+    creators, categories = _random_unit(10, 8, 20), _random_unit(3, 8, 21)
+    scores = creators @ creators[0]
+    order = [int(j) for j in np.argsort(-np.where(np.arange(10) == 0, -np.inf, scores))]
+    first, second = order[0], order[1]
+    api_creators = creators.copy()
+    # 1위 후보의 C0과의 코사인이 2위보다 살짝 낮아지도록 C0 방향으로 다시 세운다(둘 다 상위 5 안에 남고 서로의 순서만 바뀐다)
+    target = float(scores[second]) - 1e-4
+    orthogonal = creators[first] - float(scores[first]) * creators[0]
+    orthogonal = orthogonal / np.linalg.norm(orthogonal)
+    api_creators[first] = (target * creators[0] + np.sqrt(1 - target**2) * orthogonal).astype(np.float32)
+
+    report = _decisions(creators, api_creators, categories, categories, tau=0.1, cutoff=-1.0)
+
+    assert "C0" in report["candidates_after_cutoff_mismatch"]["M2"]["creators"]
+    assert report["decisions_identical"] is False
+
+
 def test_client_sends_configured_model_name() -> None:
     calls = []
 
