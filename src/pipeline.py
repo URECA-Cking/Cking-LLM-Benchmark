@@ -144,6 +144,9 @@ def cmd_embed(args: argparse.Namespace) -> None:
         category_tokens = getattr(client, "last_input_tokens", None)
         elapsed_seconds = time.perf_counter() - started
 
+        # 두 파일을 차례로 덮어쓰다 중간에 실패해도 서로 다른 실행의 벡터가 유효한 캐시로 남지 않도록,
+        # 저장을 시작하기 전에 기존 해시를 지우고 두 파일을 다 쓴 뒤에 새 해시를 쓴다
+        hash_path.unlink(missing_ok=True)
         _save_vectors(creators_path, creator_ids, creator_vectors)
         _save_vectors(categories_path, category_codes, category_vectors)
         hash_path.write_text(input_hash, encoding="utf-8")
@@ -218,10 +221,13 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
                     run_input_tokens += result.input_tokens
                     run_output_tokens += result.output_tokens
                 run_usage = {"input_tokens": run_input_tokens, "output_tokens": run_output_tokens}
+                # run·사용량 파일을 쓰다 실패해도 이전 해시가 새/옛 파일 조합을 캐시로 인정하지 않도록,
+                # 쓰기 전에 기존 해시를 지우고 두 파일을 다 쓴 뒤에 새 해시를 쓴다
+                hash_path.unlink(missing_ok=True)
                 with run_path.open("w", encoding="utf-8") as f:
                     json.dump(tags_by_id, f, ensure_ascii=False, indent=2)
-                hash_path.write_text(input_hash, encoding="utf-8")
                 usage_path.write_text(json.dumps(run_usage), encoding="utf-8")
+                hash_path.write_text(input_hash, encoding="utf-8")
                 print(f"[tag-llm] {model_name} run {run_index + 1}/{LLM_CONSISTENCY_RUNS} 완료")
             runs.append(tags_by_id)
             total_input_tokens += run_usage["input_tokens"]
