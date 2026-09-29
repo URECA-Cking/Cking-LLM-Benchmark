@@ -171,3 +171,15 @@ def test_select_cutoff_prefers_lowest_cutoff_on_tie() -> None:
     matrix = np.array([[-np.inf, 0.9, 0.4], [0.9, -np.inf, 0.1], [0.4, 0.1, -np.inf]], dtype=np.float32)
 
     assert select_cutoff(matrix, ids, gold, ["q"], k=2) == pytest.approx(0.4)  # 전부 관련이면 아무것도 안 거른다
+
+
+def test_select_cutoff_can_drop_everything_when_all_candidates_are_unrelated() -> None:
+    from src.similarity import select_cutoff
+
+    ids = ["q", "a", "b"]
+    gold = {"q": frozenset({"X"}), "a": frozenset({"Y"}), "b": frozenset({"Y"})}
+    matrix = np.array([[-np.inf, 0.9, 0.8], [0.9, -np.inf, 0.1], [0.8, 0.1, -np.inf]], dtype=np.float32)
+
+    cutoff = select_cutoff(matrix, ids, gold, ["q"], k=2)
+
+    assert cutoff > float(np.float32(0.9))  # 관측된 최고 점수(float32 0.9)보다 커서 무관 후보 둘 다 거른다
