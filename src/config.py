@@ -35,7 +35,7 @@ SPLIT_CSV_SHA256 = "cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d55
 CREATORS_LARGE_CSV_SHA256: str | None = "152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac"
 
 # taste_queries.csv의 확정 hash. 생성 직후 고정한다(None이면 검증하지 않음).
-TASTE_QUERIES_CSV_SHA256: str | None = None
+TASTE_QUERIES_CSV_SHA256: str | None = "ed3c37d709dd12a4e0bae59018038dce8a0c2ea9e19afde934b3e2ab31df9afb"
 
 TAXONOMY_VERSION = "v0.1"
 

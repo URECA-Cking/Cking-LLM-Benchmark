@@ -59,10 +59,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-99 passed in 3~5s
+113 passed in 3~5s
 ```
 
-**99개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**113개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -129,6 +129,16 @@ python3 -m src.pipeline select-params
 [select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.2 bonus_m4=0.2 bonus_r2=0.2
    컷오프 m1=0.500 m2=0.377 m3=0.487 m4=0.388 r2=0.388
 ```
+
+### 선택: 취향 쿼리 검증 — `generate_taste` → `taste-eval` → `taste-judge`
+
+```bash
+python3 -m src.generate_taste
+python3 -m src.pipeline taste-eval
+python3 -m src.pipeline taste-judge
+```
+
+서비스가 사용자 취향 요약문을 쿼리로 크리에이터를 추천할 때를 가정해 `data/taste_queries.csv`(90개, 키워드형·문장형·서술형)로 M2~M5를 검증합니다. `generate_taste`는 gpt-5.4-mini 30회(약 $0.03), `taste-eval`은 정답 분야 기준 P@5(태깅 1센트 안팎, 나머지 로컬), `taste-judge`는 문장형 쿼리의 후보 쌍을 LLM으로 판정합니다(약 $0.12). ①~③을 먼저 실행해야 하며 결과는 `results/taste_*.json`에 저장됩니다. 해석은 `docs/embedding-method-selection.md`의 "사용자 취향 쿼리 검증" 절을 참고하세요.
 
 ### 선택: dev-sensitivity — dev 규모 민감도 (API 호출 약 1센트, 수 분)
 
@@ -310,6 +320,7 @@ python3 -m src.judge_cli
 | `data/categories.csv` | 카테고리 10개 + zero-shot 태깅용 설명문 (taxonomy v0.1) |
 | `data/creators.csv` | 가상 크리에이터 100명 (일반 85 + 어려운 사례 X01~X15) |
 | `data/split.csv` | dev 30 / test 70, `query=Y`인 test 30명이 평가 쿼리 |
+| `data/taste_queries.csv` | 사용자 취향 요약문 쿼리 90개(프로필 30 × 표현 3종, `python3 -m src.generate_taste`로 생성) |
 | `data/creators_large.csv` | dev 규모 민감도 실험용 합성 300명(`python3 -m src.generate_large`로 생성, 평가에는 쓰지 않음) |
 
 `creators.csv` 컬럼
@@ -330,6 +341,7 @@ python3 -m src.judge_cli
 ```
 creators.csv sha256 e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
+taste_queries.csv sha256 ed3c37d709dd12a4e0bae59018038dce8a0c2ea9e19afde934b3e2ab31df9afb
 creators_large.csv sha256 152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac
 ```
 
