@@ -991,6 +991,73 @@ def cmd_memory(args: argparse.Namespace) -> None:
         )
 
 
+def _api_bge_m3_client() -> OpenAIEmbeddingClient:
+    """DEEPINFRA_API_KEY로 API bge-m3 클라이언트를 만든다. 키가 없으면 무엇을 채울지 알려준다."""
+    import os
+
+    from openai import OpenAI
+
+    from src.config import API_BGE_M3_BASE_URL, API_BGE_M3_MODEL
+
+    api_key = os.environ.get("DEEPINFRA_API_KEY")
+    if not api_key:
+        raise RuntimeError(".env의 DEEPINFRA_API_KEY가 비어 있습니다. api-parity 단계에는 DeepInfra 키가 필요합니다.")
+    client = OpenAI(api_key=api_key, base_url=API_BGE_M3_BASE_URL)
+    return OpenAIEmbeddingClient(client=client, model=API_BGE_M3_MODEL, dim=LOCAL_EMBEDDING_MODELS["bge-m3"]["dim"])
+
+
+def cmd_api_parity(_: argparse.Namespace, api_client: OpenAIEmbeddingClient | None = None) -> None:
+    """캐시된 로컬 bge-m3 벡터와 API bge-m3 벡터를 비교해 results/api_parity.json에 남긴다.
+
+    로컬 벡터는 embed 단계 캐시를 그대로 쓰고(모델을 다시 올리지 않는다), 입력이 바뀌어 캐시가 오래됐으면 중단한다.
+    """
+    from src.api_parity import compare_embeddings
+    from src.config import API_BGE_M3_PRICE_PER_1M, PARITY_MAX_ABS_DIFF, PARITY_MIN_TOP5_OVERLAP
+
+    key = "bge-m3"
+    creators, categories = load_creators(), load_categories()
+    creator_texts = [c.input_text() for c in creators]
+    category_texts = [c.description for c in categories]
+    input_hash = _content_hash(_embedding_model_identity(key), *creator_texts, *category_texts)
+    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
+        raise RuntimeError("로컬 bge-m3 캐시가 없거나 현재 데이터와 다릅니다. 먼저 `python3 -m src.pipeline embed`를 실행하세요.")
+    creator_ids, local_creators = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+    _, local_categories = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    if creator_ids != [c.id for c in creators]:
+        raise RuntimeError("로컬 bge-m3 캐시의 크리에이터 순서가 현재 데이터와 다릅니다. `embed --force`로 다시 만드세요.")
+
+    client = api_client or _api_bge_m3_client()
+    api_creators = client.embed(creator_texts)
+    creator_tokens = client.last_input_tokens or 0
+    api_categories = client.embed(category_texts)
+    total_tokens = creator_tokens + (client.last_input_tokens or 0)
+
+    report = compare_embeddings(
+        local_creators, api_creators, local_categories, api_categories,
+        k=5, max_abs_diff_limit=PARITY_MAX_ABS_DIFF, min_top_k_overlap=PARITY_MIN_TOP5_OVERLAP,
+    )
+    report.update(
+        {
+            "api_model": client.name,
+            "input_tokens": total_tokens,
+            "cost_usd": total_tokens / 1_000_000 * API_BGE_M3_PRICE_PER_1M,
+            "criteria": {"max_abs_diff": PARITY_MAX_ABS_DIFF, "min_top5_overlap_mean": PARITY_MIN_TOP5_OVERLAP},
+        }
+    )
+    with (RESULTS_DIR / "api_parity.json").open("w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    verdict = "동등 — 로컬에서 고른 tau·bonus·컷오프를 그대로 써도 됨" if report["equivalent"] else "차이 있음 — API 벡터로 파라미터 재선택 필요"
+    print(
+        f"[api-parity] {verdict}\n"
+        f"  자기 코사인 최소 {report['self_cosine_min']:.6f} / 평균 {report['self_cosine_mean']:.6f}\n"
+        f"  유사도 최대 차이: 크리에이터끼리 {report['creator_similarity_max_abs_diff']:.6f}, "
+        f"크리에이터↔카테고리 {report['category_similarity_max_abs_diff']:.6f}\n"
+        f"  상위 5 이웃 겹침 평균 {report['top5_overlap_mean']:.3f} / 최소 {report['top5_overlap_min']:.3f}, "
+        f"1순위 일치 {report['top1_agreement']:.3f}\n"
+        f"  토큰 {total_tokens}, 비용 약 ${report['cost_usd']:.6f}"
+    )
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -1010,6 +1077,7 @@ def main() -> None:
         "spot-check-models-report": cmd_spot_check_models_report,
         "dev-sensitivity": cmd_dev_sensitivity,
         "memory": cmd_memory,
+        "api-parity": cmd_api_parity,
         "taste-eval": cmd_taste_eval,
         "taste-judge": cmd_taste_judge,
     }

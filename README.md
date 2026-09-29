@@ -141,6 +141,14 @@ python3 -m src.pipeline memory
 
 로컬 임베딩 모델 3종, 리랭커, M5 구성(bge-m3 + 리랭커를 함께 로드)의 최대 메모리를 새 프로세스에서 하나씩 재서 `results/e4_embedding.json`의 `memory`에 기록합니다. 기본은 CPU 기준(서버 메모리 계획용)이고 `--device auto`는 이 장비의 가속기 기준입니다. ①을 먼저 실행하지 않아도 되지만 모델이 내려받아져 있어야 합니다.
 
+### 선택: api-parity — 로컬 bge-m3 ↔ API bge-m3 비교 (API 호출 1센트 미만, 수 초)
+
+```bash
+python3 -m src.pipeline api-parity
+```
+
+서버에 모델을 올리지 않고 같은 bge-m3를 API(DeepInfra)로 써도 되는지 확인합니다. ①이 만든 로컬 벡터 캐시와 API 벡터를 비교해 크리에이터끼리·크리에이터↔카테고리 유사도의 최대 차이, 상위 5 이웃 겹침을 `results/api_parity.json`에 기록합니다. 유사도 차이가 0.01 이하이고 상위 5 겹침 평균이 0.95 이상이면 "동등"으로 판정하며, 이때는 로컬에서 고른 tau·bonus·컷오프를 그대로 써도 됩니다(기준은 `src/config.py`의 `PARITY_*`). `.env`에 `DEEPINFRA_API_KEY`가 필요하고 ①을 먼저 실행해야 합니다.
+
 ### 선택: 취향 쿼리 검증 — `taste-eval` → `taste-judge`
 
 ```bash
