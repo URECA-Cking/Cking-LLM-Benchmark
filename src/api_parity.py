@@ -70,27 +70,35 @@ def compare_decisions(
     bonuses: dict[str, float],
     cutoffs: dict[str, float],
     k: int,
+    api_params: dict | None = None,
 ) -> dict:
     """같은 tau·bonus·컷오프로 로컬·API 벡터의 zero-shot 태그와 컷오프 뒤 상위 k 후보(순위 순서 포함)를 비교한다.
+
+    api_params({"tau", "bonuses", "cutoffs"})를 주면 API 쪽에는 그 값을 쓴다. API 벡터로 파라미터를 다시 골랐을 때
+    로컬(로컬 파라미터)과 API(API 파라미터)의 결과가 얼마나 다른지 볼 때 쓴다.
 
     태그는 점수가 tau 이상인지, 후보는 점수가 컷오프 이상인지로 정해져서 경계 근처에서는 미세한 차이로도 뒤집힌다.
     M1~M4(bge-m3 임베딩과 tau·bonus·컷오프를 쓰는 방식)만 본다. M5는 리랭커 점수가 따로 필요해 포함하지 않는다.
     """
 
-    def tags(creators: np.ndarray, categories: np.ndarray) -> list[frozenset[str]]:
-        return [r.assigned(tau, max_tags) for r in rank_all(creators, categories, category_codes)]
+    api_tau = api_params["tau"] if api_params else tau
+    api_bonuses = api_params["bonuses"] if api_params else bonuses
+    api_cutoffs = api_params["cutoffs"] if api_params else cutoffs
 
-    def matrices(creators: np.ndarray, zero_shot: list[frozenset[str]]) -> dict[str, np.ndarray]:
+    def tags(creators: np.ndarray, categories: np.ndarray, tau_value: float) -> list[frozenset[str]]:
+        return [r.assigned(tau_value, max_tags) for r in rank_all(creators, categories, category_codes)]
+
+    def matrices(creators: np.ndarray, zero_shot: list[frozenset[str]], bonus: dict[str, float]) -> dict[str, np.ndarray]:
         cosine = cosine_matrix(creators)
         return {
             "M1": jaccard_matrix(zero_shot),
             "M2": cosine,
-            "M3": cosine_with_tag_bonus(cosine, zero_shot, bonuses["M3"]),
-            "M4": cosine_with_tag_bonus(cosine, llm_tag_sets, bonuses["M4"]),
+            "M3": cosine_with_tag_bonus(cosine, zero_shot, bonus["M3"]),
+            "M4": cosine_with_tag_bonus(cosine, llm_tag_sets, bonus["M4"]),
         }
 
-    local_tags, api_tags = tags(local_creators, local_categories), tags(api_creators, api_categories)
-    local_matrices, api_matrices = matrices(local_creators, local_tags), matrices(api_creators, api_tags)
+    local_tags, api_tags = tags(local_creators, local_categories, tau), tags(api_creators, api_categories, api_tau)
+    local_matrices, api_matrices = matrices(local_creators, local_tags, bonuses), matrices(api_creators, api_tags, api_bonuses)
 
     def kept(matrix: np.ndarray, row: int, cutoff: float) -> list[str]:
         """컷오프를 넘은 상위 k 후보를 순위 순서 그대로 돌려준다. 순서가 달라져도 다른 결과로 본다."""
@@ -104,7 +112,7 @@ def compare_decisions(
         method: [
             cid
             for row, cid in enumerate(creator_ids)
-            if kept(local_matrices[method], row, cutoffs[method]) != kept(api_matrices[method], row, cutoffs[method])
+            if kept(local_matrices[method], row, cutoffs[method]) != kept(api_matrices[method], row, api_cutoffs[method])
         ]
         for method in local_matrices
     }
