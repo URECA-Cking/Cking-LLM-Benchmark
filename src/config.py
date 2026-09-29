@@ -40,7 +40,10 @@ LOCAL_EMBEDDING_MODELS = {
     # bge-m3를 한국어 데이터로 파인튜닝한 모델. 같은 베이스에서 한국어 특화가 도움이 되는지 비교 (2026-09-28 추가)
     "kure-v1": {"model_name": "nlpai-lab/KURE-v1", "dim": 1024},
     # 다국어(한국어 포함) 임베딩. 리뷰에서 제안된 비교 후보 (2026-09-28 추가)
-    "qwen3-embedding-0.6b": {"model_name": "Qwen/Qwen3-Embedding-0.6B", "dim": 1024},
+    # query_prompt_name: 모델에 등록된 쿼리용 instruct 프롬프트 이름. 평가 쿼리 30명의
+    # 임베딩만 이 프롬프트로 다시 인코딩해 M2~M4/R2에 쓴다(이슈 #8, 리뷰로 발견 — Qwen3
+    # 공식 사용법은 검색 쿼리 쪽에 이 프롬프트를 쓰길 권장하는데 기존엔 적용하지 않았다).
+    "qwen3-embedding-0.6b": {"model_name": "Qwen/Qwen3-Embedding-0.6B", "dim": 1024, "query_prompt_name": "query"},
 }
 
 # M5(bge-m3 M2 + 재정렬)용 cross-encoder 리랭커. 임베딩처럼 벡터를 미리 만들어두지 않고
@@ -63,18 +66,6 @@ LLM_CONSISTENCY_RUNS = 2
 OPENAI_JUDGE_MODEL = "gpt-5.4-mini-2026-03-17"
 OPENAI_JUDGE_MODEL_PRICE = {"input_price": 0.75, "output_price": 4.50}
 
-# 태깅·유사도 임계값은 dev로만 결정한다. 여기 값은 select 단계가 채운 뒤 고정한다.
-ZERO_SHOT_TAU: dict[str, float | None] = {
-    "text-embedding-3-small": None,
-    "bge-m3": None,
-}
-SIMILARITY_BONUS: dict[str, float | None] = {
-    "text-embedding-3-small": None,
-    "bge-m3": None,
-}
-
 TOP_N_STORED = 20  # 크리에이터별 저장할 유사 후보 수
 JUDGE_TOP_K = 5  # 판정 시트에 합집합으로 모을 상위 개수
 JUDGE_SHUFFLE_SEED = 20260928
-
-METHOD_IDS = ("M1", "M2", "M3", "M4", "R1", "R2")

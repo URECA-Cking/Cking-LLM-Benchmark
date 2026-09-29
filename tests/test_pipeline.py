@@ -403,6 +403,53 @@ def test_cmd_spot_check_samples_when_pool_exceeds_sample_size(tmp_path, monkeypa
     assert {r["pair_id"] for r in rows_again} == {r["pair_id"] for r in rows}
 
 
+def _minimal_creator(cid: str, is_query: bool) -> Creator:
+    return Creator(
+        id=cid, name=cid, bio=f"bio of {cid}", events=(), subtopic="", gold=(), declared=(),
+        written_by="test", note="", split="test", is_query=is_query,
+    )
+
+
+def test_query_prompted_vectors_substitutes_only_query_rows(monkeypatch) -> None:
+    """이슈 #8 회귀 테스트: query_prompt_name이 등록된 모델은 평가 쿼리 행만 바꿔치기해야 한다.
+
+    Qwen3-Embedding처럼 모델에 쿼리용 instruct 프롬프트가 있는데 이를 안 쓰면(기존 버그),
+    공식 권장 사용법과 다른 조건으로 측정하게 된다(리뷰로 발견).
+    """
+    ids = ["q1", "c1", "q2"]
+    creators = [_minimal_creator("q1", True), _minimal_creator("c1", False), _minimal_creator("q2", True)]
+    vectors = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
+
+    class _FakeQueryClient:
+        def __init__(self, key: str) -> None:
+            pass
+
+        def embed(self, texts: list[str], prompt_name: str | None = None) -> np.ndarray:
+            assert prompt_name == "fake-query-prompt"
+            return np.zeros((len(texts), 2), dtype=np.float32)
+
+    monkeypatch.setattr(pipeline, "LocalEmbeddingClient", _FakeQueryClient)
+    monkeypatch.setattr(pipeline, "LOCAL_EMBEDDING_MODELS", {"fake-key": {"query_prompt_name": "fake-query-prompt"}})
+
+    result = pipeline._query_prompted_vectors("fake-key", ids, vectors, creators)
+
+    assert np.allclose(result[0], [0.0, 0.0])  # q1: 쿼리 프롬프트로 바뀜
+    assert np.allclose(result[1], [0.0, 1.0])  # c1: 후보 전용, 원래 임베딩 그대로
+    assert np.allclose(result[2], [0.0, 0.0])  # q2: 쿼리 프롬프트로 바뀜
+
+
+def test_query_prompted_vectors_noop_when_model_has_no_query_prompt(monkeypatch) -> None:
+    """query_prompt_name이 없는 모델(bge-m3, KURE-v1)은 원본 벡터를 그대로 반환해야 한다."""
+    ids = ["q1"]
+    creators = [_minimal_creator("q1", True)]
+    vectors = np.array([[1.0, 0.0]], dtype=np.float32)
+    monkeypatch.setattr(pipeline, "LOCAL_EMBEDDING_MODELS", {"fake-key": {}})
+
+    result = pipeline._query_prompted_vectors("fake-key", ids, vectors, creators)
+
+    assert result is vectors
+
+
 class _FakeReranker:
     """(쿼리, 후보) 텍스트를 그대로 점수로 쓴다 — 후보 텍스트 끝 숫자가 클수록 높은 점수."""
 

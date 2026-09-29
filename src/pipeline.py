@@ -329,6 +329,30 @@ def _rerank_bge_m2_candidates(
     return result
 
 
+def _query_prompted_vectors(key: str, ids: list[str], vectors: np.ndarray, creators: list[Creator]) -> np.ndarray:
+    """query_prompt_name이 등록된 모델(Qwen3)이면, 평가 쿼리 30명의 행만 그 프롬프트로
+
+    다시 인코딩해 바꿔치기한다 — M2~M4/R2의 "쿼리가 후보를 찾는" 방향 유사도용이다
+    (이슈 #8, 리뷰로 발견: 공식 사용법은 검색 쿼리 쪽에 instruct 프롬프트를 쓰길 권장하는데
+    기존엔 bge-m3·KURE-v1과 동일하게 접두어 없이 측정했다). 후보(비쿼리 70명)로 참조될 때는
+    원래 임베딩을 그대로 쓴다 — E2/E3 평가는 쿼리 30명의 top-5만 보므로 이걸로 충분하다.
+    query_prompt_name이 없는 모델(bge-m3, KURE-v1)은 그대로 반환한다.
+    """
+    prompt_name = LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name")
+    if not prompt_name:
+        return vectors
+    query_ids = {c.id for c in query_creators(creators)}
+    text_by_id = {c.id: c.input_text() for c in creators}
+    targets = [(i, cid) for i, cid in enumerate(ids) if cid in query_ids]
+    if not targets:
+        return vectors
+    query_vectors = LocalEmbeddingClient(key).embed([text_by_id[cid] for _, cid in targets], prompt_name=prompt_name)
+    vectors = vectors.copy()
+    for (i, _cid), qv in zip(targets, query_vectors):
+        vectors[i] = qv
+    return vectors
+
+
 def cmd_candidates(_: argparse.Namespace) -> None:
     """설정(임베딩 모델 x 방식) 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
     categories = load_categories()
@@ -349,6 +373,7 @@ def cmd_candidates(_: argparse.Namespace) -> None:
         p = params["per_embedding"][key]
         ids, _, zero_shot_tags, _ = _zero_shot_tags_for_key(key, creators, categories, tau_candidates=[p["tau"]])
         _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        vectors = _query_prompted_vectors(key, ids, vectors, creators)
         cosine = cosine_matrix(vectors)
 
         zero_shot_tag_sets = [zero_shot_tags[cid] for cid in ids]
@@ -552,16 +577,23 @@ SPOT_CHECK_BASELINES = ["M3_bge-m3", "R2_bge-m3"]
 SPOT_CHECK_SAMPLE_SIZE = 30  # 141쌍 전부는 부담이 커서 무작위 표본만 사람이 본다 (2026-09-28 결정)
 SPOT_CHECK_SAMPLE_SEED = 20260928
 
+# bge-m3와 KURE-v1 중 하나를 고를 때 실제로 추천이 갈리는 쌍만 사람이 보게 한다 (이슈 #8).
+# 각 임베딩의 현재 1순위 후보를 골랐다: M3_bge-m3(재현성 우선 픽), M2_kure-v1(태그 보정 없이도
+# 견고했던 KURE-v1의 대표 픽). 다른 조합을 보고 싶으면 이 두 값만 바꾸면 된다.
+MODEL_SPOT_CHECK_TARGET = "M3_bge-m3"
+MODEL_SPOT_CHECK_BASELINES = ["M2_kure-v1"]
 
-def cmd_spot_check(_: argparse.Namespace) -> None:
-    """target_method와 각 baseline을 양쪽 차집합(대칭차집합)으로 비교해 다른 후보만 골라
 
-    소규모 시트(results/spot_check.csv)를 만든다. target−baseline 합집합만 보던 이전 방식은
-    "M4=A, M3=B, R2=A"처럼 다른 baseline이 같은 후보를 갖고 있으면 실제 차이를 놓쳤다
-    (리뷰 P2). 지금은 M4 vs M3, M4 vs R2를 각각 정확히 비교해 두 방향(더한 것·뺀 것)을
-    모두 잡는다. 전체 쌍이 SPOT_CHECK_SAMPLE_SIZE보다 많으면 고정 시드로 무작위 표본만
-    남긴다(전수 조사가 아니라 표본 조사임을 결과에 함께 적어야 한다).
-    `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
+def _build_spot_check_rows(
+    target: str, baselines: list[str], sample_size: int, seed: int, out_path: Path
+) -> tuple[int, int]:
+    """target과 각 baseline을 양쪽 차집합(대칭차집합)으로 비교해 다른 후보만 골라
+
+    소규모 시트를 만든다. target−baseline 합집합만 보던 이전 방식은 "A=X, B=Y, C=X"처럼
+    다른 baseline이 같은 후보를 갖고 있으면 실제 차이를 놓쳤다(리뷰 P2). 지금은 각 baseline과
+    정확히 한 쌍씩 비교해 두 방향(더한 것·뺀 것)을 모두 잡는다. 전체 쌍이 sample_size보다
+    많으면 고정 시드로 무작위 표본만 남긴다(전수 조사가 아니라 표본 조사임을 결과에 함께
+    적어야 한다). 반환값은 (실제 저장한 쌍 수, 표본 뽑기 전 전체 쌍 수)다.
     """
     creators = load_creators()
     query_ids = [c.id for c in query_creators(creators)]
@@ -572,20 +604,20 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
 
     pairs: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
-    for baseline in SPOT_CHECK_BASELINES:
-        for pair in select_pairwise_symmetric_disagreement(all_candidates, query_ids, SPOT_CHECK_TARGET, baseline, k=JUDGE_TOP_K):
+    for baseline in baselines:
+        for pair in select_pairwise_symmetric_disagreement(all_candidates, query_ids, target, baseline, k=JUDGE_TOP_K):
             if pair not in seen:
                 seen.add(pair)
                 pairs.append(pair)
 
     total_found = len(pairs)
-    if total_found > SPOT_CHECK_SAMPLE_SIZE:
-        # 정렬 후 샘플링해야 고정 시드가 실행마다 같은 30쌍을 뽑는다는 보장이 생긴다
+    if total_found > sample_size:
+        # 정렬 후 샘플링해야 고정 시드가 실행마다 같은 쌍을 뽑는다는 보장이 생긴다
         # (PR #5 리뷰로 발견: set 순회 순서가 해시 시드에 따라 달라져 pairs 자체가 이미
         # 비결정적이었다 — select_pairwise_symmetric_disagreement에서 sorted로 고쳤지만,
         # 여기서도 한 번 더 정렬해 이 함수만 보고도 재현성이 보장됨을 알 수 있게 한다).
         pairs = sorted(pairs)
-        pairs = random.Random(SPOT_CHECK_SAMPLE_SEED).sample(pairs, SPOT_CHECK_SAMPLE_SIZE)
+        pairs = random.Random(seed).sample(pairs, sample_size)
 
     rows = [
         {
@@ -597,24 +629,17 @@ def cmd_spot_check(_: argparse.Namespace) -> None:
         }
         for qid, cid in pairs
     ]
-    write_judge_sheet_rows(rows, RESULTS_DIR / "spot_check.csv")
-    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > len(rows) else ""
-    print(
-        f"[spot-check] {SPOT_CHECK_TARGET}를 {SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
-        f"다른 {len(rows)}쌍{sample_note}을 results/spot_check.csv에 저장했습니다.\n"
-        f"python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 "
-        f"python3 -m src.pipeline spot-check-report 를 실행하세요."
-    )
+    write_judge_sheet_rows(rows, out_path)
+    return len(rows), total_found
 
 
-def cmd_spot_check_report(_: argparse.Namespace) -> None:
-    """spot_check.csv의 사람 점수와 judge_sheet.csv의 자동 판정 점수를 같은 쌍끼리 비교한다."""
-    spot_path = RESULTS_DIR / "spot_check.csv"
+def _print_spot_check_report(target: str, baselines: list[str], spot_path: Path) -> None:
+    """spot_path의 사람 점수와 judge_sheet.csv의 자동 판정 점수를 같은 쌍끼리 비교한다."""
     with spot_path.open(encoding="utf-8") as f:
         spot_rows = list(csv.DictReader(f))
     unscored = [r["pair_id"] for r in spot_rows if not r["score"].strip()]
     if unscored:
-        raise ValueError(f"아직 판정이 안 된 쌍이 있습니다: {unscored}. src.judge_cli --file results/spot_check.csv 로 먼저 채우세요.")
+        raise ValueError(f"아직 판정이 안 된 쌍이 있습니다: {unscored}. src.judge_cli --file {spot_path} 로 먼저 채우세요.")
     human = {(r["query_id"], r["candidate_id"]): int(r["score"]) for r in spot_rows}
 
     with (RESULTS_DIR / "judge_sheet.csv").open(encoding="utf-8") as f:
@@ -622,13 +647,62 @@ def cmd_spot_check_report(_: argparse.Namespace) -> None:
     auto = {(r["query_id"], r["candidate_id"]): int(r["score"]) for r in auto_rows if r["score"].strip()}
 
     stats = agreement_stats(human, auto)
-    print(f"=== spot-check 일치율 ({SPOT_CHECK_TARGET} vs {SPOT_CHECK_BASELINES}만 고른 후보 {stats['count']}쌍) ===")
+    print(f"=== spot-check 일치율 ({target} vs {baselines}만 고른 후보 {stats['count']}쌍) ===")
     print(f"   완전 일치율: {stats['exact_match_rate']:.2f}")
     print(f"   ±1 이내 일치율: {stats['within_1_rate']:.2f}")
     print(f"   평균 절대 오차: {stats['mean_abs_diff']:.2f}")
     for (qid, cid), auto_score in auto.items():
         if (qid, cid) in human and human[(qid, cid)] != auto_score:
             print(f"   불일치: {qid}::{cid}  사람={human[(qid, cid)]}  자동={auto_score}")
+
+
+def cmd_spot_check(_: argparse.Namespace) -> None:
+    """SPOT_CHECK_TARGET·SPOT_CHECK_BASELINES 기준으로 results/spot_check.csv를 만든다.
+
+    `python3 -m src.judge_cli --file results/spot_check.csv`로 채운다.
+    """
+    saved, total_found = _build_spot_check_rows(
+        SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, SPOT_CHECK_SAMPLE_SIZE, SPOT_CHECK_SAMPLE_SEED, RESULTS_DIR / "spot_check.csv"
+    )
+    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > saved else ""
+    print(
+        f"[spot-check] {SPOT_CHECK_TARGET}를 {SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
+        f"다른 {saved}쌍{sample_note}을 results/spot_check.csv에 저장했습니다.\n"
+        f"python3 -m src.judge_cli --file results/spot_check.csv 로 채운 뒤 "
+        f"python3 -m src.pipeline spot-check-report 를 실행하세요."
+    )
+
+
+def cmd_spot_check_report(_: argparse.Namespace) -> None:
+    """results/spot_check.csv 기준으로 SPOT_CHECK_TARGET·SPOT_CHECK_BASELINES 일치율을 출력한다."""
+    _print_spot_check_report(SPOT_CHECK_TARGET, SPOT_CHECK_BASELINES, RESULTS_DIR / "spot_check.csv")
+
+
+def cmd_spot_check_models(_: argparse.Namespace) -> None:
+    """MODEL_SPOT_CHECK_TARGET·_BASELINES 기준으로 results/spot_check_models.csv를 만든다.
+
+    bge-m3와 KURE-v1 중 하나를 고를 때, 두 임베딩이 실제로 다르게 추천한 쌍만 사람이 보게
+    한다(이슈 #8). `python3 -m src.judge_cli --file results/spot_check_models.csv`로 채운다.
+    """
+    saved, total_found = _build_spot_check_rows(
+        MODEL_SPOT_CHECK_TARGET,
+        MODEL_SPOT_CHECK_BASELINES,
+        SPOT_CHECK_SAMPLE_SIZE,
+        SPOT_CHECK_SAMPLE_SEED,
+        RESULTS_DIR / "spot_check_models.csv",
+    )
+    sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > saved else ""
+    print(
+        f"[spot-check-models] {MODEL_SPOT_CHECK_TARGET}를 {MODEL_SPOT_CHECK_BASELINES}와 각각 양쪽 차집합으로 비교해 "
+        f"다른 {saved}쌍{sample_note}을 results/spot_check_models.csv에 저장했습니다.\n"
+        f"python3 -m src.judge_cli --file results/spot_check_models.csv 로 채운 뒤 "
+        f"python3 -m src.pipeline spot-check-models-report 를 실행하세요."
+    )
+
+
+def cmd_spot_check_models_report(_: argparse.Namespace) -> None:
+    """results/spot_check_models.csv 기준으로 MODEL_SPOT_CHECK_TARGET·_BASELINES 일치율을 출력한다."""
+    _print_spot_check_report(MODEL_SPOT_CHECK_TARGET, MODEL_SPOT_CHECK_BASELINES, RESULTS_DIR / "spot_check_models.csv")
 
 
 def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
@@ -667,6 +741,8 @@ def main() -> None:
         "score-judgments": cmd_score_judgments,
         "spot-check": cmd_spot_check,
         "spot-check-report": cmd_spot_check_report,
+        "spot-check-models": cmd_spot_check_models,
+        "spot-check-models-report": cmd_spot_check_models_report,
     }
     for name in stages:
         stage_parser = sub.add_parser(name)
