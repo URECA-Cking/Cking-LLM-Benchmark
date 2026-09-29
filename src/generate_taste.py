@@ -136,7 +136,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="사용자 취향 요약문 쿼리 생성")
     parser.add_argument("--model", default=DEFAULT_GENERATOR_MODEL, choices=list(GENERATOR_MODELS))
     parser.add_argument("--dry-run", action="store_true", help="API를 부르지 않고 계획·예상 비용만 출력")
+    parser.add_argument("--force", action="store_true", help="이미 확정된 CSV가 있어도 새로 만들어 덮어쓴다(hash도 다시 고정해야 함)")
     args = parser.parse_args()
+    if TASTE_QUERIES_CSV.exists() and not args.force and not args.dry_run:
+        print(f"[generate] {TASTE_QUERIES_CSV.name}이 이미 있어 만들지 않습니다. 확정된 데이터를 평가하려면 이 단계는 필요 없습니다. 새로 만들려면 --force를 주세요(hash 재고정 필요).")
+        return
 
     categories = load_categories()
     names = {c.code: c.name for c in categories}

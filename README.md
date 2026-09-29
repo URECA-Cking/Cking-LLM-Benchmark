@@ -59,10 +59,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-113 passed in 3~5s
+118 passed in 3~5s
 ```
 
-**113개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**118개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -130,15 +130,16 @@ python3 -m src.pipeline select-params
    컷오프 m1=0.500 m2=0.377 m3=0.487 m4=0.388 r2=0.388
 ```
 
-### 선택: 취향 쿼리 검증 — `generate_taste` → `taste-eval` → `taste-judge`
+### 선택: 취향 쿼리 검증 — `taste-eval` → `taste-judge`
 
 ```bash
-python3 -m src.generate_taste
 python3 -m src.pipeline taste-eval
 python3 -m src.pipeline taste-judge
 ```
 
-서비스가 사용자 취향 요약문을 쿼리로 크리에이터를 추천할 때를 가정해 `data/taste_queries.csv`(90개, 키워드형·문장형·서술형)로 M2~M5를 검증합니다. `generate_taste`는 gpt-5.4-mini 30회(약 $0.03), `taste-eval`은 정답 분야 기준 P@5(태깅 1센트 안팎, 나머지 로컬), `taste-judge`는 문장형 쿼리의 후보 쌍을 LLM으로 판정합니다(약 $0.12). ①~③을 먼저 실행해야 하며 결과는 `results/taste_*.json`에 저장됩니다. 해석은 `docs/embedding-method-selection.md`의 "사용자 취향 쿼리 검증" 절을 참고하세요.
+서비스가 사용자 취향 요약문을 쿼리로 크리에이터를 추천할 때를 가정해 커밋된 `data/taste_queries.csv`(90개, 키워드형·문장형·서술형, hash 고정)로 M2~M5를 검증합니다. `taste-eval`은 정답 분야 기준 P@5를 만들고(태깅 1센트 안팎, 나머지 로컬), `taste-judge`는 문장형 쿼리의 후보 쌍을 LLM으로 판정합니다(약 $0.12, 판정 모델·프롬프트가 바뀌면 다시 판정). ①~③을 먼저 실행해야 하며 결과는 `results/taste_*.json`에 저장됩니다. 해석은 `docs/embedding-method-selection.md`의 "사용자 취향 쿼리 검증" 절을 참고하세요.
+
+쿼리를 **새로 만들 때만** `python3 -m src.generate_taste --force`를 실행합니다(gpt-5.4-mini 30회, 약 $0.03). 확정본을 덮어쓰므로 끝난 뒤 `src/config.py`의 `TASTE_QUERIES_CSV_SHA256`을 다시 고정해야 하고, 그렇지 않으면 이후 단계가 hash 불일치로 멈춥니다. 확정본을 평가하는 데는 이 단계가 필요 없습니다.
 
 ### 선택: dev-sensitivity — dev 규모 민감도 (API 호출 약 1센트, 수 분)
 
@@ -320,8 +321,8 @@ python3 -m src.judge_cli
 | `data/categories.csv` | 카테고리 10개 + zero-shot 태깅용 설명문 (taxonomy v0.1) |
 | `data/creators.csv` | 가상 크리에이터 100명 (일반 85 + 어려운 사례 X01~X15) |
 | `data/split.csv` | dev 30 / test 70, `query=Y`인 test 30명이 평가 쿼리 |
-| `data/taste_queries.csv` | 사용자 취향 요약문 쿼리 90개(프로필 30 × 표현 3종, `python3 -m src.generate_taste`로 생성) |
-| `data/creators_large.csv` | dev 규모 민감도 실험용 합성 300명(`python3 -m src.generate_large`로 생성, 평가에는 쓰지 않음) |
+| `data/taste_queries.csv` | 사용자 취향 요약문 쿼리 90개(프로필 30 × 표현 3종, `python3 -m src.generate_taste --force`로 새로 생성, 평가에는 커밋본 사용) |
+| `data/creators_large.csv` | dev 규모 민감도 실험용 합성 300명(`python3 -m src.generate_large --force`로 새로 생성, 평가에는 쓰지 않음) |
 
 `creators.csv` 컬럼
 

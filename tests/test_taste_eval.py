@@ -60,3 +60,32 @@ def test_rerank_for_queries_reorders_pool_with_query_text() -> None:
     )
 
     assert [cid for cid, _ in result["q"]] == ["b", "a"]  # 풀은 코사인 상위 2명(a, b), 리랭커가 b를 앞으로
+
+
+def test_pending_pairs_redoes_when_text_or_judge_config_changes() -> None:
+    saved = {
+        "q::a": {"score": 1, "hash": "h1", "judge": "cfg"},
+        "q::b": {"score": 2, "hash": "old", "judge": "cfg"},  # 텍스트 해시가 달라짐
+        "q::c": {"score": 0, "hash": "h3", "judge": "other"},  # 모델·프롬프트가 달라짐
+        "q::d": {"score": 0, "hash": "h4"},  # 판정 조건 정보가 없는 예전 저장분
+    }
+    text_hash = {("q", "a"): "h1", ("q", "b"): "h2", ("q", "c"): "h3", ("q", "d"): "h4", ("q", "e"): "h5"}
+
+    pending = te.pending_pairs(list(text_hash), saved, text_hash, "cfg")
+
+    assert pending == [("q", "b"), ("q", "c"), ("q", "d"), ("q", "e")]  # 조건이 모두 같은 a만 재사용
+
+
+def test_judge_config_hash_changes_with_model_or_prompt() -> None:
+    base = te.judge_config_hash("m1", "p")
+
+    assert base == te.judge_config_hash("m1", "p")
+    assert base != te.judge_config_hash("m2", "p") and base != te.judge_config_hash("m1", "p2")
+
+
+def test_build_judged_pool_ignores_judgments_of_pairs_no_longer_candidates() -> None:
+    saved = {"q::a": {"score": 2}, "q::b": {"score": 0}, "q::gone": {"score": 2}}  # gone은 지금 후보가 아님
+
+    judged, pool = te.build_judged_pool([("q", "a"), ("q", "b")], saved)
+
+    assert judged == {("q", "a"): 2, ("q", "b"): 0} and pool == {"q": [2, 0]}

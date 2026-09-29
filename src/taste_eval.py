@@ -74,6 +74,36 @@ def summarize_gold(
     return summary
 
 
+def judge_config_hash(model: str, system_prompt: str) -> str:
+    """판정 모델과 판정 프롬프트의 해시다. 이 값이 바뀌면 저장된 판정은 새 조건의 결과가 아니므로 다시 판정한다."""
+    import hashlib
+
+    return hashlib.sha256(f"{model}\x1f{system_prompt}".encode("utf-8")).hexdigest()[:16]
+
+
+def pending_pairs(
+    pairs: list[tuple[str, str]], saved: dict[str, dict], text_hash: dict[tuple[str, str], str], config_hash: str
+) -> list[tuple[str, str]]:
+    """저장된 판정이 없거나 텍스트·판정 조건(모델·프롬프트)이 달라진 쌍만 골라 다시 판정 대상으로 돌려준다."""
+    return [
+        pair
+        for pair in pairs
+        if saved.get(f"{pair[0]}::{pair[1]}", {}).get("hash") != text_hash[pair]
+        or saved.get(f"{pair[0]}::{pair[1]}", {}).get("judge") != config_hash
+    ]
+
+
+def build_judged_pool(
+    pairs: list[tuple[str, str]], saved: dict[str, dict]
+) -> tuple[dict[tuple[str, str], int], dict[str, list[int]]]:
+    """현재 후보 쌍(pairs)의 판정만 모아 (쌍별 점수, 쿼리별 점수 목록)을 만든다. 저장 파일에 남은 과거 후보의 판정은 nDCG 풀에서 뺀다."""
+    judged = {pair: saved[f"{pair[0]}::{pair[1]}"]["score"] for pair in pairs}
+    pool: dict[str, list[int]] = {}
+    for (qid, _cid), score in judged.items():
+        pool.setdefault(qid, []).append(score)
+    return judged, pool
+
+
 def setting_name(method: str, key: str, variant: str) -> str:
     """설정 이름이다. 기본(plain) 조건이면 접미사 없이 M2_bge-m3처럼, 프롬프트 조건이면 +variant를 붙인다."""
     return f"{method}_{key}" if variant == "plain" else f"{method}_{key}+{variant}"
@@ -217,14 +247,15 @@ def cmd_taste_judge(_: argparse.Namespace) -> None:
     path = RESULTS_DIR / "taste_judgments.json"
     saved: dict[str, dict] = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     hash_of = {(q, c): pair_text_hash(queries[q].text, creators[c].input_text()) for q, c in pairs}
-    pending = [pair for pair in pairs if saved.get(f"{pair[0]}::{pair[1]}", {}).get("hash") != hash_of[pair]]
+    config_hash = judge_config_hash(OPENAI_JUDGE_MODEL, TASTE_SYSTEM_PROMPT)
+    pending = pending_pairs(pairs, saved, hash_of, config_hash)
     print(f"[taste-judge] 판정 대상 {len(pairs)}쌍 중 {len(pairs) - len(pending)}쌍 완료, {len(pending)}쌍 판정 시작 (모델: {OPENAI_JUDGE_MODEL})")
 
     judge = OpenAIJudge(model=OPENAI_JUDGE_MODEL, system_prompt=TASTE_SYSTEM_PROMPT)
     in_tokens = out_tokens = 0
     for i, (qid, cid) in enumerate(pending, start=1):
         result = judge.judge(queries[qid].text, creators[cid].input_text())
-        saved[f"{qid}::{cid}"] = {"score": result.score, "hash": hash_of[(qid, cid)]}
+        saved[f"{qid}::{cid}"] = {"score": result.score, "hash": hash_of[(qid, cid)], "judge": config_hash}
         in_tokens += result.input_tokens
         out_tokens += result.output_tokens
         path.write_text(json.dumps(saved, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -234,10 +265,7 @@ def cmd_taste_judge(_: argparse.Namespace) -> None:
     if pending:
         print(f"[taste-judge] 완료. 이번 실행 비용 약 ${cost:.4f}")
 
-    judged = {tuple(key.split("::")): v["score"] for key, v in saved.items()}
-    pool: dict[str, list[int]] = {}
-    for (qid, _cid), score in judged.items():
-        pool.setdefault(qid, []).append(score)
+    judged, pool = build_judged_pool(pairs, saved)
     print(f"\n=== 취향 쿼리(문장형 {len(queries)}개) 설정별 관련도@5 / nDCG@5 ===")
     results = {}
     for setting, by_query in rankings.items():

@@ -182,5 +182,20 @@ def test_main_reuses_cache_with_soft_length_violation_but_rejects_duplicate_subt
     data = json.loads(dup.read_text(encoding="utf-8"))
     data["items"][0]["subtopic"] = "주제0_0_0"
     dup.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["generate_large", "--model", "gpt-5.4-mini-2026-03-17", "--force"])
     with pytest.raises(ValueError, match="subtopic"):
         gl.main()
+
+
+def test_main_does_not_overwrite_existing_csv_without_force(tmp_path, monkeypatch, capsys) -> None:
+    import sys
+
+    existing = tmp_path / "large.csv"
+    existing.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(gl, "CREATORS_LARGE_CSV", existing)
+    monkeypatch.setattr(gl, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["generate_large"])
+
+    gl.main()
+
+    assert existing.read_text(encoding="utf-8") == "keep" and "이미 있어" in capsys.readouterr().out

@@ -98,3 +98,17 @@ def test_load_taste_queries_reads_rows_and_checks_hash(tmp_path) -> None:
         load_taste_queries(path, expected_sha256="0" * 64)
     with pytest.raises(FileNotFoundError):
         load_taste_queries(tmp_path / "none.csv")
+
+
+def test_main_does_not_overwrite_existing_csv_without_force(tmp_path, monkeypatch, capsys) -> None:
+    import sys
+
+    existing = tmp_path / "taste.csv"
+    existing.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(gt, "TASTE_QUERIES_CSV", existing)
+    monkeypatch.setattr(gt, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["generate_taste"])
+
+    gt.main()
+
+    assert existing.read_text(encoding="utf-8") == "keep" and "이미 있어" in capsys.readouterr().out
