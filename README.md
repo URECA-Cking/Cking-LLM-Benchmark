@@ -76,7 +76,7 @@ python3 -m pytest -q
 ⑤ judge-sheet    쿼리 30명의 상위 5명을 합집합해 "무엇을 판정할지" 목록 생성
 ⑥ (판정)          auto-judge(LLM 자동) 또는 judge_cli(사람 직접)로 관련도 0/1/2 채점  ← 5장 참고
 ⑦ score-judgments 판정 결과로 관련도·nDCG 계산 (E2)
-⑧ report         판정 없이 자동 계산되는 태깅 정확도(E1)·대표 사례(E3) 출력
+⑧ report         판정 없이 자동 계산되는 태깅 정확도(E1)·대표 사례(E3 ①~⑤, 컷오프 효과) 출력
 ```
 
 ①~⑤, ⑦, ⑧은 순서대로 한 번씩만 실행하면 됩니다. ⑥은 상황에 맞는 방법을 5장에서 고르세요.
@@ -124,8 +124,11 @@ python3 -m src.pipeline select-params
 
 ```
 [select-params] text-embedding-3-small: tau=0.2706 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
+   컷오프 m1=1.000 m2=0.424 m3=0.624 m4=0.415 r2=0.415
 [select-params] bge-m3: tau=0.4801 bonus_m3=0.1 bonus_m4=0.2 bonus_r2=0.2
+   컷오프 m1=0.500 m2=0.506 m3=0.597 m4=0.577 r2=0.577 m5=0.002
 [select-params] kure-v1: tau=0.4745 bonus_m3=0.1 bonus_m4=0.1 bonus_r2=0.1
+   컷오프 m1=0.500 m2=0.503 m3=0.529 m4=0.529 r2=0.529
 [select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.2 bonus_m4=0.2 bonus_r2=0.2
    컷오프 m1=0.500 m2=0.377 m3=0.487 m4=0.388 r2=0.388
 ```
