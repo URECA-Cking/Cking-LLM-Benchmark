@@ -18,6 +18,8 @@ CREATORS_CSV = DATA_DIR / "creators.csv"
 SPLIT_CSV = DATA_DIR / "split.csv"
 # dev 규모 민감도 실험용 추가 크리에이터(이슈 #8). 기존 100명과 별개 파일이며 평가에는 쓰지 않는다.
 CREATORS_LARGE_CSV = DATA_DIR / "creators_large.csv"
+# 사용자 취향 요약문 쿼리(이슈 #12). 소개글 → 크리에이터가 아닌 취향 → 크리에이터 E2E 검증용이다.
+TASTE_QUERIES_CSV = DATA_DIR / "taste_queries.csv"
 
 # 실험 착수 시 확정한 데이터. 값이 바뀌면 README와 함께 갱신한다.
 CREATORS_CSV_SHA256 = "e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a"
@@ -31,6 +33,9 @@ SPLIT_CSV_SHA256 = "cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d55
 # creators_large.csv(2026-09-29, gpt-5.4-mini로 생성한 합성 300명, 카테고리당 30명)의 확정 hash.
 # 값이 바뀌면 이 hash와 docs를 함께 갱신한다(None이면 검증하지 않음).
 CREATORS_LARGE_CSV_SHA256: str | None = "152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac"
+
+# taste_queries.csv의 확정 hash. 생성 직후 고정한다(None이면 검증하지 않음).
+TASTE_QUERIES_CSV_SHA256: str | None = "ed3c37d709dd12a4e0bae59018038dce8a0c2ea9e19afde934b3e2ab31df9afb"
 
 TAXONOMY_VERSION = "v0.1"
 
@@ -70,6 +75,11 @@ LLM_CONSISTENCY_RUNS = 2
 # "같은 LLM이 자기 태깅을 스스로 좋게 채점하는" 순환 편향을 줄인다.
 OPENAI_JUDGE_MODEL = "gpt-5.4-mini-2026-03-17"
 OPENAI_JUDGE_MODEL_PRICE = {"input_price": 0.75, "output_price": 4.50}
+
+# Qwen3 쿼리 instruct 실험용(이슈 #12): 등록된 웹 검색용 프롬프트 대신 취향 → 크리에이터 과제에 맞춘 문구
+TASTE_QWEN3_INSTRUCT = "Instruct: 사용자의 취향 설명을 보고 그 취향에 맞는 크리에이터 소개를 찾으세요\nQuery:"
+TASTE_JUDGE_STYLES = ("sentence",)  # LLM 판정은 비용 때문에 문장형 쿼리만 한다(키워드형·서술형은 정답 분야 기준 지표만)
+TASTE_TOP_K = 5
 
 TOP_N_STORED = 20  # 크리에이터별 저장할 유사 후보 수
 JUDGE_TOP_K = 5  # 판정 시트에 합집합으로 모을 상위 개수

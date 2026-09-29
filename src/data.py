@@ -15,6 +15,8 @@ from src.config import (
     CREATORS_LARGE_CSV_SHA256,
     SPLIT_CSV,
     SPLIT_CSV_SHA256,
+    TASTE_QUERIES_CSV,
+    TASTE_QUERIES_CSV_SHA256,
 )
 
 
@@ -133,6 +135,32 @@ def load_large_creators(
         raise ValueError(f"{path.name}이 확정본과 다릅니다. 의도한 변경이면 src/config.py의 hash를 갱신하세요.")
     with path.open(encoding="utf-8") as f:
         return [_creator_from_row(row, "dev", False) for row in csv.DictReader(f)]
+
+
+@dataclass(frozen=True)
+class TasteQuery:
+    """사용자 취향 요약문 쿼리 하나와 정답 분야다 (이슈 #12). style은 keyword/sentence/long 중 하나다."""
+
+    id: str
+    profile_id: str
+    style: str
+    text: str
+    gold: tuple[str, ...]
+
+
+def load_taste_queries(
+    path: Path = TASTE_QUERIES_CSV, expected_sha256: str | None = TASTE_QUERIES_CSV_SHA256
+) -> list[TasteQuery]:
+    """data/taste_queries.csv를 읽는다. hash가 고정돼 있으면 확정본과 다를 때 중단한다."""
+    if not path.exists():
+        raise FileNotFoundError(f"{path.name}이 없습니다. `python3 -m src.generate_taste`로 먼저 만드세요.")
+    if expected_sha256 is not None and _sha256(path) != expected_sha256:
+        raise ValueError(f"{path.name}이 확정본과 다릅니다. 의도한 변경이면 src/config.py의 hash를 갱신하세요.")
+    with path.open(encoding="utf-8") as f:
+        return [
+            TasteQuery(r["id"], r["profile_id"], r["style"], r["text"].strip(), _split_codes(r["gold"]))
+            for r in csv.DictReader(f)
+        ]
 
 
 def dev_creators(creators: list[Creator]) -> list[Creator]:
