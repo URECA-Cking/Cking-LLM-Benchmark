@@ -151,6 +151,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
         total_tokens = None if creator_tokens is None or category_tokens is None else creator_tokens + category_tokens
         cost_usd = None if total_tokens is None else total_tokens / 1_000_000 * OPENAI_EMBEDDING_PRICE_PER_1M
         e4_report[key] = {
+            **e4_report.get(key, {}),  # memory 단계가 기록한 메모리 측정값을 보존한다
             "elapsed_seconds": elapsed_seconds,
             "dim": int(creator_vectors.shape[1]),
             "bytes_per_creator": int(creator_vectors.dtype.itemsize * creator_vectors.shape[1]),
@@ -957,6 +958,35 @@ def cmd_taste_judge(args: argparse.Namespace) -> None:
     run(args)
 
 
+def cmd_memory(args: argparse.Namespace) -> None:
+    """로컬 임베딩 모델 3종과 리랭커의 최대 메모리(peak RSS)를 모델마다 새 프로세스에서 재 e4_embedding.json에 기록한다 (이슈 #13).
+
+    한 프로세스에서 여러 모델을 재면 앞선 모델의 최대 메모리가 뒤에 섞이므로 하위 프로세스로 하나씩 잰다.
+    `--device cpu`(기본)는 서버 기준이고 `--device auto`는 이 장비의 가속기(MPS 등) 기준이다.
+    """
+    import subprocess
+    import sys
+
+    from src.measure_memory import RERANKER_KEY
+
+    device = getattr(args, "device", None) or "cpu"
+    e4_path = RESULTS_DIR / "e4_embedding.json"
+    e4_report: dict[str, dict] = json.loads(e4_path.read_text(encoding="utf-8")) if e4_path.exists() else {}
+    for name in [*LOCAL_EMBEDDING_MODELS, RERANKER_KEY]:
+        completed = subprocess.run(
+            [sys.executable, "-m", "src.measure_memory", name, "--device", device], capture_output=True, text=True, check=True
+        )
+        result = json.loads(completed.stdout.strip().splitlines()[-1])
+        entry_key = "bge-reranker-v2-m3" if name == RERANKER_KEY else name
+        e4_report.setdefault(entry_key, {}).setdefault("memory", {})[device] = result
+        print(
+            f"[memory] {entry_key} ({device}): 로드 직후 {result['peak_after_load_mb']:.0f}MB, "
+            f"처리 후 최대 {result['peak_after_run_mb']:.0f}MB (기준 {result['baseline_mb']:.0f}MB)"
+        )
+    with e4_path.open("w", encoding="utf-8") as f:
+        json.dump(e4_report, f, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -975,6 +1005,7 @@ def main() -> None:
         "spot-check-models": cmd_spot_check_models,
         "spot-check-models-report": cmd_spot_check_models_report,
         "dev-sensitivity": cmd_dev_sensitivity,
+        "memory": cmd_memory,
         "taste-eval": cmd_taste_eval,
         "taste-judge": cmd_taste_judge,
     }
@@ -984,6 +1015,8 @@ def main() -> None:
             stage_parser.add_argument("--target", help="비교의 기준 설정 (예: M4_bge-m3)")
             stage_parser.add_argument("--baseline", action="append", help="비교 대상 설정, 여러 번 지정 가능 (예: M4_qwen3-embedding-0.6b)")
             stage_parser.add_argument("--out", help="results/ 아래에 저장할 파일명 (기본 spot_check_models.csv)")
+        if name == "memory":
+            stage_parser.add_argument("--device", choices=["cpu", "auto"], default="cpu", help="cpu는 서버 기준, auto는 이 장비의 가속기 기준")
         if name in ("embed", "tag-llm"):
             stage_parser.add_argument(
                 "--force", action="store_true", help="캐시된 결과가 있어도 API를 다시 호출해 새로 계산한다"
