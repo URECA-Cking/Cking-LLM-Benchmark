@@ -1,7 +1,12 @@
 """sentence-transformers로 로컬 실행하는 임베딩 클라이언트다. 접두어 없이 dense 벡터만 사용한다.
 
-bge-m3, KURE-v1(bge-m3의 한국어 파인튜닝), Qwen3-Embedding 모두 같은 방식(dense 벡터,
-query/passage 접두어 불필요)으로 로드·인코딩되어 하나의 클래스를 모델명·차원만 바꿔 공유한다.
+bge-m3, KURE-v1(bge-m3의 한국어 파인튜닝)은 query/passage 접두어가 필요 없어 이 클래스로
+충분하다. Qwen3-Embedding은 모델에 쿼리용 instruct 프롬프트(`prompt_name="query"`)가
+등록돼 있고 공식 사용법은 검색 질의 쪽에 이를 적용하길 권장하지만, 이 클래스는 세 모델 모두
+접두어 없이 동일하게 인코딩한다 — M1~M4가 공유하는 대칭 코사인 행렬 구조(크리에이터 한 명을
+같은 임베딩으로 쿼리·후보 양쪽에 다 쓰는 방식) 때문에 비대칭 프롬프트를 끼워 넣으려면 이
+클래스 밖에서 별도 처리가 필요하다(리뷰로 발견, `docs/embedding-method-selection.md`의
+Qwen3 관련 한계 참고). 현재 Qwen3 결과는 이 프롬프트 없이 측정한 값이다.
 """
 
 from __future__ import annotations
