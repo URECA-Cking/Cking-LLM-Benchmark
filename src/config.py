@@ -35,8 +35,17 @@ OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_EMBEDDING_DIM = 1536
 OPENAI_EMBEDDING_PRICE_PER_1M = 0.02  # USD / 1,000,000 input tokens
 
-BGE_MODEL_NAME = "BAAI/bge-m3"
-BGE_EMBEDDING_DIM = 1024
+LOCAL_EMBEDDING_MODELS = {
+    "bge-m3": {"model_name": "BAAI/bge-m3", "dim": 1024},
+    # bge-m3를 한국어 데이터로 파인튜닝한 모델. 같은 베이스에서 한국어 특화가 도움이 되는지 비교 (2026-09-28 추가)
+    "kure-v1": {"model_name": "nlpai-lab/KURE-v1", "dim": 1024},
+    # 다국어(한국어 포함) 임베딩. 리뷰에서 제안된 비교 후보 (2026-09-28 추가)
+    "qwen3-embedding-0.6b": {"model_name": "Qwen/Qwen3-Embedding-0.6B", "dim": 1024},
+}
+
+# M5(bge-m3 M2 + 재정렬)용 cross-encoder 리랭커. 임베딩처럼 벡터를 미리 만들어두지 않고
+# (쿼리, 후보) 쌍을 직접 채점하므로 M2가 이미 추린 후보군(TOP_N_STORED)에만 적용한다.
+RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
 
 # M4 LLM 태깅 후보. dev 정확도로 하나를 골라 OPENAI_LLM_MODEL_SELECTED에 기록한다.
 OPENAI_LLM_MODEL_CANDIDATES = {

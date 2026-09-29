@@ -27,10 +27,10 @@ Ticle(Cking) 2차 MVP **AI 크리에이터 추천**의 임베딩 모델과 추�
 | --- | --- | --- |
 | Python 3.11 이상 | `python3 --version` | `brew install python@3.12` (macOS) |
 | OpenAI API 키 (결제 등록 완료) | — | [platform.openai.com](https://platform.openai.com/api-keys)에서 발급, Billing에서 결제수단 등록 |
-| 디스크 여유 공간 약 3GB | — | `bge-m3` 모델을 로컬에 내려받는 데 필요 |
+| 디스크 여유 공간 약 9GB | — | `bge-m3`·`KURE-v1`·`Qwen3-Embedding-0.6B`·`bge-reranker-v2-m3` 모델을 로컬에 내려받는 데 필요 |
 | (선택) 인터넷 | — | 임베딩·태깅·판정은 실제 OpenAI API를 호출합니다 |
 
-> ⚠️ **비용 안내**: 이 저장소의 파이프라인을 처음부터 끝까지 한 번 실행하면 **API 비용이 약 $0.16 (200원 안팎)** 발생합니다. 상세 내역은 [비용·소요 시간](docs/embedding-method-selection.md#비용소요-시간)을 참고하세요. 큰돈은 아니지만 **본인 API 키에서 실제로 빠져나가는 돈**이니, `.env`에 다른 사람 키를 쓰지 말고 본인 키로 실행하세요.
+> ⚠️ **비용 안내**: 이 저장소의 파이프라인을 처음부터 끝까지 한 번 실행하면 **API 비용이 약 $0.18 (250원 안팎)** 발생합니다. 상세 내역은 [비용·소요 시간](docs/embedding-method-selection.md#비용소요-시간)을 참고하세요. 큰돈은 아니지만 **본인 API 키에서 실제로 빠져나가는 돈**이니, `.env`에 다른 사람 키를 쓰지 말고 본인 키로 실행하세요.
 
 ## 2. 설치
 
@@ -58,21 +58,21 @@ python3 -m pytest -q
 ```
 
 ```
-................................................................  [100%]
-64 passed in 3~4s
+.................................................................  [100%]
+65 passed in 3~4s
 ```
 
-**64개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**65개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
 ## 3. 전체 흐름 한눈에 보기
 
 ```
-① embed          카테고리·크리에이터 100명을 두 임베딩 모델로 인코딩
+① embed          카테고리·크리에이터 100명을 임베딩 모델 4종으로 인코딩
 ② tag-llm        LLM 태깅 후보 2개를 dev로 비교해 하나 선택
 ③ select-params  zero-shot 태깅 기준값(τ)과 보정 가중치(bonus)를 dev로 결정
-④ candidates     11개 설정 각각의 유사 크리에이터 후보 계산
+④ candidates     22개 설정 각각의 유사 크리에이터 후보 계산
 ⑤ judge-sheet    쿼리 30명의 상위 5명을 합집합해 "무엇을 판정할지" 목록 생성
 ⑥ (판정)          auto-judge(LLM 자동) 또는 judge_cli(사람 직접)로 관련도 0/1/2 채점  ← 5장 참고
 ⑦ score-judgments 판정 결과로 관련도·nDCG 계산 (E2)
@@ -94,9 +94,11 @@ python3 -m src.pipeline embed
 ```
 [embed] text-embedding-3-small: 크리에이터 100명, 카테고리 10개, dim=1536, 3.1초
 [embed] bge-m3: 크리에이터 100명, 카테고리 10개, dim=1024, 1.7초
+[embed] kure-v1: 크리에이터 100명, 카테고리 10개, dim=1024, 1.2초
+[embed] qwen3-embedding-0.6b: 크리에이터 100명, 카테고리 10개, dim=1024, 2.4초
 ```
 
-`bge-m3`를 **처음 실행할 때만** 모델 가중치(약 2.3GB)를 자동으로 내려받습니다. 몇 분 걸릴 수 있습니다. 이미 계산된 벡터가 있으면 `[embed] {모델}: 캐시된 벡터 사용 (재계산하려면 --force)`만 찍고 끝납니다.
+`bge-m3`·`kure-v1`·`qwen3-embedding-0.6b`를 **처음 실행할 때만** 모델 가중치(로컬 3종 합쳐 약 6GB)를 자동으로 내려받습니다. 몇 분 걸릴 수 있습니다. 이미 계산된 벡터가 있으면 `[embed] {모델}: 캐시된 벡터 사용 (재계산하려면 --force)`만 찍고 끝납니다.
 
 ### ② tag-llm — LLM 태깅 모델 선택 (API 호출, 약 $0.02, 5~6분)
 
@@ -123,6 +125,8 @@ python3 -m src.pipeline select-params
 ```
 [select-params] text-embedding-3-small: tau=0.2707 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
 [select-params] bge-m3: tau=0.4801 bonus_m3=0.1 bonus_m4=0.2 bonus_r2=0.2
+[select-params] kure-v1: tau=0.4745 bonus_m3=0.1 bonus_m4=0.1 bonus_r2=0.1
+[select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.3 bonus_m4=0.3 bonus_r2=0.3
 ```
 
 ### ④ candidates — 유사 크리에이터 후보 계산 (API 호출 없음, 몇 초)
@@ -132,7 +136,7 @@ python3 -m src.pipeline candidates
 ```
 
 ```
-[candidates] 11개 설정 저장 완료
+[candidates] 22개 설정 저장 완료
 ```
 
 ### ⑤ judge-sheet — 판정할 목록 만들기 (API 호출 없음, 즉시)
@@ -142,7 +146,7 @@ python3 -m src.pipeline judge-sheet
 ```
 
 ```
-[judge-sheet] 559쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
+[judge-sheet] 680쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
 ```
 
 이 시점의 `results/judge_sheet.csv`는 `score` 열이 전부 빈칸입니다. **다음 5장에서 이 빈칸을 채우는 방법을 고릅니다.**
@@ -159,7 +163,7 @@ python3 -m src.pipeline score-judgments
 === E2. 방식별 평균 관련도@5 / nDCG@5 / 무관 비율@5 (test 쿼리 30명) ===
    M1_text-embedding-3-small: 관련도=0.147 [0.060, 0.240]  nDCG=0.146  무관비율=0.867
    ...
-   M4_bge-m3: 관련도=0.487 [0.330, 0.640]  nDCG=0.553  무관비율=0.587
+   M4_bge-m3: 관련도=0.487 [0.333, 0.640]  nDCG=0.535  무관비율=0.587
    ...
 ```
 
@@ -180,15 +184,18 @@ python3 -m src.pipeline report
    Top-3 포함률: 1.000
    ...
 
-=== E3. 대표 사례 (top-5, 11개 설정 전체) ===
+=== E3. 대표 사례 (top-5, 설정 전체) ===
 -- M4_bge-m3
+   [PASS] ① 동의어 F01<->F02 -> top5=[...]
+   ...
+-- M2_kure-v1
    [PASS] ① 동의어 F01<->F02 -> top5=[...]
    ...
 ```
 
 ## 5. 판정하기 (E2)
 
-`judge-sheet` 직후 `results/judge_sheet.csv`는 559쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
+`judge-sheet` 직후 `results/judge_sheet.csv`는 680쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
 
 ### 방법 A. 자동 판정 (추천 — 대부분 이 방법으로 충분)
 
@@ -196,13 +203,13 @@ python3 -m src.pipeline report
 python3 -m src.pipeline auto-judge
 ```
 
-LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 559쌍을 대신 채점합니다. **비용 약 $0.14, 소요 약 7~8분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
+LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 680쌍을 대신 채점합니다. **비용 약 $0.17, 소요 약 9~10분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
 
 ```
-[auto-judge] 전체 559쌍 중 0쌍 완료, 559쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
-[auto-judge] 50/559 완료
+[auto-judge] 전체 680쌍 중 0쌍 완료, 680쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
+[auto-judge] 50/680 완료
 ...
-[auto-judge] 완료. 비용 약 $0.1393. 일부를 src.judge_cli로 직접 재판정해 일치율을 확인하는 것을 권장합니다.
+[auto-judge] 완료. 비용 약 $0.17. 일부를 src.judge_cli로 직접 재판정해 일치율을 확인하는 것을 권장합니다.
 ```
 
 ### 방법 B. 자동 판정 신뢰도 확인 (선택, 권장 — 10~15분)
@@ -235,13 +242,13 @@ python3 -m src.pipeline spot-check-report
    완전 일치율: 0.77
    ±1 이내 일치율: 1.00
    평균 절대 오차: 0.23
-   불일치: F02::X03  사람=2  자동=1
+   불일치: K07::T07  사람=1  자동=0
    ...
 ```
 
 `±1 이내 일치율`이 1.0에 가까우면(즉 사람과 자동 판정이 2점 이상 차이나는 극단적 불일치가 없으면) 방법 A의 결과를 신뢰할 근거가 됩니다.
 
-### 방법 C. 559쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
+### 방법 C. 680쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
 
 빠르게 확인하고 싶다면 방법 A만으로 충분합니다. 하지만 **사람 판정만으로 결과를 내고 싶다면** 이 방법을 씁니다.
 
@@ -254,9 +261,9 @@ python3 -m src.judge_cli
 `judge_cli`는 쌍 하나씩 소개글을 보여주고 점수를 입력받습니다. **`judge_sheet.csv`와 `spot_check.csv` 둘 다 이 도구로 채웁니다** — 어떤 파일을 채울지는 `--file` 옵션으로 정합니다(생략하면 `results/judge_sheet.csv`).
 
 ```
-전체 559쌍 중 0쌍 완료, 559쌍 남음
+전체 680쌍 중 0쌍 완료, 680쌍 남음
 
-[1/559] 쿼리 B02 데일리메이크업쌤
+[1/680] 쿼리 B02 데일리메이크업쌤
   소개: 출근 전 10분이면 끝나는 데일리 메이크업을 알려드려요. ...
   후보 B01 피부과가고싶은날
   소개: 민감성 피부 스킨케어 루틴이랑 성분 분석해요. ...
@@ -285,7 +292,7 @@ python3 -m src.judge_cli
 | `ValueError: 데이터 파일이 실험 착수 시 확정본과 다릅니다` | `data/creators.csv` 또는 `data/split.csv`를 수정함 | 의도한 수정이 아니면 `git checkout -- data/`로 되돌림. 의도한 수정이면 `src/config.py`의 hash를 갱신 |
 | `tag-llm`에서 특정 모델이 400 에러 | 그 모델이 `temperature=0`을 지원하지 않음 (예: `gpt-5-nano`) | 이미 후보에서 제외되어 있음. 새 모델을 추가할 때는 `src/config.py`에서 먼저 단독 테스트 |
 | `score-judgments`에서 `ValueError: 판정이 비어 있는 행이 있습니다` | `judge_sheet.csv`를 다 안 채움 | 5장의 방법 A/B/C 중 하나로 마저 채움 |
-| bge-m3 다운로드가 느리거나 멈춤 | 첫 실행 때 약 2.3GB를 Hugging Face에서 내려받는 중 | 네트워크 확인 후 재실행 (다운로드는 이어받기됨) |
+| 로컬 모델 다운로드가 느리거나 멈춤 | 첫 실행 때 bge-m3·kure-v1·qwen3-embedding-0.6b·bge-reranker-v2-m3 가중치(합쳐서 약 8GB)를 Hugging Face에서 내려받는 중 | 네트워크 확인 후 재실행 (다운로드는 이어받기됨) |
 
 ## 7. 데이터 설명
 
@@ -323,6 +330,14 @@ split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d55
 | --- | --- |
 | OpenAI `text-embedding-3-small` | 외부 API |
 | `BAAI/bge-m3` | 로컬 (sentence-transformers) |
+| `nlpai-lab/KURE-v1` (bge-m3의 한국어 파인튜닝) | 로컬 (sentence-transformers) |
+| `Qwen/Qwen3-Embedding-0.6B` | 로컬 (sentence-transformers) |
+
+**리랭커** (임베딩이 아니라 (쿼리, 후보) 쌍을 직접 채점하는 cross-encoder, M5 전용)
+
+| 모델 | 실행 |
+| --- | --- |
+| `BAAI/bge-reranker-v2-m3` | 로컬 (sentence-transformers CrossEncoder) |
 
 **추천 방식** (크리에이터 간 유사도)
 
@@ -332,10 +347,11 @@ split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d55
 | M2 | 임베딩 단독 | 소개글 벡터 코사인 |
 | M3 | 임베딩 + zero-shot 태그 보정 | 코사인 + (zero-shot 태그 공유 시 +bonus) |
 | M4 | 임베딩 + LLM 태그 보정 | 코사인 + (OpenAI LLM 태그 공유 시 +bonus) |
+| M5 | bge-m3 M2 후보 재정렬 (bge-m3 전용) | M2 코사인 상위 20명을 bge-reranker-v2-m3로 다시 채점·정렬 |
 | R1 | (참고) 입력 분야 단독 | `declared` Jaccard |
 | R2 | (참고) 임베딩 + 입력 분야 보정 | 코사인 + (`declared` 공유 시 +bonus) |
 
-M1~M3·R2는 모델 2종 각각, M4의 LLM 태그는 1회 생성해 두 모델에 공통 사용, R1은 모델 무관 → **11개 설정**. R1·R2는 사람 입력 분야를 쓰므로 실제보다 유리하게 나올 수 있어 **상한선 참고치**로만 해석합니다.
+M1~M3·R2는 모델 4종 각각, M4의 LLM 태그는 1회 생성해 네 모델에 공통 사용, R1은 모델 무관, M5는 bge-m3 M2 후보를 재정렬(모델 무관하게 1회) → **22개 설정**. R1·R2는 사람 입력 분야를 쓰므로 실제보다 유리하게 나올 수 있어 **상한선 참고치**로만 해석합니다.
 
 ## 9. 평가 지표
 
@@ -343,7 +359,7 @@ M1~M3·R2는 모델 2종 각각, M4의 LLM 태그는 1회 생성해 두 모델�
 | --- | --- | --- |
 | E1 | 태깅 정확도 | Top-1 정확도, Top-3 포함률, 혼동 쌍, UNCLASSIFIED 비율, LLM 2회 일관성 (자동 계산) |
 | E2 | 유사 크리에이터 품질 | 쿼리 30명 × 설정별 상위 5명 합집합을 0/1/2점 판정(자동 또는 사람) → 평균 관련도@5, nDCG@5, 무관 비율@5, 쿼리별 짝비교 + 부트스트랩 신뢰구간 |
-| E3 | 대표 사례 | 동의어 / 경품 잡음 / 분야 넘기 / 정보 부족 / 분야 오입력 통과 여부 (11개 설정 전체) |
+| E3 | 대표 사례 | 동의어 / 경품 잡음 / 분야 넘기 / 정보 부족 / 분야 오입력 통과 여부 (22개 설정 전체) |
 | E4 | 운영 | 임베딩 소요 시간, 벡터 차원·크기, 비용 |
 
 ## 10. 코드 규칙

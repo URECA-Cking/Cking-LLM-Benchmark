@@ -17,13 +17,15 @@ from pathlib import Path
 
 import numpy as np
 
-from src.clients import BgeEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger
+from src.clients import LocalEmbeddingClient, OpenAIEmbeddingClient, OpenAIJudge, OpenAITagger, RerankerClient
 from src.config import (
     CACHE_DIR,
     JUDGE_SHUFFLE_SEED,
     JUDGE_TOP_K,
     LLM_CONSISTENCY_RUNS,
     LLM_TAG_MAX,
+    LLM_TEMPERATURE,
+    LOCAL_EMBEDDING_MODELS,
     OPENAI_JUDGE_MODEL,
     OPENAI_JUDGE_MODEL_PRICE,
     OPENAI_LLM_MODEL_CANDIDATES,
@@ -47,7 +49,7 @@ from src.tagging import (
     unclassified_rate,
 )
 
-EMBEDDING_MODEL_KEYS = ("text-embedding-3-small", "bge-m3")
+EMBEDDING_MODEL_KEYS = ("text-embedding-3-small", "bge-m3", "kure-v1", "qwen3-embedding-0.6b")
 BONUS_GRID = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
@@ -55,22 +57,23 @@ def _embedding_client(key: str):
     """설정 키로 임베딩 클라이언트를 만든다."""
     if key == "text-embedding-3-small":
         return OpenAIEmbeddingClient()
-    if key == "bge-m3":
-        return BgeEmbeddingClient()
+    if key in LOCAL_EMBEDDING_MODELS:
+        return LocalEmbeddingClient(key)
     raise ValueError(f"알 수 없는 임베딩 모델 키: {key}")
 
 
 def _embedding_model_identity(key: str) -> str:
     """캐시 무효화 해시에 포함할, 이 키가 실제로 가리키는 모델·차원 설정이다.
 
-    (재리뷰로 발견: 캐시 키가 "bge-m3" 같은 이름뿐이라, config.py에서 그 이름이
-    가리키는 실제 모델·차원을 바꿔도 텍스트가 그대로면 오래된 캐시를 계속 썼다.)
+    (PR #5 재리뷰로 발견: 캐시 키가 "bge-m3" 같은 이름뿐이라, config.py에서 그 이름이
+    가리키는 실제 HF 모델·차원을 바꿔도 텍스트가 그대로면 오래된 캐시를 계속 썼다.)
     """
-    from src.config import BGE_EMBEDDING_DIM, BGE_MODEL_NAME, OPENAI_EMBEDDING_DIM, OPENAI_EMBEDDING_MODEL
-
     if key == "text-embedding-3-small":
+        from src.config import OPENAI_EMBEDDING_DIM, OPENAI_EMBEDDING_MODEL
+
         return f"{OPENAI_EMBEDDING_MODEL}:{OPENAI_EMBEDDING_DIM}"
-    return f"{BGE_MODEL_NAME}:{BGE_EMBEDDING_DIM}"
+    spec = LOCAL_EMBEDDING_MODELS[key]
+    return f"{spec['model_name']}:{spec['dim']}"
 
 
 def _save_vectors(path: Path, ids: list[str], vectors: np.ndarray) -> None:
@@ -99,7 +102,7 @@ def _cached_hash_matches(hash_path: Path, expected: str) -> bool:
 
 
 def cmd_embed(args: argparse.Namespace) -> None:
-    """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 두 임베딩 모델로 인코딩한다.
+    """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 EMBEDDING_MODEL_KEYS의 모델들로 인코딩한다.
 
     모델별로 저장된 벡터 파일이 있고 입력 텍스트 해시도 그대로면 API를 다시 부르지 않고
     건너뛴다 (리뷰 P2: 재실행 시 무조건 다시 호출하던 문제 수정. 리뷰 P1: 파일 존재만
@@ -182,7 +185,6 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
     from src.clients.openai_tagger import SYSTEM_PROMPT
-    from src.config import LLM_TEMPERATURE
 
     categories = load_categories()
     creators = load_creators()
@@ -310,8 +312,25 @@ def cmd_select_params(_: argparse.Namespace) -> None:
         json.dump(params, f, ensure_ascii=False, indent=2)
 
 
+def _rerank_bge_m2_candidates(
+    ids: list[str], cosine: np.ndarray, text_by_id: dict[str, str], reranker: RerankerClient, pool_size: int
+) -> dict[str, list[list]]:
+    """M2(bge-m3) 코사인으로 추린 후보(pool_size명)를 cross-encoder로 다시 채점·정렬한다 (M5).
+
+    리랭커는 100x100 행렬을 만들지 않는다 — 이미 추린 소수 후보에만 쌍별로 추론한다.
+    """
+    result: dict[str, list[list]] = {}
+    for i, qid in enumerate(ids):
+        pool = top_n(cosine, ids, i, pool_size)
+        pairs = [(text_by_id[qid], text_by_id[cid]) for cid, _ in pool]
+        scores = reranker.score(pairs)
+        ranked = sorted(zip((cid for cid, _ in pool), scores), key=lambda item: -item[1])
+        result[qid] = [[cid, score] for cid, score in ranked]
+    return result
+
+
 def cmd_candidates(_: argparse.Namespace) -> None:
-    """11개 설정 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
+    """설정(임베딩 모델 x 방식) 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
     categories = load_categories()
     creators = load_creators()
     declared_by_id = {c.id: frozenset(c.declared) for c in creators}
@@ -348,6 +367,11 @@ def cmd_candidates(_: argparse.Namespace) -> None:
 
         for method_id, matrix in matrices.items():
             all_candidates[method_id] = {cid: top_n(matrix, ids, i, TOP_N_STORED) for i, cid in enumerate(ids)}
+
+        if key == "bge-m3":
+            text_by_id = {c.id: c.input_text() for c in creators}
+            reranker = RerankerClient()
+            all_candidates["M5_bge-m3"] = _rerank_bge_m2_candidates(ids, cosine, text_by_id, reranker, TOP_N_STORED)
 
     with (RESULTS_DIR / "candidates.json").open("w", encoding="utf-8") as f:
         json.dump(all_candidates, f, ensure_ascii=False, indent=2)
@@ -449,7 +473,7 @@ def cmd_report(_: argparse.Namespace) -> None:
         confusions = sorted(confusion_pairs(test_ranked, test_gold).items(), key=lambda kv: -kv[1])[:5]
         print(f"   주요 혼동 쌍(정답->예측1등): {confusions}")
 
-    print("\n=== E3. 대표 사례 (top-5, 11개 설정 전체) ===")
+    print("\n=== E3. 대표 사례 (top-5, 설정 전체) ===")
     with (RESULTS_DIR / "candidates.json").open(encoding="utf-8") as f:
         all_candidates = json.load(f)
 
