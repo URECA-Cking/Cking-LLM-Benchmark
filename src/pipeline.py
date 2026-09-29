@@ -316,6 +316,16 @@ def cmd_select_params(_: argparse.Namespace) -> None:
             "cutoff_r2": cosine_with_tag_bonus(dev_cosine, dev_declared_sets, bonus_r2),
         }
         cutoffs = {name: select_cutoff(matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered) for name, matrix in dev_matrices.items()}
+        if key == "bge-m3":
+            # M5는 bge-m3 M2 상위 후보를 리랭커로 다시 채점한 점수라, 그 dev×dev 점수로 컷오프를 따로 고른다
+            dev_text_by_id = {c.id: c.input_text() for c in creators if c.id in dev_id_set}
+            reranked = _rerank_bge_m2_candidates(dev_ids_ordered, dev_cosine, dev_text_by_id, RerankerClient(), TOP_N_STORED)
+            m5_matrix = np.full((len(dev_ids_ordered), len(dev_ids_ordered)), -np.inf, dtype=np.float32)
+            position = {cid: i for i, cid in enumerate(dev_ids_ordered)}
+            for qid, ranked in reranked.items():
+                for cid, score in ranked:
+                    m5_matrix[position[qid], position[cid]] = score
+            cutoffs["cutoff_m5"] = select_cutoff(m5_matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
         if "cutoff_r1" not in params:  # R1은 임베딩과 무관해 한 번만 고른다
             params["cutoff_r1"] = select_cutoff(jaccard_matrix(dev_declared_sets), dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
 
@@ -544,12 +554,10 @@ def cmd_report(_: argparse.Namespace) -> None:
 
 
 def _method_cutoff(method: str, params: dict) -> float | None:
-    """설정 이름에서 select-params가 고른 컷오프를 찾는다. 점수 척도가 다른 M5는 없다(None)."""
+    """설정 이름에서 select-params가 고른 컷오프를 찾는다."""
     if method == "R1":
         return params["cutoff_r1"]
     kind, _, key = method.partition("_")
-    if kind == "M5":
-        return None
     return params["per_embedding"][key][f"cutoff_{kind.lower()}"]
 
 
@@ -566,7 +574,7 @@ def _print_cutoff_report(creators: list[Creator], all_candidates: dict[str, dict
     with (RESULTS_DIR / "selected_params.json").open(encoding="utf-8") as f:
         params = json.load(f)
 
-    print("\n=== E3 ④·⑤ 컷오프 적용 (컷오프는 dev로 방식별 선택, M5는 점수 척도가 달라 제외) ===")
+    print("\n=== E3 ④·⑤ 컷오프 적용 (컷오프는 dev로 방식별 선택, M5는 리랭커 점수로 따로 선택) ===")
     print("④ 소개 부족 사례: 컷오프 뒤 남은 후보에 정답 분야가 전혀 다른(엉뚱한) 크리에이터가 없어야 통과 (빈 결과도 통과)")
     print("⑤ 컷오프 효과(쿼리 30명 상위 5): 무관 쌍 제거율↑, 관련 쌍 보존율↑, 빈 결과 비율(컷오프 뒤 후보 0명인 쿼리 비율)")
     for method, top_lists in all_candidates.items():
