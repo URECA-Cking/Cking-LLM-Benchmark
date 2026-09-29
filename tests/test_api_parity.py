@@ -248,6 +248,18 @@ def test_api_select_params_reuses_cached_vectors_unless_forced(tmp_path, monkeyp
     assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
 
 
+@pytest.mark.parametrize("missing", ["creators_bge-m3-api.npz", "categories_bge-m3-api.npz"])
+def test_api_select_params_refetches_when_a_cached_vector_file_is_missing(tmp_path, monkeypatch, missing) -> None:
+    creators, categories, creator_vectors, category_vectors = _prepare_api_select_params(tmp_path, monkeypatch, 28)
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+    (tmp_path / missing).unlink()  # 입력 해시는 남았지만 벡터 파일 하나가 없는 상태
+
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+
+    assert (tmp_path / missing).exists()
+    assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
+
+
 def test_api_select_params_stops_before_api_when_selected_params_are_missing(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)

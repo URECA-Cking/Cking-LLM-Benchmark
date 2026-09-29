@@ -1107,6 +1107,20 @@ def cmd_api_parity(_: argparse.Namespace, api_client: OpenAIEmbeddingClient | No
     )
 
 
+def _cached_api_vectors(key: str, creators: list[Creator], categories, input_hash: str) -> tuple[np.ndarray, np.ndarray] | None:
+    """캐시된 API 벡터를 돌려준다. 입력 해시가 다르거나 벡터 파일이 없거나 읽을 수 없거나 순서가 다르면 None이다."""
+    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
+        return None
+    try:
+        creator_ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        category_codes, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    except (OSError, ValueError):  # 파일이 없거나 깨진 경우. 해시만 남아 있어도 다시 받는다
+        return None
+    if creator_ids != [c.id for c in creators] or category_codes != [c.code for c in categories]:
+        return None
+    return creator_vectors, category_vectors
+
+
 def cmd_api_select_params(args: argparse.Namespace, api_client: OpenAIEmbeddingClient | None = None) -> None:
     """API bge-m3 벡터로 tau·bonus·컷오프를 dev만으로 다시 고르고, 로컬 선택값과 비교해 results/api_selected_params.json에 남긴다.
 
@@ -1126,7 +1140,8 @@ def cmd_api_select_params(args: argparse.Namespace, api_client: OpenAIEmbeddingC
     input_hash = _content_hash(f"{API_BGE_M3_MODEL}@api:{LOCAL_EMBEDDING_MODELS[local_key]['dim']}", *creator_texts, *category_texts)
     hash_path = CACHE_DIR / f"embed_{key}.input_hash"
     total_tokens = 0
-    if getattr(args, "force", False) or not _cached_hash_matches(hash_path, input_hash):
+    cached = None if getattr(args, "force", False) else _cached_api_vectors(key, creators, categories, input_hash)
+    if cached is None:
         client = api_client or _api_bge_m3_client()
         api_creators = client.embed(creator_texts)
         total_tokens = client.last_input_tokens or 0
@@ -1138,8 +1153,7 @@ def cmd_api_select_params(args: argparse.Namespace, api_client: OpenAIEmbeddingC
         print(f"[api-select-params] API 벡터를 새로 받아 캐시했습니다 (토큰 {total_tokens})")
     else:
         print("[api-select-params] 캐시된 API 벡터를 사용합니다 (다시 받으려면 --force)")
-    _, api_creators = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-    _, api_categories = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    api_creators, api_categories = cached or _cached_api_vectors(key, creators, categories, input_hash)
 
     selected, _ = _select_params_for_key(key, creators, categories, llm_tags_by_id)
     local = params["per_embedding"][local_key]

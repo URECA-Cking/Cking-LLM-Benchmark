@@ -160,7 +160,7 @@ tau·컷오프는 "이상이면 통과"라는 경계 판정이라, 유사도가 
 python3 -m src.pipeline api-select-params
 ```
 
-서버에서 로컬 bge-m3 대신 API를 쓰기로 했다면, 로컬 벡터로 고른 tau·bonus·컷오프 대신 API 벡터로 다시 고른 값을 씁니다. API 벡터를 받아 캐시(`results/cache/*bge-m3-api*`)한 뒤 `select-params`와 같은 방식으로 dev 30명만으로 고르고, 로컬 선택값과 비교해 `results/api_selected_params.json`에 남깁니다. API 벡터는 호출마다 조금씩 달라서 **처음 받은 벡터를 캐시해 두고 이후 실행은 그 벡터를 씁니다**(`--force`로 다시 받음). `results/selected_params.json`은 바꾸지 않습니다. `.env`에 `DEEPINFRA_API_KEY`가 필요하고 ①~③(`embed`, `tag-llm`, `select-params`)을 먼저 실행해야 합니다.
+서버에서 로컬 bge-m3 대신 API를 쓰기로 했다면, 로컬 벡터로 고른 tau·bonus·컷오프 대신 API 벡터로 다시 고른 값을 씁니다. API 벡터를 받아 캐시(`results/cache/*bge-m3-api*`)한 뒤 `select-params`와 같은 방식으로 dev 30명만으로 고르고, 로컬 선택값과 비교해 `results/api_selected_params.json`에 남깁니다. API 벡터는 호출마다 조금씩 달라서 **처음 받은 벡터를 캐시해 두고 이후 실행은 그 벡터를 씁니다**(`--force`로 다시 받음). 캐시는 입력 텍스트와 모델명이 같으면 재사용하므로, **제공 업체의 서빙 방식이 바뀌었거나 모델을 바꿨을 때는 `python3 -m src.pipeline api-select-params --force`로 다시 받아야 합니다.** 벡터 파일이 하나라도 없거나 순서가 다르면 자동으로 다시 받습니다. `results/selected_params.json`은 바꾸지 않습니다. `.env`에 `DEEPINFRA_API_KEY`가 필요하고 ①~③(`embed`, `tag-llm`, `select-params`)을 먼저 실행해야 합니다.
 
 ### 선택: 취향 쿼리 검증 — `taste-eval` → `taste-judge`
 
