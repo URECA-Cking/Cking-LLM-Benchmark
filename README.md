@@ -6,6 +6,8 @@ Ticle(Cking) 2차 MVP **AI 크리에이터 추천**의 임베딩 모델과 추�
 
 실행 결과와 선택 근거는 [`docs/embedding-method-selection.md`](docs/embedding-method-selection.md)에서 확인할 수 있습니다. 처음 이 저장소를 여는 사람은 **직접 실행해보지 않아도** 이 문서만 읽으면 결론을 알 수 있습니다.
 
+**현재 구성(잠정):** 임베딩은 `bge-m3`를 API로 쓰고, 추천 방식은 M4(LLM 태그 보정)와 M3(zero-shot 태그 보정)를 둘 다 계속 검토합니다. 태깅 LLM `gpt-5.4-nano`는 **M4에만** 쓰고(M3는 LLM 없이 임베딩만으로 태그를 붙임), 판정 LLM `gpt-5.4-mini`는 추천 품질을 채점하는 **평가 전용**이라 서비스에 들어가지 않습니다.
+
 **서버는 로컬 모델 대신 API(DeepInfra `BAAI/bge-m3`)로 진행합니다.** 같은 모델이고 벡터·유사도가 사실상 같으며, 임베딩을 저장해 쓰고 tau·bonus·컷오프를 API 벡터로 다시 고른 값(`api-select-params`)을 쓰는 것이 전제입니다. 자세한 근거와 조건은 결과 문서의 "로컬 ↔ API bge-m3 동등성" 절을 참고하세요.
 
 ## 목차
