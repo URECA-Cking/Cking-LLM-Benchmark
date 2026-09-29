@@ -1147,6 +1147,9 @@ def cmd_api_select_params(args: argparse.Namespace, api_client: OpenAIEmbeddingC
         total_tokens = client.last_input_tokens or 0
         api_categories = client.embed(category_texts)
         total_tokens += client.last_input_tokens or 0
+        # 두 파일을 차례로 덮어쓰다 중간에 실패해도 서로 다른 실행의 벡터가 유효한 캐시로 남지 않도록,
+        # 저장을 시작하기 전에 기존 해시를 지우고 두 파일을 다 쓴 뒤에 새 해시를 쓴다
+        hash_path.unlink(missing_ok=True)
         _save_vectors(CACHE_DIR / f"creators_{key}.npz", creator_ids, api_creators)
         _save_vectors(CACHE_DIR / f"categories_{key}.npz", [c.code for c in categories], api_categories)
         hash_path.write_text(input_hash, encoding="utf-8")

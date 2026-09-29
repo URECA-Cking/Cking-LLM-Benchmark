@@ -260,6 +260,31 @@ def test_api_select_params_refetches_when_a_cached_vector_file_is_missing(tmp_pa
     assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
 
 
+def test_api_select_params_does_not_trust_a_half_updated_cache_after_failed_force(tmp_path, monkeypatch) -> None:
+    creators, categories, creator_vectors, category_vectors = _prepare_api_select_params(tmp_path, monkeypatch, 30)
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+    new_creators, new_categories = _random_unit(len(creators), 8, 31), _random_unit(len(categories), 8, 32)
+
+    real_save, calls = pipeline._save_vectors, []
+
+    def save_then_fail_on_second(path, ids, vectors):
+        calls.append(path.name)
+        if len(calls) == 2:  # 크리에이터 파일은 새 벡터로 바뀌었고 카테고리 파일 저장에서 실패
+            raise OSError("disk full")
+        real_save(path, ids, vectors)
+
+    monkeypatch.setattr(pipeline, "_save_vectors", save_then_fail_on_second)
+    with pytest.raises(OSError):
+        pipeline.cmd_api_select_params(SimpleNamespace(force=True), api_client=_FakeApiClient(new_creators, new_categories))
+    monkeypatch.setattr(pipeline, "_save_vectors", real_save)
+
+    # 다음 실행은 새 크리에이터 + 이전 카테고리 벡터를 정상 캐시로 읽지 않고 API에서 다시 받는다
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(new_creators, new_categories))
+    assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
+    _, saved_categories = pipeline._load_vectors(tmp_path / "categories_bge-m3-api.npz")
+    assert np.allclose(saved_categories, new_categories)
+
+
 def test_api_select_params_stops_before_api_when_selected_params_are_missing(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
