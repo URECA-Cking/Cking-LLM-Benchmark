@@ -16,6 +16,8 @@ CACHE_DIR = RESULTS_DIR / "cache"
 CATEGORIES_CSV = DATA_DIR / "categories.csv"
 CREATORS_CSV = DATA_DIR / "creators.csv"
 SPLIT_CSV = DATA_DIR / "split.csv"
+# dev 규모 민감도 실험용 추가 크리에이터(이슈 #8). 기존 100명과 별개 파일이며 평가에는 쓰지 않는다.
+CREATORS_LARGE_CSV = DATA_DIR / "creators_large.csv"
 
 # 실험 착수 시 확정한 데이터. 값이 바뀌면 README와 함께 갱신한다.
 CREATORS_CSV_SHA256 = "e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a"
@@ -26,6 +28,9 @@ CREATORS_CSV_SHA256 = "e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32
 # input_text()에 전달되지 않아, "경품 잡음에 강하다"던 E3 사례가 실제로는 잡음을 넣어본 적이 없었다.
 # 세 수정 모두 X01·X02 bio 외 gold·declared 값은 바뀌지 않았다.
 SPLIT_CSV_SHA256 = "cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6"
+# creators_large.csv(2026-09-29, gpt-5.4-mini로 생성한 합성 300명, 카테고리당 30명)의 확정 hash.
+# 값이 바뀌면 이 hash와 docs를 함께 갱신한다(None이면 검증하지 않음).
+CREATORS_LARGE_CSV_SHA256: str | None = "4ac22daa0708e44debccfc65d5af47a722be1a0b351ea2a0b33ed50cf1c09512"
 
 TAXONOMY_VERSION = "v0.1"
 

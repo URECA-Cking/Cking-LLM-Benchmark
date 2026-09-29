@@ -32,7 +32,7 @@ from src.config import (
     RESULTS_DIR,
     TOP_N_STORED,
 )
-from src.data import Creator, dev_creators, load_categories, load_creators, query_creators
+from src.data import Creator, dev_creators, load_categories, load_creators, query_creators, test_creators
 from src.judge import build_judge_pairs, load_existing_scores, pair_text_hash, shuffle_rows, write_judge_sheet, write_provenance
 from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
 from src.spot_check import agreement_stats, select_pairwise_symmetric_disagreement
@@ -726,6 +726,112 @@ def write_judge_sheet_rows(rows: list[dict[str, str]], path: Path) -> None:
             writer.writerow({**row, "score": prev[0] if keep else row["score"], "text_hash": text_hash})
 
 
+SENSITIVITY_SIZES = [30, 60, 120, 240]
+SENSITIVITY_REPS = 20
+SENSITIVITY_SEED = 20260929
+
+
+def _large_llm_tags(creators: list[Creator], llm_model: str, category_codes: list[str]) -> dict[str, frozenset[str]]:
+    """합성 크리에이터를 선택된 LLM 태거로 1회 태깅한다. 입력·프롬프트 해시가 같으면 캐시를 쓴다."""
+    from src.clients.openai_tagger import SYSTEM_PROMPT
+
+    input_hash = _content_hash(llm_model, SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *category_codes)
+    path = CACHE_DIR / "large_llm_tags.json"
+    hash_path = CACHE_DIR / "large_llm_tags.input_hash"
+    if path.exists() and _cached_hash_matches(hash_path, input_hash):
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        tagger = OpenAITagger(model=llm_model, category_codes=category_codes)
+        raw = {c.id: list(tagger.tag(c.input_text()).tags) for c in creators}
+        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        hash_path.write_text(input_hash, encoding="utf-8")
+    return {cid: frozenset(tags) for cid, tags in raw.items()}
+
+
+def _large_vectors(key: str, creators: list[Creator]) -> np.ndarray:
+    """합성 크리에이터 벡터를 모델별로 캐시해 만든다. 텍스트·모델 설정이 바뀌면 다시 계산한다."""
+    texts = [c.input_text() for c in creators]
+    input_hash = _content_hash(_embedding_model_identity(key), *texts)
+    path = CACHE_DIR / f"large_creators_{key}.npz"
+    hash_path = CACHE_DIR / f"large_creators_{key}.input_hash"
+    if path.exists() and _cached_hash_matches(hash_path, input_hash):
+        return _load_vectors(path)[1]
+    vectors = _embedding_client(key).embed(texts)
+    _save_vectors(path, [c.id for c in creators], vectors)
+    hash_path.write_text(input_hash, encoding="utf-8")
+    return vectors
+
+
+def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
+    """dev 크기(30/60/120/240)별로 tau·bonus 선택이 얼마나 흔들리는지 잰다 (이슈 #8).
+
+    dev 후보 풀 = 기존 dev 30명 + 합성 300명. test = 기존 100명(쿼리 30명 포함)이며, test 성적은
+    LLM 판정 없는 gold 기준 대리 지표다. 쿼리 프롬프트(Qwen3)는 적용하지 않는다.
+    기존 dev 30명 그대로 고른 값이 selected_params.json과 같은지도 확인해 함께 기록한다.
+    """
+    from src.data import load_large_creators
+    from src.sensitivity import CreatorSet, run_sensitivity, select_on_subset, summarize
+
+    categories = load_categories()
+    codes = [c.code for c in categories]
+    creators = load_creators()
+    large = load_large_creators()
+    dev_ids = {c.id for c in dev_creators(creators)}
+    query_ids = [c.id for c in query_creators(creators)]
+    test_ids = [c.id for c in test_creators(creators)]
+
+    selected = json.loads((RESULTS_DIR / "selected_params.json").read_text(encoding="utf-8"))
+    llm_model = selected["llm_model"]
+    safe_name = llm_model.replace("/", "_")
+    orig_llm = {cid: frozenset(t) for cid, t in json.loads((CACHE_DIR / f"llm_tags_{safe_name}_run0.json").read_text(encoding="utf-8")).items()}
+    large_llm = _large_llm_tags(large, llm_model, codes)
+
+    orig_gold = {c.id: frozenset(c.gold) for c in creators}
+    orig_declared = {c.id: frozenset(c.declared) for c in creators}
+    large_gold = {c.id: frozenset(c.gold) for c in large}
+    large_declared = {c.id: frozenset(c.declared) for c in large}
+
+    output: dict = {"sizes": SENSITIVITY_SIZES, "reps": SENSITIVITY_REPS, "seed": SENSITIVITY_SEED, "per_embedding": {}}
+    for key in EMBEDDING_MODEL_KEYS:
+        ids, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+        test = CreatorSet(list(ids), vectors, rank_all(vectors, category_vectors, codes), orig_gold, orig_llm, orig_declared)
+
+        dev_index = [i for i, cid in enumerate(ids) if cid in dev_ids]
+        large_vectors = _large_vectors(key, large)
+        pool_ids = [ids[i] for i in dev_index] + [c.id for c in large]
+        pool_vectors = np.vstack([vectors[dev_index], large_vectors])
+        pool = CreatorSet(
+            pool_ids,
+            pool_vectors,
+            rank_all(pool_vectors, category_vectors, codes),
+            {**orig_gold, **large_gold},
+            {**orig_llm, **large_llm},
+            {**orig_declared, **large_declared},
+        )
+
+        tau, bonuses = select_on_subset(pool, list(range(len(dev_index))), BONUS_GRID, LLM_TAG_MAX)
+        expected = selected["per_embedding"][key]
+        matches = abs(tau - expected["tau"]) < 1e-9 and all(bonuses[n] == expected[n] for n in bonuses)
+        records = run_sensitivity(pool, test, test_ids, query_ids, SENSITIVITY_SIZES, SENSITIVITY_REPS, BONUS_GRID, LLM_TAG_MAX, SENSITIVITY_SEED)
+        output["per_embedding"][key] = {
+            "original_dev30": {"tau": tau, **bonuses, "matches_selected_params": matches},
+            "summary": summarize(records),
+        }
+        print(f"[dev-sensitivity] {key}: 기존 dev 30 재현={'OK' if matches else 'MISMATCH'}")
+        for row in output["per_embedding"][key]["summary"]:
+            print(
+                f"  size={row['size']:>3} tau={row['tau_mean']:.3f}±{row['tau_std']:.3f} "
+                f"m3={row['bonus_m3']['mode']}({row['bonus_m3']['mode_share']:.0%}) "
+                f"m4={row['bonus_m4']['mode']}({row['bonus_m4']['mode_share']:.0%}) "
+                f"r2={row['bonus_r2']['mode']}({row['bonus_r2']['mode_share']:.0%}) "
+                f"F1={row['test_tag_f1']['mean']:.3f}±{row['test_tag_f1']['std']:.3f} "
+                f"P@5 m3={row['p5_m3']['mean']:.3f} m4={row['p5_m4']['mean']:.3f} r2={row['p5_r2']['mean']:.3f}"
+            )
+    with (RESULTS_DIR / "dev_sensitivity.json").open("w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -743,6 +849,7 @@ def main() -> None:
         "spot-check-report": cmd_spot_check_report,
         "spot-check-models": cmd_spot_check_models,
         "spot-check-models-report": cmd_spot_check_models_report,
+        "dev-sensitivity": cmd_dev_sensitivity,
     }
     for name in stages:
         stage_parser = sub.add_parser(name)

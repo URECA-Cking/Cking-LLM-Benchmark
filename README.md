@@ -59,10 +59,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-65 passed in 3~4s
+84 passed in 3~5s
 ```
 
-**65개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**84개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -128,6 +128,14 @@ python3 -m src.pipeline select-params
 [select-params] kure-v1: tau=0.4745 bonus_m3=0.1 bonus_m4=0.1 bonus_r2=0.1
 [select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.3 bonus_m4=0.3 bonus_r2=0.3
 ```
+
+### 선택: dev-sensitivity — dev 규모 민감도 (API 호출 약 1센트, 수 분)
+
+```bash
+python3 -m src.pipeline dev-sensitivity
+```
+
+기존 dev 30명 + 합성 300명에서 크기별(30/60/120/240) 부분표본으로 tau·bonus를 골라 보고 얼마나 흔들리는지 `results/dev_sensitivity.json`에 저장합니다. ①~③을 먼저 실행해야 합니다. 결과 해석은 `docs/embedding-method-selection.md`의 "dev 규모 민감도" 절을 참고하세요.
 
 ### ④ candidates — 유사 크리에이터 후보 계산 (API 호출 없음, 몇 초)
 
@@ -301,6 +309,7 @@ python3 -m src.judge_cli
 | `data/categories.csv` | 카테고리 10개 + zero-shot 태깅용 설명문 (taxonomy v0.1) |
 | `data/creators.csv` | 가상 크리에이터 100명 (일반 85 + 어려운 사례 X01~X15) |
 | `data/split.csv` | dev 30 / test 70, `query=Y`인 test 30명이 평가 쿼리 |
+| `data/creators_large.csv` | dev 규모 민감도 실험용 합성 300명(`python3 -m src.generate_large`로 생성, 평가에는 쓰지 않음) |
 
 `creators.csv` 컬럼
 
@@ -320,6 +329,7 @@ python3 -m src.judge_cli
 ```
 creators.csv sha256 e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
+creators_large.csv sha256 4ac22daa0708e44debccfc65d5af47a722be1a0b351ea2a0b33ed50cf1c09512
 ```
 
 ## 8. 비교 대상 방식

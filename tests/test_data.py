@@ -36,3 +36,25 @@ def test_declared_defaults_to_gold_when_not_overridden() -> None:
     assert creators["F01"].declared == creators["F01"].gold
     assert creators["X03"].declared == ("BEAUTY",)
     assert creators["X03"].gold == ("FITNESS",)
+
+
+def test_load_large_creators_reads_pinned_file_as_dev_pool() -> None:
+    from src.data import load_large_creators
+
+    large = load_large_creators()
+
+    assert len(large) == 300
+    assert {c.split for c in large} == {"dev"} and not any(c.is_query for c in large)
+
+
+def test_load_large_creators_rejects_missing_file_and_hash_mismatch(tmp_path) -> None:
+    import pytest
+
+    from src.data import load_large_creators
+
+    with pytest.raises(FileNotFoundError):
+        load_large_creators(tmp_path / "none.csv")
+    bad = tmp_path / "bad.csv"
+    bad.write_text("id,name,bio,events,subtopic,gold,written_by,note,declared\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_large_creators(bad, expected_sha256="0" * 64)
