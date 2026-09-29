@@ -146,7 +146,7 @@ def _write_local_cache(cache_dir, creators, categories, creator_vectors, categor
 
 
 def _write_params_and_llm_tags(dir_, creators) -> None:
-    per_embedding = {"tau": 0.0, "bonus_m3": 0.1, "bonus_m4": 0.2, **{f"cutoff_m{i}": 0.0 for i in range(1, 5)}}
+    per_embedding = {"tau": 0.0, "bonus_m3": 0.1, "bonus_m4": 0.2, "bonus_r2": 0.2, **{f"cutoff_m{i}": 0.0 for i in range(1, 5)}}
     (dir_ / "selected_params.json").write_text(
         json.dumps({"llm_model": "m", "per_embedding": {"bge-m3": per_embedding}}), encoding="utf-8"
     )
@@ -210,3 +210,86 @@ def test_cmd_api_parity_stops_before_api_when_selected_params_are_missing(tmp_pa
 
     with pytest.raises(RuntimeError, match="select-params"):
         pipeline.cmd_api_parity(SimpleNamespace(), api_client=_FakeApiClient())
+
+
+def _prepare_api_select_params(tmp_path, monkeypatch, seed: int):
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    creators, categories = pipeline.load_creators(), pipeline.load_categories()
+    creator_vectors, category_vectors = _random_unit(len(creators), 8, seed), _random_unit(len(categories), 8, seed + 1)
+    _write_local_cache(tmp_path, creators, categories, creator_vectors, category_vectors)
+    _write_params_and_llm_tags(tmp_path, creators)
+    return creators, categories, creator_vectors, category_vectors
+
+
+def test_api_select_params_caches_api_vectors_and_keeps_selected_params(tmp_path, monkeypatch) -> None:
+    creators, categories, creator_vectors, category_vectors = _prepare_api_select_params(tmp_path, monkeypatch, 22)
+    before = (tmp_path / "selected_params.json").read_text(encoding="utf-8")
+
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+
+    saved = json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))
+    assert set(saved) >= {"local_params", "api_params", "test_zero_shot", "local_params_on_local_vs_api_params_on_api"}
+    assert {"tau", "bonus_m3", "bonus_m4", "cutoff_m2"} <= set(saved["api_params"])
+    assert saved["input_tokens_this_run"] == 200
+    assert (tmp_path / "creators_bge-m3-api.npz").exists() and (tmp_path / "embed_bge-m3-api.input_hash").exists()
+    assert (tmp_path / "selected_params.json").read_text(encoding="utf-8") == before  # 로컬 선택값은 그대로
+
+
+def test_api_select_params_reuses_cached_vectors_unless_forced(tmp_path, monkeypatch) -> None:
+    creators, categories, creator_vectors, category_vectors = _prepare_api_select_params(tmp_path, monkeypatch, 24)
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+
+    # 캐시가 있으면 API를 부르지 않는다: 호출되면 출력이 없어 IndexError로 드러난다
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient())
+    assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 0
+
+    pipeline.cmd_api_select_params(SimpleNamespace(force=True), api_client=_FakeApiClient(creator_vectors, category_vectors))
+    assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
+
+
+@pytest.mark.parametrize("missing", ["creators_bge-m3-api.npz", "categories_bge-m3-api.npz"])
+def test_api_select_params_refetches_when_a_cached_vector_file_is_missing(tmp_path, monkeypatch, missing) -> None:
+    creators, categories, creator_vectors, category_vectors = _prepare_api_select_params(tmp_path, monkeypatch, 28)
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+    (tmp_path / missing).unlink()  # 입력 해시는 남았지만 벡터 파일 하나가 없는 상태
+
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+
+    assert (tmp_path / missing).exists()
+    assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
+
+
+def test_api_select_params_does_not_trust_a_half_updated_cache_after_failed_force(tmp_path, monkeypatch) -> None:
+    creators, categories, creator_vectors, category_vectors = _prepare_api_select_params(tmp_path, monkeypatch, 30)
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(creator_vectors, category_vectors))
+    new_creators, new_categories = _random_unit(len(creators), 8, 31), _random_unit(len(categories), 8, 32)
+
+    real_save, calls = pipeline._save_vectors, []
+
+    def save_then_fail_on_second(path, ids, vectors):
+        calls.append(path.name)
+        if len(calls) == 2:  # 크리에이터 파일은 새 벡터로 바뀌었고 카테고리 파일 저장에서 실패
+            raise OSError("disk full")
+        real_save(path, ids, vectors)
+
+    monkeypatch.setattr(pipeline, "_save_vectors", save_then_fail_on_second)
+    with pytest.raises(OSError):
+        pipeline.cmd_api_select_params(SimpleNamespace(force=True), api_client=_FakeApiClient(new_creators, new_categories))
+    monkeypatch.setattr(pipeline, "_save_vectors", real_save)
+
+    # 다음 실행은 새 크리에이터 + 이전 카테고리 벡터를 정상 캐시로 읽지 않고 API에서 다시 받는다
+    pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient(new_creators, new_categories))
+    assert json.loads((tmp_path / "api_selected_params.json").read_text(encoding="utf-8"))["input_tokens_this_run"] == 200
+    _, saved_categories = pipeline._load_vectors(tmp_path / "categories_bge-m3-api.npz")
+    assert np.allclose(saved_categories, new_categories)
+
+
+def test_api_select_params_stops_before_api_when_selected_params_are_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(pipeline, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    creators, categories = pipeline.load_creators(), pipeline.load_categories()
+    _write_local_cache(tmp_path, creators, categories, _random_unit(len(creators), 8, 26), _random_unit(len(categories), 8, 27))
+
+    with pytest.raises(RuntimeError, match="select-params"):
+        pipeline.cmd_api_select_params(SimpleNamespace(force=False), api_client=_FakeApiClient())

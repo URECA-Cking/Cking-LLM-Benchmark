@@ -265,19 +265,70 @@ def _zero_shot_tags_for_key(key: str, creators: list[Creator], categories, tau_c
     return creator_ids, ranked_by_id, tags_by_id, tau
 
 
-def cmd_select_params(_: argparse.Namespace) -> None:
-    """zero-shot tau와, 세 태그 소스(zero-shot, LLM, 입력분야) 각각의 bonus를 dev로만 고정한다.
+def _select_params_for_key(key: str, creators: list[Creator], categories, llm_tags_by_id: dict[str, frozenset[str]]) -> tuple[dict, float]:
+    """캐시된 `key` 벡터로 tau, 세 태그 소스의 bonus, 방식별 컷오프를 dev만으로 고른다. (선택값, R1 컷오프)를 돌려준다.
 
     bonus 선택은 dev 크리에이터끼리의 후보 pool·정답만 사용한다 (dev×dev 부분 행렬).
     test 크리에이터가 후보나 relevance 정답으로 섞이면, 쿼리를 dev로 제한해도 test 라벨이
     선택에 영향을 주는 누수가 생기기 때문이다 (2026-09-28 리뷰로 발견, dev 입력은 그대로
     두고 test gold만 바꿔도 선택 bonus가 달라지는 것으로 재현됨).
     """
-    categories = load_categories()
-    creators = load_creators()
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
     declared_by_id = {c.id: frozenset(c.declared) for c in creators}
     dev_id_set = {c.id for c in dev_creators(creators)}
+
+    ids, _, zero_shot_tags, tau = _zero_shot_tags_for_key(key, creators, categories)
+    _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+
+    # dev만 남긴 부분 행렬로 bonus를 고른다. test 벡터·gold는 이 시점에 전혀 등장하지 않는다.
+    dev_index = [i for i, cid in enumerate(ids) if cid in dev_id_set]
+    dev_ids_ordered = [ids[i] for i in dev_index]
+    # 평가(candidates)와 같은 조건으로 고르도록, 프롬프트가 있는 모델은 dev 행에도 쿼리 프롬프트를 적용한다
+    dev_query_vectors = _query_prompted_vectors(key, ids, vectors, creators, target_ids=dev_id_set)[dev_index]
+    dev_cosine = cosine_matrix(vectors[dev_index], query_vectors=dev_query_vectors)
+
+    dev_zero_shot_tag_sets = [zero_shot_tags[cid] for cid in dev_ids_ordered]
+    dev_llm_tag_sets = [llm_tags_by_id[cid] for cid in dev_ids_ordered]
+    dev_declared_sets = [declared_by_id[cid] for cid in dev_ids_ordered]
+    dev_gold_by_id = {cid: gold_by_id[cid] for cid in dev_ids_ordered}
+
+    bonus_m3 = select_bonus(dev_cosine, dev_ids_ordered, dev_zero_shot_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
+    bonus_m4 = select_bonus(dev_cosine, dev_ids_ordered, dev_llm_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
+    bonus_r2 = select_bonus(dev_cosine, dev_ids_ordered, dev_declared_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
+
+    # 결과 후보를 거르는 컷오프(이슈 #10): 각 방식의 dev×dev 점수 행렬에서 방식별로 고른다
+    dev_matrices = {
+        "cutoff_m1": jaccard_matrix(dev_zero_shot_tag_sets),
+        "cutoff_m2": dev_cosine,
+        "cutoff_m3": cosine_with_tag_bonus(dev_cosine, dev_zero_shot_tag_sets, bonus_m3),
+        "cutoff_m4": cosine_with_tag_bonus(dev_cosine, dev_llm_tag_sets, bonus_m4),
+        "cutoff_r2": cosine_with_tag_bonus(dev_cosine, dev_declared_sets, bonus_r2),
+    }
+    cutoffs = {name: select_cutoff(matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered) for name, matrix in dev_matrices.items()}
+    if key == "bge-m3":
+        # M5는 bge-m3 M2 상위 후보를 리랭커로 다시 채점한 점수라, 그 dev×dev 점수로 컷오프를 따로 고른다
+        dev_text_by_id = {c.id: c.input_text() for c in creators if c.id in dev_id_set}
+        reranked = _rerank_bge_m2_candidates(dev_ids_ordered, dev_cosine, dev_text_by_id, RerankerClient(), TOP_N_STORED)
+        m5_matrix = np.full((len(dev_ids_ordered), len(dev_ids_ordered)), -np.inf, dtype=np.float32)
+        position = {cid: i for i, cid in enumerate(dev_ids_ordered)}
+        for qid, ranked in reranked.items():
+            for cid, score in ranked:
+                m5_matrix[position[qid], position[cid]] = score
+        cutoffs["cutoff_m5"] = select_cutoff(m5_matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
+    r1_cutoff = select_cutoff(jaccard_matrix(dev_declared_sets), dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
+    return {"tau": tau, "bonus_m3": bonus_m3, "bonus_m4": bonus_m4, "bonus_r2": bonus_r2, **cutoffs}, r1_cutoff
+
+
+def _print_selected_params(label: str, selected: dict) -> None:
+    """고른 tau·bonus·컷오프를 한 줄씩 출력한다."""
+    print(f"[select-params] {label}: tau={selected['tau']:.4f} bonus_m3={selected['bonus_m3']} bonus_m4={selected['bonus_m4']} bonus_r2={selected['bonus_r2']}")
+    print("   컷오프 " + " ".join(f"{name.removeprefix('cutoff_')}={value:.3f}" for name, value in selected.items() if name.startswith("cutoff_")))
+
+
+def cmd_select_params(_: argparse.Namespace) -> None:
+    """zero-shot tau와, 세 태그 소스(zero-shot, LLM, 입력분야) 각각의 bonus·컷오프를 dev로만 고정한다. 고르는 방법은 `_select_params_for_key`."""
+    categories = load_categories()
+    creators = load_creators()
 
     with (RESULTS_DIR / "llm_model_selection.json").open(encoding="utf-8") as f:
         llm_selection = json.load(f)
@@ -289,50 +340,10 @@ def cmd_select_params(_: argparse.Namespace) -> None:
 
     params: dict[str, dict] = {"llm_model": llm_model, "per_embedding": {}}
     for key in EMBEDDING_MODEL_KEYS:
-        ids, _, zero_shot_tags, tau = _zero_shot_tags_for_key(key, creators, categories)
-        _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-
-        # dev만 남긴 부분 행렬로 bonus를 고른다. test 벡터·gold는 이 시점에 전혀 등장하지 않는다.
-        dev_index = [i for i, cid in enumerate(ids) if cid in dev_id_set]
-        dev_ids_ordered = [ids[i] for i in dev_index]
-        # 평가(candidates)와 같은 조건으로 고르도록, 프롬프트가 있는 모델은 dev 행에도 쿼리 프롬프트를 적용한다
-        dev_query_vectors = _query_prompted_vectors(key, ids, vectors, creators, target_ids=dev_id_set)[dev_index]
-        dev_cosine = cosine_matrix(vectors[dev_index], query_vectors=dev_query_vectors)
-
-        dev_zero_shot_tag_sets = [zero_shot_tags[cid] for cid in dev_ids_ordered]
-        dev_llm_tag_sets = [llm_tags_by_id[cid] for cid in dev_ids_ordered]
-        dev_declared_sets = [declared_by_id[cid] for cid in dev_ids_ordered]
-        dev_gold_by_id = {cid: gold_by_id[cid] for cid in dev_ids_ordered}
-
-        bonus_m3 = select_bonus(dev_cosine, dev_ids_ordered, dev_zero_shot_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
-        bonus_m4 = select_bonus(dev_cosine, dev_ids_ordered, dev_llm_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
-        bonus_r2 = select_bonus(dev_cosine, dev_ids_ordered, dev_declared_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
-
-        # 결과 후보를 거르는 컷오프(이슈 #10): 각 방식의 dev×dev 점수 행렬에서 방식별로 고른다
-        dev_matrices = {
-            "cutoff_m1": jaccard_matrix(dev_zero_shot_tag_sets),
-            "cutoff_m2": dev_cosine,
-            "cutoff_m3": cosine_with_tag_bonus(dev_cosine, dev_zero_shot_tag_sets, bonus_m3),
-            "cutoff_m4": cosine_with_tag_bonus(dev_cosine, dev_llm_tag_sets, bonus_m4),
-            "cutoff_r2": cosine_with_tag_bonus(dev_cosine, dev_declared_sets, bonus_r2),
-        }
-        cutoffs = {name: select_cutoff(matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered) for name, matrix in dev_matrices.items()}
-        if key == "bge-m3":
-            # M5는 bge-m3 M2 상위 후보를 리랭커로 다시 채점한 점수라, 그 dev×dev 점수로 컷오프를 따로 고른다
-            dev_text_by_id = {c.id: c.input_text() for c in creators if c.id in dev_id_set}
-            reranked = _rerank_bge_m2_candidates(dev_ids_ordered, dev_cosine, dev_text_by_id, RerankerClient(), TOP_N_STORED)
-            m5_matrix = np.full((len(dev_ids_ordered), len(dev_ids_ordered)), -np.inf, dtype=np.float32)
-            position = {cid: i for i, cid in enumerate(dev_ids_ordered)}
-            for qid, ranked in reranked.items():
-                for cid, score in ranked:
-                    m5_matrix[position[qid], position[cid]] = score
-            cutoffs["cutoff_m5"] = select_cutoff(m5_matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
-        if "cutoff_r1" not in params:  # R1은 임베딩과 무관해 한 번만 고른다
-            params["cutoff_r1"] = select_cutoff(jaccard_matrix(dev_declared_sets), dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
-
-        params["per_embedding"][key] = {"tau": tau, "bonus_m3": bonus_m3, "bonus_m4": bonus_m4, "bonus_r2": bonus_r2, **cutoffs}
-        print(f"[select-params] {key}: tau={tau:.4f} bonus_m3={bonus_m3} bonus_m4={bonus_m4} bonus_r2={bonus_r2}")
-        print("   컷오프 " + " ".join(f"{name.removeprefix('cutoff_')}={value:.3f}" for name, value in cutoffs.items()))
+        selected, r1_cutoff = _select_params_for_key(key, creators, categories, llm_tags_by_id)
+        params.setdefault("cutoff_r1", r1_cutoff)  # R1은 임베딩과 무관해 한 번만 둔다
+        params["per_embedding"][key] = selected
+        _print_selected_params(key, selected)
 
     with (RESULTS_DIR / "selected_params.json").open("w", encoding="utf-8") as f:
         json.dump(params, f, ensure_ascii=False, indent=2)
@@ -1010,9 +1021,24 @@ def _api_bge_m3_client() -> OpenAIEmbeddingClient:
 
     api_key = os.environ.get("DEEPINFRA_API_KEY")
     if not api_key:
-        raise RuntimeError(".env의 DEEPINFRA_API_KEY가 비어 있습니다. api-parity 단계에는 DeepInfra 키가 필요합니다.")
+        raise RuntimeError(".env의 DEEPINFRA_API_KEY가 비어 있습니다. api-parity·api-select-params 단계에는 DeepInfra 키가 필요합니다.")
     client = OpenAI(api_key=api_key, base_url=API_BGE_M3_BASE_URL)
     return OpenAIEmbeddingClient(client=client, model=API_BGE_M3_MODEL, dim=LOCAL_EMBEDDING_MODELS["bge-m3"]["dim"])
+
+
+def _load_local_bge_m3(creators: list[Creator], categories) -> tuple[list[str], np.ndarray, np.ndarray]:
+    """embed 단계가 캐시한 로컬 bge-m3 벡터를 읽는다. 캐시가 없거나 현재 데이터와 다르면 API를 부르기 전에 중단한다."""
+    key = "bge-m3"
+    input_hash = _content_hash(
+        _embedding_model_identity(key), *[c.input_text() for c in creators], *[c.description for c in categories]
+    )
+    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
+        raise RuntimeError("로컬 bge-m3 캐시가 없거나 현재 데이터와 다릅니다. 먼저 `python3 -m src.pipeline embed`를 실행하세요.")
+    creator_ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+    _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    if creator_ids != [c.id for c in creators]:
+        raise RuntimeError("로컬 bge-m3 캐시의 크리에이터 순서가 현재 데이터와 다릅니다. `embed --force`로 다시 만드세요.")
+    return creator_ids, creator_vectors, category_vectors
 
 
 def cmd_api_parity(_: argparse.Namespace, api_client: OpenAIEmbeddingClient | None = None) -> None:
@@ -1027,13 +1053,7 @@ def cmd_api_parity(_: argparse.Namespace, api_client: OpenAIEmbeddingClient | No
     creators, categories = load_creators(), load_categories()
     creator_texts = [c.input_text() for c in creators]
     category_texts = [c.description for c in categories]
-    input_hash = _content_hash(_embedding_model_identity(key), *creator_texts, *category_texts)
-    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
-        raise RuntimeError("로컬 bge-m3 캐시가 없거나 현재 데이터와 다릅니다. 먼저 `python3 -m src.pipeline embed`를 실행하세요.")
-    creator_ids, local_creators = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-    _, local_categories = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
-    if creator_ids != [c.id for c in creators]:
-        raise RuntimeError("로컬 bge-m3 캐시의 크리에이터 순서가 현재 데이터와 다릅니다. `embed --force`로 다시 만드세요.")
+    creator_ids, local_creators, local_categories = _load_local_bge_m3(creators, categories)
 
     params, llm_tags_by_id = _load_params_and_llm_tags()  # API를 부르기 전에 필요한 입력이 있는지 확인한다
     client = api_client or _api_bge_m3_client()
@@ -1087,6 +1107,106 @@ def cmd_api_parity(_: argparse.Namespace, api_client: OpenAIEmbeddingClient | No
     )
 
 
+def _cached_api_vectors(key: str, creators: list[Creator], categories, input_hash: str) -> tuple[np.ndarray, np.ndarray] | None:
+    """캐시된 API 벡터를 돌려준다. 입력 해시가 다르거나 벡터 파일이 없거나 읽을 수 없거나 순서가 다르면 None이다."""
+    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
+        return None
+    try:
+        creator_ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        category_codes, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    except (OSError, ValueError):  # 파일이 없거나 깨진 경우. 해시만 남아 있어도 다시 받는다
+        return None
+    if creator_ids != [c.id for c in creators] or category_codes != [c.code for c in categories]:
+        return None
+    return creator_vectors, category_vectors
+
+
+def cmd_api_select_params(args: argparse.Namespace, api_client: OpenAIEmbeddingClient | None = None) -> None:
+    """API bge-m3 벡터로 tau·bonus·컷오프를 dev만으로 다시 고르고, 로컬 선택값과 비교해 results/api_selected_params.json에 남긴다.
+
+    API 벡터는 호출마다 조금씩 달라서, 처음 받은 벡터를 캐시(`bge-m3-api`)해 두고 이후 실행은 그 벡터를 쓴다.
+    그래야 같은 입력에서 같은 파라미터가 나온다(`--force`로 다시 받는다). results/selected_params.json은 건드리지 않는다.
+    """
+    from src.api_parity import compare_decisions
+    from src.config import API_BGE_M3_MODEL, API_BGE_M3_PRICE_PER_1M
+
+    key, local_key = "bge-m3-api", "bge-m3"
+    creators, categories = load_creators(), load_categories()
+    creator_texts = [c.input_text() for c in creators]
+    category_texts = [c.description for c in categories]
+    creator_ids, local_creators, local_categories = _load_local_bge_m3(creators, categories)
+    params, llm_tags_by_id = _load_params_and_llm_tags()  # API를 부르기 전에 필요한 입력이 있는지 확인한다
+
+    input_hash = _content_hash(f"{API_BGE_M3_MODEL}@api:{LOCAL_EMBEDDING_MODELS[local_key]['dim']}", *creator_texts, *category_texts)
+    hash_path = CACHE_DIR / f"embed_{key}.input_hash"
+    total_tokens = 0
+    cached = None if getattr(args, "force", False) else _cached_api_vectors(key, creators, categories, input_hash)
+    if cached is None:
+        client = api_client or _api_bge_m3_client()
+        api_creators = client.embed(creator_texts)
+        total_tokens = client.last_input_tokens or 0
+        api_categories = client.embed(category_texts)
+        total_tokens += client.last_input_tokens or 0
+        # 두 파일을 차례로 덮어쓰다 중간에 실패해도 서로 다른 실행의 벡터가 유효한 캐시로 남지 않도록,
+        # 저장을 시작하기 전에 기존 해시를 지우고 두 파일을 다 쓴 뒤에 새 해시를 쓴다
+        hash_path.unlink(missing_ok=True)
+        _save_vectors(CACHE_DIR / f"creators_{key}.npz", creator_ids, api_creators)
+        _save_vectors(CACHE_DIR / f"categories_{key}.npz", [c.code for c in categories], api_categories)
+        hash_path.write_text(input_hash, encoding="utf-8")
+        print(f"[api-select-params] API 벡터를 새로 받아 캐시했습니다 (토큰 {total_tokens})")
+    else:
+        print("[api-select-params] 캐시된 API 벡터를 사용합니다 (다시 받으려면 --force)")
+    api_creators, api_categories = cached or _cached_api_vectors(key, creators, categories, input_hash)
+
+    selected, _ = _select_params_for_key(key, creators, categories, llm_tags_by_id)
+    local = params["per_embedding"][local_key]
+    _print_selected_params("로컬 bge-m3", local)
+    _print_selected_params("API bge-m3", selected)
+
+    gold_by_id = {c.id: frozenset(c.gold) for c in creators}
+    test_ids = {c.id for c in creators if c.split == "test"}
+    test_metrics = {}
+    for label, k, tau in (("local", local_key, local["tau"]), ("api", key, selected["tau"])):
+        _, ranked_by_id, _, _ = _zero_shot_tags_for_key(k, creators, categories, tau_candidates=[tau])
+        test_ranked = {cid: r for cid, r in ranked_by_id.items() if cid in test_ids}
+        test_gold = {cid: gold_by_id[cid] for cid in test_ranked}
+        test_metrics[label] = {"top1": top1_accuracy(test_ranked, test_gold), "top3": top3_inclusion_rate(test_ranked, test_gold)}
+
+    methods = ("M1", "M2", "M3", "M4")
+    decisions = compare_decisions(
+        creator_ids, local_creators, api_creators, local_categories, api_categories,
+        [c.code for c in categories], [llm_tags_by_id[cid] for cid in creator_ids],
+        tau=local["tau"], max_tags=LLM_TAG_MAX,
+        bonuses={"M3": local["bonus_m3"], "M4": local["bonus_m4"]},
+        cutoffs={m: local[f"cutoff_{m.lower()}"] for m in methods}, k=5,
+        api_params={
+            "tau": selected["tau"],
+            "bonuses": {"M3": selected["bonus_m3"], "M4": selected["bonus_m4"]},
+            "cutoffs": {m: selected[f"cutoff_{m.lower()}"] for m in methods},
+        },
+    )
+    report = {
+        "api_model": API_BGE_M3_MODEL,
+        "local_params": local,
+        "api_params": selected,
+        "test_zero_shot": test_metrics,
+        "local_params_on_local_vs_api_params_on_api": decisions,
+        "input_tokens_this_run": total_tokens,
+        "cost_usd_this_run": total_tokens / 1_000_000 * API_BGE_M3_PRICE_PER_1M,
+    }
+    with (RESULTS_DIR / "api_selected_params.json").open("w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    mismatch = decisions["candidates_after_cutoff_mismatch"]
+    print(
+        f"  test zero-shot Top-1 로컬 {test_metrics['local']['top1']:.3f} / API {test_metrics['api']['top1']:.3f}, "
+        f"Top-3 로컬 {test_metrics['local']['top3']:.3f} / API {test_metrics['api']['top3']:.3f}\n"
+        f"  각자 고른 파라미터로 비교(로컬 파라미터·로컬 벡터 대 API 파라미터·API 벡터): "
+        f"태그가 달라진 크리에이터 {decisions['zero_shot_tag_mismatch']['count']}명, 컷오프 뒤 후보가 달라진 크리에이터 "
+        + ", ".join(f"{m} {v['count']}명" for m, v in mismatch.items())
+    )
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -1107,6 +1227,7 @@ def main() -> None:
         "dev-sensitivity": cmd_dev_sensitivity,
         "memory": cmd_memory,
         "api-parity": cmd_api_parity,
+        "api-select-params": cmd_api_select_params,
         "taste-eval": cmd_taste_eval,
         "taste-judge": cmd_taste_judge,
     }
@@ -1118,7 +1239,7 @@ def main() -> None:
             stage_parser.add_argument("--out", help="results/ 아래에 저장할 파일명 (기본 spot_check_models.csv)")
         if name == "memory":
             stage_parser.add_argument("--device", choices=["cpu", "auto"], default="cpu", help="cpu는 서버 기준, auto는 이 장비의 가속기 기준")
-        if name in ("embed", "tag-llm"):
+        if name in ("embed", "tag-llm", "api-select-params"):
             stage_parser.add_argument(
                 "--force", action="store_true", help="캐시된 결과가 있어도 API를 다시 호출해 새로 계산한다"
             )

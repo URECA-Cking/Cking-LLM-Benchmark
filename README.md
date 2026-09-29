@@ -59,10 +59,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-137 passed in 3~5s
+140 passed in 3~5s
 ```
 
-**137개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**140개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -153,6 +153,14 @@ python3 -m src.pipeline api-parity
 2. **같은 파라미터로 결과 비교:** `select-params`가 고른 tau·bonus·컷오프를 그대로 써서 zero-shot 태그 집합과 컷오프 뒤 상위 5 후보(M1~M4)가 순위 순서까지 로컬과 API에서 같은지 봅니다. 전부 같아야 `parameters_reusable`입니다.
 
 tau·컷오프는 "이상이면 통과"라는 경계 판정이라, 유사도가 거의 같아도 경계에 놓인 크리에이터는 결과가 달라질 수 있습니다. 그래서 1번만 통과하면 "유사도는 같지만 일부 결과가 바뀔 수 있음"으로 안내합니다. `.env`에 `DEEPINFRA_API_KEY`가 필요하고 ①~③(`embed`, `tag-llm`, `select-params`)을 먼저 실행해야 합니다.
+
+### 선택: api-select-params — API bge-m3 벡터로 tau·bonus·컷오프 다시 고르기 (API 호출 1센트 미만, 수 초)
+
+```bash
+python3 -m src.pipeline api-select-params
+```
+
+서버에서 로컬 bge-m3 대신 API를 쓰기로 했다면, 로컬 벡터로 고른 tau·bonus·컷오프 대신 API 벡터로 다시 고른 값을 씁니다. API 벡터를 받아 캐시(`results/cache/*bge-m3-api*`)한 뒤 `select-params`와 같은 방식으로 dev 30명만으로 고르고, 로컬 선택값과 비교해 `results/api_selected_params.json`에 남깁니다. API 벡터는 호출마다 조금씩 달라서 **처음 받은 벡터를 캐시해 두고 이후 실행은 그 벡터를 씁니다**(`--force`로 다시 받음). 캐시는 입력 텍스트와 모델명이 같으면 재사용하므로, **제공 업체의 서빙 방식이 바뀌었거나 모델을 바꿨을 때는 `python3 -m src.pipeline api-select-params --force`로 다시 받아야 합니다.** 벡터 파일이 하나라도 없거나 순서가 다르면 자동으로 다시 받습니다. `results/selected_params.json`은 바꾸지 않습니다. `.env`에 `DEEPINFRA_API_KEY`가 필요하고 ①~③(`embed`, `tag-llm`, `select-params`)을 먼저 실행해야 합니다.
 
 ### 선택: 취향 쿼리 검증 — `taste-eval` → `taste-judge`
 
