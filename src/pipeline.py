@@ -330,13 +330,15 @@ def _rerank_bge_m2_candidates(
 
 
 def _query_prompted_vectors(key: str, ids: list[str], vectors: np.ndarray, creators: list[Creator]) -> np.ndarray:
-    """query_prompt_name이 등록된 모델(Qwen3)이면, 평가 쿼리 30명의 행만 그 프롬프트로
+    """쿼리 쪽(행) 벡터를 반환한다. 원래 벡터 배열은 후보 쪽(열)으로 그대로 두고 바꾸지 않는다.
 
-    다시 인코딩해 바꿔치기한다 — M2~M4/R2의 "쿼리가 후보를 찾는" 방향 유사도용이다
+    query_prompt_name이 등록된 모델(Qwen3)이면 평가 쿼리 30명의 행만 그 프롬프트로 다시
+    인코딩해 바꿔치기한 복사본을 돌려준다 — M2~M4/R2의 "쿼리가 후보를 찾는" 방향 유사도용이다
     (이슈 #8, 리뷰로 발견: 공식 사용법은 검색 쿼리 쪽에 instruct 프롬프트를 쓰길 권장하는데
-    기존엔 bge-m3·KURE-v1과 동일하게 접두어 없이 측정했다). 후보(비쿼리 70명)로 참조될 때는
-    원래 임베딩을 그대로 쓴다 — E2/E3 평가는 쿼리 30명의 top-5만 보므로 이걸로 충분하다.
-    query_prompt_name이 없는 모델(bge-m3, KURE-v1)은 그대로 반환한다.
+    기존엔 접두어 없이 측정했다). 이 반환값을 `cosine_matrix(vectors, query_vectors=...)`의 행에만
+    쓰고 열에는 원래 vectors를 써야 한다 — 쿼리끼리 서로의 후보가 될 때도 후보로 참조되는 쪽은
+    프롬프트 없는 원래 임베딩이어야 하기 때문이다(재리뷰로 발견: 예전엔 하나의 배열을 덮어써
+    후보 쪽 벡터까지 바뀌었다). query_prompt_name이 없는 모델은 vectors를 그대로 반환한다.
     """
     prompt_name = LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name")
     if not prompt_name:
@@ -373,8 +375,7 @@ def cmd_candidates(_: argparse.Namespace) -> None:
         p = params["per_embedding"][key]
         ids, _, zero_shot_tags, _ = _zero_shot_tags_for_key(key, creators, categories, tau_candidates=[p["tau"]])
         _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-        vectors = _query_prompted_vectors(key, ids, vectors, creators)
-        cosine = cosine_matrix(vectors)
+        cosine = cosine_matrix(vectors, query_vectors=_query_prompted_vectors(key, ids, vectors, creators))
 
         zero_shot_tag_sets = [zero_shot_tags[cid] for cid in ids]
         llm_tag_sets = [llm_tags_by_id[cid] for cid in ids]

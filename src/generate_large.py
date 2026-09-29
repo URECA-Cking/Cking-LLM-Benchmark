@@ -218,6 +218,10 @@ def main() -> None:
     by_code = {c.code: c for c in categories}
     calls = len(categories) * BATCHES_PER_CATEGORY
     cache_dir = CACHE_DIR / "large_gen"
+    for path in cache_dir.glob("*.json"):
+        cached_model = json.loads(path.read_text(encoding="utf-8")).get("model")
+        if cached_model != args.model:
+            raise ValueError(f"{path.name}은 {cached_model}로 만든 캐시입니다. --model {args.model}로 쓰려면 results/cache/large_gen/을 지우고 다시 만드세요.")
     pending = [
         (c.code, b) for c in categories for b in range(BATCHES_PER_CATEGORY)
         if not (cache_dir / f"{c.code}_{b}.json").exists()

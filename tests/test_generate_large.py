@@ -127,3 +127,16 @@ def test_generate_batch_accepts_length_only_violations_after_max_attempts() -> N
     result, _, _ = gl._generate_batch(client, "m", "prompt", slots, set())
 
     assert len(result) == gl.BATCH_SIZE and calls["n"] == gl.MAX_ATTEMPTS
+
+
+def test_main_rejects_cache_made_with_another_model(tmp_path, monkeypatch) -> None:
+    import json
+    import sys
+
+    monkeypatch.setattr(gl, "CACHE_DIR", tmp_path)
+    (tmp_path / "large_gen").mkdir()
+    (tmp_path / "large_gen" / "GAME_0.json").write_text(json.dumps({"model": "gpt-5.4-nano-2026-03-17", "items": []}), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["generate_large", "--model", "gpt-5.4-mini-2026-03-17", "--dry-run"])
+
+    with pytest.raises(ValueError, match="캐시"):
+        gl.main()

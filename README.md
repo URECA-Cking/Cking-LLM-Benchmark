@@ -154,7 +154,7 @@ python3 -m src.pipeline judge-sheet
 ```
 
 ```
-[judge-sheet] 680쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
+[judge-sheet] 682쌍. results/judge_sheet.csv의 score 열(0/1/2)을 채운 뒤 score-judgments를 실행하세요.
 ```
 
 이 시점의 `results/judge_sheet.csv`는 `score` 열이 전부 빈칸입니다. **다음 5장에서 이 빈칸을 채우는 방법을 고릅니다.**
@@ -203,7 +203,7 @@ python3 -m src.pipeline report
 
 ## 5. 판정하기 (E2)
 
-`judge-sheet` 직후 `results/judge_sheet.csv`는 680쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
+`judge-sheet` 직후 `results/judge_sheet.csv`는 682쌍인데 `score` 열이 비어 있습니다. 이 빈칸을 채우는 세 가지 방법이 있습니다. **상황에 맞게 하나만 골라도 되고, 순서대로 다 해도 됩니다.**
 
 ### 방법 A. 자동 판정 (추천 — 대부분 이 방법으로 충분)
 
@@ -211,10 +211,10 @@ python3 -m src.pipeline report
 python3 -m src.pipeline auto-judge
 ```
 
-LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 680쌍을 대신 채점합니다. **비용 약 $0.17, 소요 약 9~10분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
+LLM(`gpt-5.4-mini`, 태깅에 쓴 모델보다 강한 모델)이 682쌍을 대신 채점합니다. **비용 약 $0.17, 소요 약 9~10분.** 중간에 멈춰도 이미 채운 건 저장돼 있어서 다시 실행하면 **비어 있는 것만** 이어서 채웁니다.
 
 ```
-[auto-judge] 전체 680쌍 중 0쌍 완료, 680쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
+[auto-judge] 전체 682쌍 중 0쌍 완료, 682쌍 자동 판정 시작 (모델: gpt-5.4-mini-2026-03-17)
 [auto-judge] 50/680 완료
 ...
 [auto-judge] 완료. 비용 약 $0.17. 일부를 src.judge_cli로 직접 재판정해 일치율을 확인하는 것을 권장합니다.
@@ -256,7 +256,7 @@ python3 -m src.pipeline spot-check-report
 
 `±1 이내 일치율`이 1.0에 가까우면(즉 사람과 자동 판정이 2점 이상 차이나는 극단적 불일치가 없으면) 방법 A의 결과를 신뢰할 근거가 됩니다.
 
-### 방법 C. 680쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
+### 방법 C. 682쌍 전부 사람이 직접 판정 (가장 정확, 4~5시간)
 
 빠르게 확인하고 싶다면 방법 A만으로 충분합니다. 하지만 **사람 판정만으로 결과를 내고 싶다면** 이 방법을 씁니다.
 
@@ -269,7 +269,7 @@ python3 -m src.judge_cli
 `judge_cli`는 쌍 하나씩 소개글을 보여주고 점수를 입력받습니다. **`judge_sheet.csv`와 `spot_check.csv` 둘 다 이 도구로 채웁니다** — 어떤 파일을 채울지는 `--file` 옵션으로 정합니다(생략하면 `results/judge_sheet.csv`).
 
 ```
-전체 680쌍 중 0쌍 완료, 680쌍 남음
+전체 682쌍 중 0쌍 완료, 682쌍 남음
 
 [1/680] 쿼리 B02 데일리메이크업쌤
   소개: 출근 전 10분이면 끝나는 데일리 메이크업을 알려드려요. ...
