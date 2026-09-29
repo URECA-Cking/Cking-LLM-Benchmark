@@ -354,6 +354,25 @@ def _rerank_bge_m2_candidates(
     return result
 
 
+def _rerank_bge_m2_candidates_for_queries(
+    query_ids: list[str],
+    query_texts: list[str],
+    cosine: np.ndarray,
+    creator_ids: list[str],
+    text_by_id: dict[str, str],
+    reranker: RerankerClient,
+    pool_size: int,
+) -> dict[str, list[list]]:
+    """쿼리 텍스트(행)와 크리에이터(열) 코사인 행렬로 상위 pool_size명을 뽑아 리랭커로 다시 채점·정렬한다 (취향 쿼리 M5)."""
+    result: dict[str, list[list]] = {}
+    for i, (qid, text) in enumerate(zip(query_ids, query_texts)):
+        pool = sorted(range(len(creator_ids)), key=lambda j: (-cosine[i, j], creator_ids[j]))[:pool_size]
+        scores = reranker.score([(text, text_by_id[creator_ids[j]]) for j in pool])
+        ranked = sorted(zip((creator_ids[j] for j in pool), scores), key=lambda item: -item[1])
+        result[qid] = [[cid, score] for cid, score in ranked]
+    return result
+
+
 def _query_prompted_vectors(
     key: str, ids: list[str], vectors: np.ndarray, creators: list[Creator], target_ids: set[str] | None = None
 ) -> np.ndarray:
@@ -924,6 +943,20 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
 
+def cmd_taste_eval(args: argparse.Namespace) -> None:
+    """취향 쿼리 추천을 만들고 정답 분야 기준 P@5를 출력한다. 구현은 src/taste_eval.py에 있다."""
+    from src.taste_eval import cmd_taste_eval as run
+
+    run(args)
+
+
+def cmd_taste_judge(args: argparse.Namespace) -> None:
+    """문장형 취향 쿼리 추천을 LLM으로 판정한다(API 비용 발생). 구현은 src/taste_eval.py에 있다."""
+    from src.taste_eval import cmd_taste_judge as run
+
+    run(args)
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -942,6 +975,8 @@ def main() -> None:
         "spot-check-models": cmd_spot_check_models,
         "spot-check-models-report": cmd_spot_check_models_report,
         "dev-sensitivity": cmd_dev_sensitivity,
+        "taste-eval": cmd_taste_eval,
+        "taste-judge": cmd_taste_judge,
     }
     for name in stages:
         stage_parser = sub.add_parser(name)

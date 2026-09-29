@@ -27,9 +27,9 @@ class LocalEmbeddingClient:
         self._model = model or SentenceTransformer(spec["model_name"])
         self.last_input_tokens: int | None = None  # 로컬 실행이라 과금 토큰 개념이 없다
 
-    def embed(self, texts: list[str], prompt_name: str | None = None) -> np.ndarray:
-        """texts를 정규화된 dense 벡터로 바꾼다. prompt_name을 주면 모델에 등록된 프롬프트를 붙인다."""
+    def embed(self, texts: list[str], prompt_name: str | None = None, prompt: str | None = None) -> np.ndarray:
+        """texts를 정규화된 dense 벡터로 바꾼다. prompt_name은 모델에 등록된 프롬프트를, prompt는 직접 쓴 접두 문구를 붙인다."""
         if not texts:
             return np.empty((0, self.dim), dtype=np.float32)
-        vectors = self._model.encode(texts, prompt_name=prompt_name, normalize_embeddings=True, convert_to_numpy=True)
+        vectors = self._model.encode(texts, prompt_name=prompt_name, prompt=prompt, normalize_embeddings=True, convert_to_numpy=True)
         return normalize_rows(np.asarray(vectors, dtype=np.float32))
