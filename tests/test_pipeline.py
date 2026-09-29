@@ -519,3 +519,27 @@ def test_model_spot_check_args_default_and_override(tmp_path, monkeypatch) -> No
 
     assert default == (pipeline.MODEL_SPOT_CHECK_TARGET, pipeline.MODEL_SPOT_CHECK_BASELINES, tmp_path / "spot_check_models.csv")
     assert custom == ("A", ["B", "C"], tmp_path / "x.csv")
+
+
+def test_model_spot_check_args_rejects_path_outside_results(tmp_path, monkeypatch) -> None:
+    import argparse
+
+    import pytest
+
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+
+    for bad in ("../README.md", "sub/x.csv", "/tmp/x.csv", "notes.txt"):
+        with pytest.raises(ValueError):
+            pipeline._model_spot_check_args(argparse.Namespace(out=bad))
+
+
+def test_cmd_spot_check_models_keeps_compare_flags_when_out_is_default_name(tmp_path, monkeypatch, capsys) -> None:
+    """사용자 지정 비교를 기본 파일명으로 저장해도 안내 명령에는 --target/--baseline이 남아야 한다."""
+    import argparse
+
+    monkeypatch.setattr(pipeline, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "_build_spot_check_rows", lambda *a, **k: (0, 0))
+
+    pipeline.cmd_spot_check_models(argparse.Namespace(target="A", baseline=["B"], out="spot_check_models.csv"))
+
+    assert "--target A --baseline B --out spot_check_models.csv" in capsys.readouterr().out

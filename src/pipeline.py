@@ -688,6 +688,9 @@ def _model_spot_check_args(args: argparse.Namespace) -> tuple[str, list[str], Pa
     target = getattr(args, "target", None) or MODEL_SPOT_CHECK_TARGET
     baselines = getattr(args, "baseline", None) or MODEL_SPOT_CHECK_BASELINES
     out = getattr(args, "out", None)
+    if out is not None and (Path(out).name != out or not out.endswith(".csv")):
+        # ../README.md 같은 경로로 results/ 밖 파일을 판정 시트로 덮어쓰지 못하게 한다
+        raise ValueError(f"--out은 results/ 안의 .csv 파일명만 받습니다: {out!r}")
     return target, baselines, RESULTS_DIR / (out or "spot_check_models.csv")
 
 
@@ -701,7 +704,8 @@ def cmd_spot_check_models(args: argparse.Namespace) -> None:
     target, baselines, out_path = _model_spot_check_args(args)
     saved, total_found = _build_spot_check_rows(target, baselines, SPOT_CHECK_SAMPLE_SIZE, SPOT_CHECK_SAMPLE_SEED, out_path)
     sample_note = f" (전체 {total_found}쌍 중 무작위 표본)" if total_found > saved else ""
-    flags = "" if out_path.name == "spot_check_models.csv" else f" --target {target} --baseline {' --baseline '.join(baselines)} --out {out_path.name}"
+    is_default = target == MODEL_SPOT_CHECK_TARGET and baselines == MODEL_SPOT_CHECK_BASELINES and out_path.name == "spot_check_models.csv"
+    flags = "" if is_default else f" --target {target} --baseline {' --baseline '.join(baselines)} --out {out_path.name}"
     print(
         f"[spot-check-models] {target}를 {baselines}와 각각 양쪽 차집합으로 비교해 "
         f"다른 {saved}쌍{sample_note}을 results/{out_path.name}에 저장했습니다.\n"

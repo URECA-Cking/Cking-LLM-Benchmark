@@ -59,10 +59,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-84 passed in 3~5s
+93 passed in 3~5s
 ```
 
-**84개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**93개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -123,10 +123,10 @@ python3 -m src.pipeline select-params
 ```
 
 ```
-[select-params] text-embedding-3-small: tau=0.2707 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
+[select-params] text-embedding-3-small: tau=0.2706 bonus_m3=0.2 bonus_m4=0.3 bonus_r2=0.3
 [select-params] bge-m3: tau=0.4801 bonus_m3=0.1 bonus_m4=0.2 bonus_r2=0.2
 [select-params] kure-v1: tau=0.4745 bonus_m3=0.1 bonus_m4=0.1 bonus_r2=0.1
-[select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.3 bonus_m4=0.3 bonus_r2=0.3
+[select-params] qwen3-embedding-0.6b: tau=0.3587 bonus_m3=0.2 bonus_m4=0.2 bonus_r2=0.2
 ```
 
 ### 선택: dev-sensitivity — dev 규모 민감도 (API 호출 약 1센트, 수 분)
@@ -183,7 +183,7 @@ python3 -m src.pipeline report
 
 ```
 === E1. zero-shot 태깅 정확도 (test) ===
--- text-embedding-3-small (tau=0.2707)
+-- text-embedding-3-small (tau=0.2706)
    Top-1 정확도: 0.729
    Top-3 포함률: 0.886
    ...
