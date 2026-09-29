@@ -1,4 +1,4 @@
-import csv
+import argparse
 import json
 
 import pytest
@@ -113,6 +113,28 @@ def test_export_refuses_a_judge_sheet_with_an_empty_score(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="비어 있는"):
         export_artifact(tmp_path)
+
+
+def test_compute_all_returns_one_result_per_unique_comparison_matching_paired_difference() -> None:
+    artifact = load_artifact()
+    results = compute_all(artifact)
+    rel = per_query_relevance(artifact)
+
+    assert len(results) == len({*M4_MINUS_M3, *M4_BGE_MINUS_TOP}) == 9
+    assert results["M4_bge-m3 - M3_bge-m3"] == paired_difference(rel["M4_bge-m3"], rel["M3_bge-m3"], artifact["query_ids"])
+    assert all(r["ci_lower"] <= r["mean"] <= r["ci_upper"] for r in results.values())
+
+
+def test_cmd_paired_diff_writes_the_results_json(tmp_path, monkeypatch, capsys) -> None:
+    from src import paired_diff
+
+    monkeypatch.setattr(paired_diff, "RESULTS_DIR", tmp_path)
+
+    paired_diff.cmd_paired_diff(argparse.Namespace(export=False))
+
+    saved = json.loads((tmp_path / "paired_diff.json").read_text(encoding="utf-8"))
+    assert len(saved) == 9 and round(saved["M4_bge-m3 - M3_bge-m3"]["mean"], 3) == 0.040
+    assert "0 포함" in capsys.readouterr().out  # bge-m3의 M4 − M3 구간은 0을 포함한다
 
 
 def test_comparison_lists_cover_every_embedding() -> None:
