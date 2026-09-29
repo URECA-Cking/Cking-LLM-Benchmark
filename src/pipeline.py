@@ -294,7 +294,9 @@ def cmd_select_params(_: argparse.Namespace) -> None:
         # dev만 남긴 부분 행렬로 bonus를 고른다. test 벡터·gold는 이 시점에 전혀 등장하지 않는다.
         dev_index = [i for i, cid in enumerate(ids) if cid in dev_id_set]
         dev_ids_ordered = [ids[i] for i in dev_index]
-        dev_cosine = cosine_matrix(vectors[dev_index])
+        # 평가(candidates)와 같은 조건으로 고르도록, 프롬프트가 있는 모델은 dev 행에도 쿼리 프롬프트를 적용한다
+        dev_query_vectors = _query_prompted_vectors(key, ids, vectors, creators, target_ids=dev_id_set)[dev_index]
+        dev_cosine = cosine_matrix(vectors[dev_index], query_vectors=dev_query_vectors)
 
         dev_zero_shot_tag_sets = [zero_shot_tags[cid] for cid in dev_ids_ordered]
         dev_llm_tag_sets = [llm_tags_by_id[cid] for cid in dev_ids_ordered]
@@ -329,7 +331,9 @@ def _rerank_bge_m2_candidates(
     return result
 
 
-def _query_prompted_vectors(key: str, ids: list[str], vectors: np.ndarray, creators: list[Creator]) -> np.ndarray:
+def _query_prompted_vectors(
+    key: str, ids: list[str], vectors: np.ndarray, creators: list[Creator], target_ids: set[str] | None = None
+) -> np.ndarray:
     """쿼리 쪽(행) 벡터를 반환한다. 원래 벡터 배열은 후보 쪽(열)으로 그대로 두고 바꾸지 않는다.
 
     query_prompt_name이 등록된 모델(Qwen3)이면 평가 쿼리 30명의 행만 그 프롬프트로 다시
@@ -338,12 +342,12 @@ def _query_prompted_vectors(key: str, ids: list[str], vectors: np.ndarray, creat
     기존엔 접두어 없이 측정했다). 이 반환값을 `cosine_matrix(vectors, query_vectors=...)`의 행에만
     쓰고 열에는 원래 vectors를 써야 한다 — 쿼리끼리 서로의 후보가 될 때도 후보로 참조되는 쪽은
     프롬프트 없는 원래 임베딩이어야 하기 때문이다(재리뷰로 발견: 예전엔 하나의 배열을 덮어써
-    후보 쪽 벡터까지 바뀌었다). query_prompt_name이 없는 모델은 vectors를 그대로 반환한다.
+    후보 쪽 벡터까지 바뀌었다). target_ids로 프롬프트를 적용할 행을 바꿀 수 있다 — 기본은 평가 쿼리 30명이고, select-params는 dev 크리에이터를 준다(평가와 같은 표현으로 bonus를 고르기 위함). query_prompt_name이 없는 모델은 vectors를 그대로 반환한다.
     """
     prompt_name = LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name")
     if not prompt_name:
         return vectors
-    query_ids = {c.id for c in query_creators(creators)}
+    query_ids = target_ids if target_ids is not None else {c.id for c in query_creators(creators)}
     text_by_id = {c.id: c.input_text() for c in creators}
     targets = [(i, cid) for i, cid in enumerate(ids) if cid in query_ids]
     if not targets:
@@ -768,7 +772,7 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
 
     dev 후보 풀 = 기존 dev 30명 + 합성 300명. test = 기존 100명(쿼리 30명 포함)이며, test 성적은
     LLM 판정 없는 gold 기준 대리 지표다. 쿼리 프롬프트(Qwen3)는 적용하지 않는다.
-    기존 dev 30명 그대로 고른 값이 selected_params.json과 같은지도 확인해 함께 기록한다.
+    기존 dev 30명 그대로 고른 값이 selected_params.json과 같은지도 확인해 함께 기록한다(프롬프트 모델 제외).
     """
     from src.data import load_large_creators
     from src.sensitivity import CreatorSet, run_sensitivity, select_on_subset, summarize
@@ -813,13 +817,15 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
 
         tau, bonuses = select_on_subset(pool, list(range(len(dev_index))), BONUS_GRID, LLM_TAG_MAX)
         expected = selected["per_embedding"][key]
-        matches = abs(tau - expected["tau"]) < 1e-9 and all(bonuses[n] == expected[n] for n in bonuses)
+        # 쿼리 프롬프트가 있는 모델은 selected_params가 프롬프트 적용 dev로 골라져 이 실험(미적용)과 조건이 달라 비교하지 않는다
+        prompted = bool(LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name"))
+        matches = None if prompted else abs(tau - expected["tau"]) < 1e-9 and all(bonuses[n] == expected[n] for n in bonuses)
         records = run_sensitivity(pool, test, test_ids, query_ids, SENSITIVITY_SIZES, SENSITIVITY_REPS, BONUS_GRID, LLM_TAG_MAX, SENSITIVITY_SEED)
         output["per_embedding"][key] = {
             "original_dev30": {"tau": tau, **bonuses, "matches_selected_params": matches},
             "summary": summarize(records),
         }
-        print(f"[dev-sensitivity] {key}: 기존 dev 30 재현={'OK' if matches else 'MISMATCH'}")
+        print(f"[dev-sensitivity] {key}: 기존 dev 30 재현={'제외(쿼리 프롬프트 모델)' if matches is None else 'OK' if matches else 'MISMATCH'}")
         for row in output["per_embedding"][key]["summary"]:
             print(
                 f"  size={row['size']:>3} tau={row['tau_mean']:.3f}±{row['tau_std']:.3f} "

@@ -488,3 +488,22 @@ def test_save_and_load_vectors_round_trip(tmp_path) -> None:
 
     assert loaded_ids == ids
     assert np.allclose(loaded_vectors, vectors)
+
+
+def test_query_prompted_vectors_target_ids_overrides_default_query_rows(monkeypatch) -> None:
+    """select-params는 dev 행에 프롬프트를 적용하므로 target_ids로 대상 행을 바꿀 수 있어야 한다."""
+    ids = ["q1", "c1"]
+    creators = [_minimal_creator("q1", True), _minimal_creator("c1", False)]
+    vectors = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+
+    class FakeClient:
+        def __init__(self, _key): ...
+        def embed(self, texts, prompt_name=None):
+            return np.zeros((len(texts), 2), dtype=np.float32)
+
+    monkeypatch.setattr(pipeline, "LocalEmbeddingClient", FakeClient)
+    monkeypatch.setattr(pipeline, "LOCAL_EMBEDDING_MODELS", {"fake-key": {"query_prompt_name": "p"}})
+
+    result = pipeline._query_prompted_vectors("fake-key", ids, vectors, creators, target_ids={"c1"})
+
+    assert np.allclose(result[0], [1.0, 0.0]) and np.allclose(result[1], [0.0, 0.0])
