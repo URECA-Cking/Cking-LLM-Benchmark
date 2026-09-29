@@ -37,6 +37,11 @@ CREATORS_LARGE_CSV_SHA256: str | None = "152aeb4be4dce9cc65fbd6261ddc894965ee611
 # taste_queries.csv의 확정 hash. 생성 직후 고정한다(None이면 검증하지 않음).
 TASTE_QUERIES_CSV_SHA256: str | None = "ed3c37d709dd12a4e0bae59018038dce8a0c2ea9e19afde934b3e2ab31df9afb"
 
+# 방식 간 관련도 차이(쿼리별 짝 차이)의 입력. results/는 커밋하지 않으므로, 필요한 부분(쿼리 30명의 설정별 상위 5 후보와
+# 판정 점수)만 이 파일로 고정한다. 값이 바뀌면(`paired-diff --export`로 다시 만들면) 이 hash와 docs를 함께 갱신한다.
+E2_JUDGMENTS_JSON = DATA_DIR / "e2_judgments.json"
+E2_JUDGMENTS_JSON_SHA256: str | None = "07c4274a356c823f39dae6a5af31fc7d37d2538ed4f0ec5227dc6a674de272ea"
+
 TAXONOMY_VERSION = "v0.1"
 
 PRICING_CHECKED_AT = "2026-09-28"

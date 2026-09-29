@@ -125,7 +125,7 @@
 - **파라미터:** tau·bonus는 dev로만 그리드서치하고 성적은 test로 계산 (`src/pipeline.py select-params`)
 - **실행:** 2026-09-28~29. 단계별 설명은 README
   ```
-  python3 -m src.pipeline embed / tag-llm / select-params / candidates / judge-sheet / auto-judge / score-judgments / report / spot-check / spot-check-report / spot-check-models / spot-check-models-report / dev-sensitivity / api-parity / api-select-params / taste-eval / taste-judge / memory
+  python3 -m src.pipeline embed / tag-llm / select-params / candidates / judge-sheet / auto-judge / score-judgments / report / spot-check / spot-check-report / spot-check-models / spot-check-models-report / dev-sensitivity / api-parity / api-select-params / paired-diff / taste-eval / taste-judge / memory
   ```
 
 ## E1. zero-shot 태깅 정확도 (test 70명)
@@ -181,6 +181,8 @@
 
 같은 쿼리 30명에 대해 두 설정의 쿼리별 관련도@5 차이를 구하고, 쿼리를 다시 뽑는(부트스트랩 2,000회) 방식으로 **차이의 평균에 대한 95% 신뢰구간**을 계산했다. 구간이 0을 포함하면 이 표본으로는 차이가 있다고 확인하지 못한 것이다(차이가 없다는 뜻은 아니다).
 
+**재현:** `python3 -m src.pipeline paired-diff`. 입력은 커밋된 `data/e2_judgments.json`(쿼리 30명의 설정별 상위 5 후보와 판정 점수 681쌍, sha256을 `src/config.py`에 고정)이다. 이 파일은 `results/candidates.json`·`results/judge_sheet.csv`(커밋하지 않음)에서 `paired-diff --export`로 만들며, 판정은 `gpt-5.4-mini-2026-03-17` 자동 판정이다. 아래 두 표의 모든 행은 테스트가 코드 출력과 행별로 대조한다.
+
 **M4 − M3 (임베딩별)**
 
 | 임베딩 | 차이 | 95% 신뢰구간 | M4 승 / M3 승 / 동점 | 0 포함 |
@@ -205,7 +207,7 @@
 - **상위권끼리(M4_bge-m3 대 M3·M4_qwen3·R2_kure-v1·M4_kure-v1·M5)는 모두 0을 포함**한다. 관련도만으로는 이들 사이의 우열을 확인하지 못했다.
 - **M4_bge-m3가 M2_bge-m3보다 낫다는 것은 확인된다.** 태그 보정이 순수 임베딩보다 관련도를 올린다는 결론과 일치한다.
 - **text-embedding-3-small과 Qwen3에서는 M4가 M3보다 확인되게 높다.** 다만 사전 기준(0.1)으로는 Qwen3(+0.093)가 M3이고, OpenAI(+0.133)는 기준을 넘지만 경품잡음(X02)에서 실패했다.
-- **한계:** 쿼리 30명, LLM 자동 판정, 사후(事後) 분석이라 사전에 정한 검정이 아니다. 위 열 개 이상의 비교를 보정 없이 나열했으므로 개별 구간을 확정적 근거가 아닌 참고로 읽는다.
+- **한계:** 쿼리 30명, LLM 자동 판정, 사후(事後) 분석이라 사전에 정한 검정이 아니다. 부트스트랩은 값의 순서에 따라 구간 끝값이 조금 달라지므로 쿼리 순서를 고정해 계산한다. 위 열 개 이상의 비교를 보정 없이 나열했으므로 개별 구간을 확정적 근거가 아닌 참고로 읽는다.
 
 ### Qwen3 쿼리 프롬프트 재측정 (이슈 #8)
 

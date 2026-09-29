@@ -63,10 +63,10 @@ python3 -m pytest -q
 
 ```
 .................................................................  [100%]
-147 passed in 3~5s
+155 passed in 3~5s
 ```
 
-**147개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
+**155개가 전부 통과하면 준비 완료입니다.** 이 테스트들은 API를 호출하지 않는 순수 로직 검증이라 비용이 들지 않습니다.
 
 > 💡 이후 모든 명령은 `source .venv/bin/activate`로 가상환경을 켠 상태에서 실행한다고 가정합니다. 터미널을 새로 열었다면 저장소 폴더에서 이 명령을 다시 실행하세요.
 
@@ -165,6 +165,14 @@ python3 -m src.pipeline api-select-params
 ```
 
 서버에서 로컬 bge-m3 대신 API를 쓰기로 했다면, 로컬 벡터로 고른 tau·bonus·컷오프 대신 API 벡터로 다시 고른 값을 씁니다. API 벡터를 받아 캐시(`results/cache/*bge-m3-api*`)한 뒤 `select-params`와 같은 방식으로 dev 30명만으로 고르고, 로컬 선택값과 비교해 `results/api_selected_params.json`에 남깁니다. API 벡터는 호출마다 조금씩 달라서 **처음 받은 벡터를 캐시해 두고 이후 실행은 그 벡터를 씁니다**(`--force`로 다시 받음). 캐시는 입력 텍스트와 모델명이 같으면 재사용하므로, **제공 업체의 서빙 방식이 바뀌었거나 모델을 바꿨을 때는 `python3 -m src.pipeline api-select-params --force`로 다시 받아야 합니다.** 벡터 파일이 하나라도 없거나 순서가 다르면 자동으로 다시 받습니다. `results/selected_params.json`은 바꾸지 않습니다. `.env`에 `DEEPINFRA_API_KEY`가 필요하고 ①~③(`embed`, `tag-llm`, `select-params`)을 먼저 실행해야 합니다.
+
+### 선택: paired-diff — 방식 간 관련도 차이 (API 호출 없음, 즉시)
+
+```bash
+python3 -m src.pipeline paired-diff
+```
+
+같은 쿼리 30명에 대한 두 설정의 관련도@5 차이를 쿼리별로 구하고, 쿼리를 다시 뽑는(부트스트랩 2,000회) 방식으로 차이의 평균에 대한 95% 신뢰구간을 계산합니다(M4 − M3 임베딩별, `M4_bge-m3` − 상위권 설정). 구간이 0을 포함하면 차이를 확인하지 못한 것입니다. 입력은 커밋된 `data/e2_judgments.json`(해시 고정)이라 ①~⑦을 실행하지 않아도 됩니다. 이 파일을 판정 결과(`results/candidates.json`, `results/judge_sheet.csv`)에서 다시 만들려면 `python3 -m src.pipeline paired-diff --export`를 실행하고, 내용이 바뀌면 `src/config.py`의 `E2_JUDGMENTS_JSON_SHA256`과 결과 문서를 함께 갱신합니다. 결과는 `results/paired_diff.json`에 저장됩니다.
 
 ### 선택: 취향 쿼리 검증 — `taste-eval` → `taste-judge`
 
@@ -359,6 +367,7 @@ python3 -m src.judge_cli
 | `data/creators.csv` | 가상 크리에이터 100명 (일반 85 + 어려운 사례 X01~X15) |
 | `data/split.csv` | dev 30 / test 70, `query=Y`인 test 30명이 평가 쿼리 |
 | `data/taste_queries.csv` | 사용자 취향 요약문 쿼리 90개(프로필 30 × 표현 3종, `python3 -m src.generate_taste --force`로 새로 생성, 평가에는 커밋본 사용) |
+| `data/e2_judgments.json` | E2 판정 점수 681쌍과 쿼리 30명의 설정별 상위 5 후보(`paired-diff`의 입력, `paired-diff --export`로 생성, 해시 고정) |
 | `data/creators_large.csv` | dev 규모 민감도 실험용 합성 300명(`python3 -m src.generate_large --force`로 새로 생성, 평가에는 쓰지 않음) |
 
 `creators.csv` 컬럼
@@ -381,6 +390,7 @@ creators.csv sha256 e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
 taste_queries.csv sha256 ed3c37d709dd12a4e0bae59018038dce8a0c2ea9e19afde934b3e2ab31df9afb
 creators_large.csv sha256 152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac
+e2_judgments.json sha256 07c4274a356c823f39dae6a5af31fc7d37d2538ed4f0ec5227dc6a674de272ea
 ```
 
 ## 8. 비교 대상 방식
@@ -429,4 +439,4 @@ M1~M3·R2는 모델 4종 각각, M4의 LLM 태그는 1회 생성해 네 모델�
 - 실행은 `python3 -m src.<모듈>` 형태로 합니다
 - 테스트는 `tests/`에 pytest로 작성합니다. 순수 로직은 반드시 테스트를 붙이고, 실제 API를 부르는 클라이언트는 가짜 클라이언트로 배선만 검증합니다
 - 모델·방식 채택 근거는 `docs/<주제>-selection.md`로 분리해 기록합니다
-- 모델 호출 결과·raw·summary는 `results/`에 저장하고 커밋하지 않습니다
+- 모델 호출 결과·raw·summary는 `results/`에 저장하고 커밋하지 않습니다. 다만 커밋된 통계 결과를 재현하는 데 꼭 필요한 최소 입력(`data/e2_judgments.json`)만 해시를 고정해 `data/`에 둡니다
