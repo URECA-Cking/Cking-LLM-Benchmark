@@ -1010,6 +1010,13 @@ def cmd_taste_eval(args: argparse.Namespace) -> None:
     run(args)
 
 
+def cmd_paired_diff(args: argparse.Namespace) -> None:
+    """설정 간 관련도 차이를 쿼리별 짝 차이로 계산한다. 구현은 src/paired_diff.py에 있다."""
+    from src.paired_diff import cmd_paired_diff as run
+
+    run(args)
+
+
 def cmd_taste_judge(args: argparse.Namespace) -> None:
     """문장형 취향 쿼리 추천을 LLM으로 판정한다(API 비용 발생). 구현은 src/taste_eval.py에 있다."""
     from src.taste_eval import cmd_taste_judge as run
@@ -1263,6 +1270,7 @@ def main() -> None:
         "api-select-params": cmd_api_select_params,
         "taste-eval": cmd_taste_eval,
         "taste-judge": cmd_taste_judge,
+        "paired-diff": cmd_paired_diff,
     }
     for name in stages:
         stage_parser = sub.add_parser(name)
@@ -1270,6 +1278,8 @@ def main() -> None:
             stage_parser.add_argument("--target", help="비교의 기준 설정 (예: M4_bge-m3)")
             stage_parser.add_argument("--baseline", action="append", help="비교 대상 설정, 여러 번 지정 가능 (예: M4_qwen3-embedding-0.6b)")
             stage_parser.add_argument("--out", help="results/ 아래에 저장할 파일명 (기본 spot_check_models.csv)")
+        if name == "paired-diff":
+            stage_parser.add_argument("--export", action="store_true", help="results/의 판정 시트·후보 목록에서 입력 아티팩트(data/e2_judgments.json)를 다시 만든다")
         if name == "memory":
             stage_parser.add_argument("--device", choices=["cpu", "auto"], default="cpu", help="cpu는 서버 기준, auto는 이 장비의 가속기 기준")
         if name in ("embed", "tag-llm", "api-select-params"):
