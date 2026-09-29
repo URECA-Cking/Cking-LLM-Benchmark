@@ -34,7 +34,7 @@ from src.config import (
 )
 from src.data import Creator, dev_creators, load_categories, load_creators, query_creators, test_creators
 from src.judge import build_judge_pairs, load_existing_scores, pair_text_hash, shuffle_rows, write_judge_sheet, write_provenance
-from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, top_n
+from src.similarity import cosine_matrix, cosine_with_tag_bonus, jaccard_matrix, select_bonus, select_cutoff, top_n
 from src.spot_check import agreement_stats, select_pairwise_symmetric_disagreement
 from src.tagging import (
     confusion_pairs,
@@ -307,8 +307,31 @@ def cmd_select_params(_: argparse.Namespace) -> None:
         bonus_m4 = select_bonus(dev_cosine, dev_ids_ordered, dev_llm_tag_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
         bonus_r2 = select_bonus(dev_cosine, dev_ids_ordered, dev_declared_sets, dev_gold_by_id, dev_ids_ordered, BONUS_GRID)
 
-        params["per_embedding"][key] = {"tau": tau, "bonus_m3": bonus_m3, "bonus_m4": bonus_m4, "bonus_r2": bonus_r2}
+        # 결과 후보를 거르는 컷오프(이슈 #10): 각 방식의 dev×dev 점수 행렬에서 방식별로 고른다
+        dev_matrices = {
+            "cutoff_m1": jaccard_matrix(dev_zero_shot_tag_sets),
+            "cutoff_m2": dev_cosine,
+            "cutoff_m3": cosine_with_tag_bonus(dev_cosine, dev_zero_shot_tag_sets, bonus_m3),
+            "cutoff_m4": cosine_with_tag_bonus(dev_cosine, dev_llm_tag_sets, bonus_m4),
+            "cutoff_r2": cosine_with_tag_bonus(dev_cosine, dev_declared_sets, bonus_r2),
+        }
+        cutoffs = {name: select_cutoff(matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered) for name, matrix in dev_matrices.items()}
+        if key == "bge-m3":
+            # M5는 bge-m3 M2 상위 후보를 리랭커로 다시 채점한 점수라, 그 dev×dev 점수로 컷오프를 따로 고른다
+            dev_text_by_id = {c.id: c.input_text() for c in creators if c.id in dev_id_set}
+            reranked = _rerank_bge_m2_candidates(dev_ids_ordered, dev_cosine, dev_text_by_id, RerankerClient(), TOP_N_STORED)
+            m5_matrix = np.full((len(dev_ids_ordered), len(dev_ids_ordered)), -np.inf, dtype=np.float32)
+            position = {cid: i for i, cid in enumerate(dev_ids_ordered)}
+            for qid, ranked in reranked.items():
+                for cid, score in ranked:
+                    m5_matrix[position[qid], position[cid]] = score
+            cutoffs["cutoff_m5"] = select_cutoff(m5_matrix, dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
+        if "cutoff_r1" not in params:  # R1은 임베딩과 무관해 한 번만 고른다
+            params["cutoff_r1"] = select_cutoff(jaccard_matrix(dev_declared_sets), dev_ids_ordered, dev_gold_by_id, dev_ids_ordered)
+
+        params["per_embedding"][key] = {"tau": tau, "bonus_m3": bonus_m3, "bonus_m4": bonus_m4, "bonus_r2": bonus_r2, **cutoffs}
         print(f"[select-params] {key}: tau={tau:.4f} bonus_m3={bonus_m3} bonus_m4={bonus_m4} bonus_r2={bonus_r2}")
+        print("   컷오프 " + " ".join(f"{name.removeprefix('cutoff_')}={value:.3f}" for name, value in cutoffs.items()))
 
     with (RESULTS_DIR / "selected_params.json").open("w", encoding="utf-8") as f:
         json.dump(params, f, ensure_ascii=False, indent=2)
@@ -526,6 +549,50 @@ def cmd_report(_: argparse.Namespace) -> None:
         for label, query_id, must_include, must_exclude in cases:
             result = check_case(top5(query_id), must_include, must_exclude)
             print(f"   [{'PASS' if result else 'FAIL'}] {label} -> top5={top5(query_id)}")
+
+    _print_cutoff_report(creators, all_candidates)
+
+
+def _method_cutoff(method: str, params: dict) -> float | None:
+    """설정 이름에서 select-params가 고른 컷오프를 찾는다."""
+    if method == "R1":
+        return params["cutoff_r1"]
+    kind, _, key = method.partition("_")
+    return params["per_embedding"][key][f"cutoff_{kind.lower()}"]
+
+
+# 소개 한 줄(X08)·이벤트 제목만(X10) 사례. 둘 다 test에 속해 dev로 고른 컷오프의 누수가 없다.
+SPARSE_CASES = [("X08", "소개 한 줄"), ("X10", "소개 없이 이벤트만")]
+
+
+def _print_cutoff_report(creators: list[Creator], all_candidates: dict[str, dict[str, list[list]]]) -> None:
+    """E3 ④(소개 부족)와 ⑤(컷오프) 결과, 그리고 빈 결과 비율을 출력한다 (이슈 #10)."""
+    from src.metrics import check_case, cutoff_effect
+
+    gold_by_id = {c.id: frozenset(c.gold) for c in creators}
+    query_ids = [c.id for c in query_creators(creators)]
+    with (RESULTS_DIR / "selected_params.json").open(encoding="utf-8") as f:
+        params = json.load(f)
+
+    print("\n=== E3 ④·⑤ 컷오프 적용 (컷오프는 dev로 방식별 선택, M5는 리랭커 점수로 따로 선택) ===")
+    print("④ 소개 부족 사례: 컷오프 뒤 남은 후보에 정답 분야가 전혀 다른(엉뚱한) 크리에이터가 없어야 통과 (빈 결과도 통과)")
+    print("⑤ 컷오프 효과(쿼리 30명 상위 5): 무관 쌍 제거율↑, 관련 쌍 보존율↑, 빈 결과 비율(컷오프 뒤 후보 0명인 쿼리 비율)")
+    for method, top_lists in all_candidates.items():
+        cutoff = _method_cutoff(method, params)
+        if cutoff is None:
+            continue
+        print(f"-- {method} (cutoff={cutoff:.3f})")
+        for query_id, label in SPARSE_CASES:
+            kept = [cid for cid, score in top_lists[query_id][:5] if score >= cutoff]
+            wrong = {cid for cid, gold in gold_by_id.items() if not gold & gold_by_id[query_id]}
+            result = check_case(kept, None, wrong)
+            print(f"   [{'PASS' if result else 'FAIL'}] ④ {label} {query_id}: 정답 분야 다른 후보 없어야 함 -> 남은 후보={kept}")
+        effect = cutoff_effect(top_lists, cutoff, gold_by_id, query_ids)
+        fmt = lambda v: "n/a" if v is None else f"{v:.3f}"
+        print(
+            f"   ⑤ 무관 쌍 제거율={fmt(effect['unrelated_removed_rate'])} 관련 쌍 보존율={fmt(effect['related_kept_rate'])} "
+            f"빈 결과 비율={effect['empty_result_rate']:.3f}"
+        )
 
 
 def cmd_score_judgments(_: argparse.Namespace) -> None:

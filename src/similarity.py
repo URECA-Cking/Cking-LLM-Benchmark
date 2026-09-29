@@ -101,6 +101,36 @@ def select_bonus(
     return best_bonus
 
 
+def select_cutoff(
+    matrix: np.ndarray,
+    ids: list[str],
+    gold_by_id: dict[str, frozenset[str]],
+    query_ids: list[str],
+    k: int = 5,
+) -> float:
+    """dev 쿼리들의 상위 k 후보에서 "관련 있으면 남기고 무관하면 거르는" 정확도가 가장 높은 컷오프를 고른다.
+
+    관련 여부는 정답 분야(gold)를 하나라도 공유하는지로 판단한다. 후보로 나온 점수들만 컷오프 후보로
+    보며(점수 >= 컷오프면 남김), 정확도가 같으면 가장 낮은 컷오프를 골라 덜 거르는 쪽으로 기운다.
+    가장 낮은 후보 점수를 고르면 아무것도 거르지 않고, 최고 점수보다 높은 값을 고르면 전부 거른다.
+    """
+    pairs: list[tuple[float, bool]] = []
+    for query_id in query_ids:
+        gold = gold_by_id[query_id]
+        for candidate_id, score in top_n(matrix, ids, ids.index(query_id), k):
+            pairs.append((score, bool(gold_by_id[candidate_id] & gold)))
+    if not pairs:
+        return 0.0
+    best_cutoff, best_correct = None, -1
+    observed = sorted({score for score, _ in pairs})
+    # 최고 점수보다 살짝 높은 값도 후보에 넣어, 후보가 전부 무관할 때 전부 거를 수 있게 한다
+    for cutoff in [*observed, float(np.nextafter(observed[-1], np.inf))]:
+        correct = sum(1 for score, related in pairs if (score >= cutoff) == related)
+        if correct > best_correct:
+            best_cutoff, best_correct = cutoff, correct
+    return best_cutoff
+
+
 def top_n(matrix: np.ndarray, ids: list[str], row_index: int, n: int) -> list[tuple[str, float]]:
     """row_index 크리에이터 기준 상위 n명을 (id, score) 내림차순으로 반환한다.
 

@@ -1,3 +1,5 @@
+import pytest
+
 from src.metrics import (
     bootstrap_ci,
     check_case,
@@ -60,3 +62,26 @@ def test_check_case_include_and_exclude() -> None:
     assert check_case(["a", "b"], must_include={"c"}) is False
     assert check_case(["a", "b"], must_exclude={"c"}) is True
     assert check_case(["a", "b"], must_exclude={"a"}) is False
+
+
+def test_cutoff_effect_counts_removed_unrelated_kept_related_and_empty_queries() -> None:
+    from src.metrics import cutoff_effect
+
+    gold = {"q1": frozenset({"X"}), "q2": frozenset({"Y"}), "a": frozenset({"X"}), "b": frozenset({"Z"}), "c": frozenset({"Z"})}
+    top_lists = {"q1": [["a", 0.9], ["b", 0.3]], "q2": [["b", 0.3], ["c", 0.2]]}
+
+    effect = cutoff_effect(top_lists, 0.5, gold, ["q1", "q2"], k=2)
+
+    assert effect["unrelated_removed_rate"] == pytest.approx(1.0)  # b·b·c 3쌍 모두 제거
+    assert effect["related_kept_rate"] == pytest.approx(1.0)  # a 유지
+    assert effect["empty_result_rate"] == pytest.approx(0.5)  # q2는 전부 걸러져 빈 결과
+
+
+def test_cutoff_effect_returns_none_when_no_pairs_of_kind() -> None:
+    from src.metrics import cutoff_effect
+
+    gold = {"q": frozenset({"X"}), "a": frozenset({"X"})}
+
+    effect = cutoff_effect({"q": [["a", 0.9]]}, 0.5, gold, ["q"], k=1)
+
+    assert effect["unrelated_removed_rate"] is None

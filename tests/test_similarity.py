@@ -147,3 +147,39 @@ def test_cosine_matrix_with_query_vectors_keeps_candidate_side_original() -> Non
     assert matrix[0, 1] == pytest.approx(0.8)  # 행 0은 쿼리 벡터로
     assert matrix[1, 0] == pytest.approx(0.6)  # 열 0(후보)은 원래 벡터 [1, 0]으로 — 덮어쓰면 0.8이 된다
     assert np.array_equal(cosine_matrix(vectors), cosine_matrix(vectors, query_vectors=None), equal_nan=True)
+
+
+def test_select_cutoff_drops_unrelated_and_keeps_related() -> None:
+    from src.similarity import select_cutoff
+
+    ids = ["q", "a", "b", "c"]
+    gold = {"q": frozenset({"X"}), "a": frozenset({"X"}), "b": frozenset({"Y"}), "c": frozenset({"Y"})}
+    matrix = np.array(
+        [[-np.inf, 0.9, 0.3, 0.2], [0.9, -np.inf, 0.1, 0.1], [0.3, 0.1, -np.inf, 0.5], [0.2, 0.1, 0.5, -np.inf]], dtype=np.float32
+    )
+
+    cutoff = select_cutoff(matrix, ids, gold, ["q"], k=3)
+
+    assert cutoff == pytest.approx(0.9)  # 관련(a=0.9)만 남기고 무관(b=0.3, c=0.2)은 거른다
+
+
+def test_select_cutoff_prefers_lowest_cutoff_on_tie() -> None:
+    from src.similarity import select_cutoff
+
+    ids = ["q", "a", "b"]
+    gold = {"q": frozenset({"X"}), "a": frozenset({"X"}), "b": frozenset({"X"})}
+    matrix = np.array([[-np.inf, 0.9, 0.4], [0.9, -np.inf, 0.1], [0.4, 0.1, -np.inf]], dtype=np.float32)
+
+    assert select_cutoff(matrix, ids, gold, ["q"], k=2) == pytest.approx(0.4)  # 전부 관련이면 아무것도 안 거른다
+
+
+def test_select_cutoff_can_drop_everything_when_all_candidates_are_unrelated() -> None:
+    from src.similarity import select_cutoff
+
+    ids = ["q", "a", "b"]
+    gold = {"q": frozenset({"X"}), "a": frozenset({"Y"}), "b": frozenset({"Y"})}
+    matrix = np.array([[-np.inf, 0.9, 0.8], [0.9, -np.inf, 0.1], [0.8, 0.1, -np.inf]], dtype=np.float32)
+
+    cutoff = select_cutoff(matrix, ids, gold, ["q"], k=2)
+
+    assert cutoff > float(np.float32(0.9))  # 관측된 최고 점수(float32 0.9)보다 커서 무관 후보 둘 다 거른다
