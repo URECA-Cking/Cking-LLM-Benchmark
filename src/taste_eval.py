@@ -165,7 +165,13 @@ def cmd_taste_eval(_: argparse.Namespace) -> None:
     """
     from src.clients import RerankerClient
     from src.data import load_categories, load_creators, load_taste_queries
-    from src.pipeline import EMBEDDING_MODEL_KEYS, _load_vectors, _rerank_bge_m2_candidates_for_queries, _zero_shot_tags_for_key
+    from src.pipeline import (
+        EMBEDDING_MODEL_KEYS,
+        _load_embedding_cache,
+        _load_llm_tags_run0,
+        _rerank_bge_m2_candidates_for_queries,
+        _zero_shot_tags_for_key,
+    )
     from src.tagging import rank_all
 
     categories = load_categories()
@@ -179,18 +185,14 @@ def cmd_taste_eval(_: argparse.Namespace) -> None:
 
     params = json.loads((RESULTS_DIR / "selected_params.json").read_text(encoding="utf-8"))
     llm_model = params["llm_model"]
-    llm_creator_tags = {
-        cid: frozenset(tags)
-        for cid, tags in json.loads((CACHE_DIR / f"llm_tags_{llm_model.replace('/', '_')}_run0.json").read_text(encoding="utf-8")).items()
-    }
+    llm_creator_tags = _load_llm_tags_run0(llm_model, creators, categories)
     query_llm_tags = _query_llm_tags(query_texts, llm_model, codes)
 
     rankings: dict[str, dict[str, list[list]]] = {}
     for key in EMBEDDING_MODEL_KEYS:
         p = params["per_embedding"][key]
-        ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        ids, creator_vectors, _, category_vectors = _load_embedding_cache(key, creators, categories)
         assert list(ids) == creator_ids
-        _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
         _, _, zero_shot_tags, _ = _zero_shot_tags_for_key(key, creators, categories, tau_candidates=[p["tau"]])
         creator_zero_shot = [zero_shot_tags[cid] for cid in ids]
         creator_llm = [llm_creator_tags[cid] for cid in ids]

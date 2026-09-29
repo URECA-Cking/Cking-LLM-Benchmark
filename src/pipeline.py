@@ -101,6 +101,52 @@ def _cached_hash_matches(hash_path: Path, expected: str) -> bool:
     return hash_path.exists() and hash_path.read_text(encoding="utf-8").strip() == expected
 
 
+API_EMBEDDING_KEY = "bge-m3-api"  # API로 받은 bge-m3 벡터를 캐시하는 키
+
+
+def _embedding_input_hash(key: str, creators: list[Creator], categories) -> str:
+    """embed(또는 api-select-params)가 `key` 벡터를 완성했을 때 남기는 입력 해시다. 읽는 쪽도 같은 값으로 확인한다."""
+    if key == API_EMBEDDING_KEY:
+        from src.config import API_BGE_M3_MODEL
+
+        identity = f"{API_BGE_M3_MODEL}@api:{LOCAL_EMBEDDING_MODELS['bge-m3']['dim']}"
+    else:
+        identity = _embedding_model_identity(key)
+    return _content_hash(identity, *[c.input_text() for c in creators], *[c.description for c in categories])
+
+
+def _load_embedding_cache(key: str, creators: list[Creator], categories) -> tuple[list[str], np.ndarray, list[str], np.ndarray]:
+    """캐시된 크리에이터·카테고리 벡터를 (크리에이터 id, 벡터, 카테고리 코드, 벡터)로 읽는다.
+
+    해시는 두 파일을 다 쓴 뒤에 남기므로, 저장 도중 실패해 서로 다른 실행의 벡터가 섞인 캐시나 현재 데이터와 다른
+    캐시는 해시가 없거나 달라 여기서 막힌다(리뷰로 발견: 후속 단계가 해시를 보지 않고 파일을 직접 읽어 섞인 벡터로 계산할 수 있었다).
+    """
+    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", _embedding_input_hash(key, creators, categories)):
+        raise RuntimeError(
+            f"{key} 임베딩 캐시가 없거나, 저장이 끝나지 않았거나, 현재 데이터와 다릅니다. "
+            "먼저 `python3 -m src.pipeline embed`(API 벡터는 `api-select-params --force`)를 실행하세요."
+        )
+    creator_ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+    category_codes, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    return creator_ids, creator_vectors, category_codes, category_vectors
+
+
+def _llm_tags_input_hash(creators: list[Creator], categories) -> str:
+    """tag-llm이 run을 완성했을 때 남기는 입력 해시다. 태깅 프롬프트·온도·입력 텍스트·카테고리 코드가 바뀌면 달라진다."""
+    from src.clients.openai_tagger import SYSTEM_PROMPT
+
+    return _content_hash(SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *[c.code for c in categories])
+
+
+def _load_llm_tags_run0(llm_model: str, creators: list[Creator], categories) -> dict[str, frozenset[str]]:
+    """선택된 LLM 모델의 태그(run0)를 읽는다. tag-llm이 run과 사용량 파일을 다 쓴 뒤에 남기는 해시가 맞을 때만 읽는다."""
+    stem = f"llm_tags_{llm_model.replace('/', '_')}_run0"
+    if not _cached_hash_matches(CACHE_DIR / f"{stem}.input_hash", _llm_tags_input_hash(creators, categories)):
+        raise RuntimeError(f"{stem}.json이 없거나, 저장이 끝나지 않았거나, 현재 입력과 다릅니다. 먼저 `python3 -m src.pipeline tag-llm`을 실행하세요.")
+    with (CACHE_DIR / f"{stem}.json").open(encoding="utf-8") as f:
+        return {cid: frozenset(tags) for cid, tags in json.load(f).items()}
+
+
 def cmd_embed(args: argparse.Namespace) -> None:
     """카테고리 설명문과 크리에이터 100명의 입력 텍스트를 EMBEDDING_MODEL_KEYS의 모델들로 인코딩한다.
 
@@ -128,7 +174,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
     for key in EMBEDDING_MODEL_KEYS:
         # 키별로 해시가 다르다 — 어떤 실제 모델·차원을 가리키는지도 해시에 넣어, config.py에서
         # 같은 키가 다른 모델을 가리키게 바꿔도(텍스트는 그대로라도) 캐시를 다시 계산하게 한다.
-        input_hash = _content_hash(_embedding_model_identity(key), *creator_texts, *category_texts)
+        input_hash = _embedding_input_hash(key, creators, categories)
         creators_path = CACHE_DIR / f"creators_{key}.npz"
         categories_path = CACHE_DIR / f"categories_{key}.npz"
         hash_path = CACHE_DIR / f"embed_{key}.input_hash"
@@ -188,14 +234,12 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     두 번 실행하는 것은 비결정성(consistency)을 재기 위함이며, 승자 모델의 태그는
     이후 M4(임베딩 + LLM 태그 보정)의 입력으로 전원에게 쓰인다.
     """
-    from src.clients.openai_tagger import SYSTEM_PROMPT
-
     categories = load_categories()
     creators = load_creators()
     category_codes = [c.code for c in categories]
     dev_ids = {c.id for c in dev_creators(creators)}
     gold_by_id = {c.id: frozenset(c.gold) for c in creators}
-    input_hash = _content_hash(SYSTEM_PROMPT, str(LLM_TEMPERATURE), *(c.input_text() for c in creators), *category_codes)
+    input_hash = _llm_tags_input_hash(creators, categories)
 
     dev_metrics: dict[str, dict[str, float]] = {}
     usage_summary: dict[str, dict[str, int]] = {}
@@ -255,8 +299,7 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
 
 def _zero_shot_tags_for_key(key: str, creators: list[Creator], categories, tau_candidates: list[float] | None = None):
     """저장된 임베딩으로 zero-shot 순위를 매기고, dev F1로 tau를 골라 태그 집합을 만든다."""
-    creator_ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-    _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    creator_ids, creator_vectors, _, category_vectors = _load_embedding_cache(key, creators, categories)
     category_codes = [c.code for c in categories]
     ranked_list = rank_all(creator_vectors, category_vectors, category_codes)
     ranked_by_id = dict(zip(creator_ids, ranked_list))
@@ -284,7 +327,7 @@ def _select_params_for_key(key: str, creators: list[Creator], categories, llm_ta
     dev_id_set = {c.id for c in dev_creators(creators)}
 
     ids, _, zero_shot_tags, tau = _zero_shot_tags_for_key(key, creators, categories)
-    _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+    _, vectors, _, _ = _load_embedding_cache(key, creators, categories)
 
     # dev만 남긴 부분 행렬로 bonus를 고른다. test 벡터·gold는 이 시점에 전혀 등장하지 않는다.
     dev_index = [i for i, cid in enumerate(ids) if cid in dev_id_set]
@@ -339,10 +382,7 @@ def cmd_select_params(_: argparse.Namespace) -> None:
     with (RESULTS_DIR / "llm_model_selection.json").open(encoding="utf-8") as f:
         llm_selection = json.load(f)
     llm_model = llm_selection["selected_model"]
-    safe_name = llm_model.replace("/", "_")
-    with (CACHE_DIR / f"llm_tags_{safe_name}_run0.json").open(encoding="utf-8") as f:
-        llm_tags_raw = json.load(f)
-    llm_tags_by_id = {cid: frozenset(tags) for cid, tags in llm_tags_raw.items()}
+    llm_tags_by_id = _load_llm_tags_run0(llm_model, creators, categories)
 
     params: dict[str, dict] = {"llm_model": llm_model, "per_embedding": {}}
     for key in EMBEDDING_MODEL_KEYS:
@@ -426,12 +466,7 @@ def _load_params_and_llm_tags() -> tuple[dict, dict[str, frozenset[str]]]:
         raise RuntimeError("results/selected_params.json이 없습니다. 먼저 tag-llm, select-params 단계를 실행하세요.")
     with params_path.open(encoding="utf-8") as f:
         params = json.load(f)
-    tags_path = CACHE_DIR / f"llm_tags_{params['llm_model'].replace('/', '_')}_run0.json"
-    if not tags_path.exists():
-        raise RuntimeError(f"{tags_path.name}이 없습니다. 먼저 tag-llm 단계를 실행하세요.")
-    with tags_path.open(encoding="utf-8") as f:
-        llm_tags_raw = json.load(f)
-    return params, {cid: frozenset(tags) for cid, tags in llm_tags_raw.items()}
+    return params, _load_llm_tags_run0(params["llm_model"], load_creators(), load_categories())
 
 
 def cmd_candidates(_: argparse.Namespace) -> None:
@@ -447,7 +482,7 @@ def cmd_candidates(_: argparse.Namespace) -> None:
     for key in EMBEDDING_MODEL_KEYS:
         p = params["per_embedding"][key]
         ids, _, zero_shot_tags, _ = _zero_shot_tags_for_key(key, creators, categories, tau_candidates=[p["tau"]])
-        _, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+        _, vectors, _, _ = _load_embedding_cache(key, creators, categories)
         cosine = cosine_matrix(vectors, query_vectors=_query_prompted_vectors(key, ids, vectors, creators))
 
         zero_shot_tag_sets = [zero_shot_tags[cid] for cid in ids]
@@ -914,8 +949,7 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
 
     selected = json.loads((RESULTS_DIR / "selected_params.json").read_text(encoding="utf-8"))
     llm_model = selected["llm_model"]
-    safe_name = llm_model.replace("/", "_")
-    orig_llm = {cid: frozenset(t) for cid, t in json.loads((CACHE_DIR / f"llm_tags_{safe_name}_run0.json").read_text(encoding="utf-8")).items()}
+    orig_llm = _load_llm_tags_run0(llm_model, creators, categories)
     large_llm = _large_llm_tags(large, llm_model, codes)
 
     orig_gold = {c.id: frozenset(c.gold) for c in creators}
@@ -925,8 +959,7 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
 
     output: dict = {"sizes": SENSITIVITY_SIZES, "reps": SENSITIVITY_REPS, "seed": SENSITIVITY_SEED, "per_embedding": {}}
     for key in EMBEDDING_MODEL_KEYS:
-        ids, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-        _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+        ids, vectors, _, category_vectors = _load_embedding_cache(key, creators, categories)
         # 쿼리 프롬프트가 있는 모델(Qwen3)은 평가와 같은 조건으로 test 쿼리 행·dev 행에 프롬프트를 적용한다
         prompted = bool(LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name"))
         test_query_vectors = _query_prompted_vectors(key, list(ids), vectors, creators) if prompted else None
@@ -1035,13 +1068,7 @@ def _api_bge_m3_client() -> OpenAIEmbeddingClient:
 def _load_local_bge_m3(creators: list[Creator], categories) -> tuple[list[str], np.ndarray, np.ndarray]:
     """embed 단계가 캐시한 로컬 bge-m3 벡터를 읽는다. 캐시가 없거나 현재 데이터와 다르면 API를 부르기 전에 중단한다."""
     key = "bge-m3"
-    input_hash = _content_hash(
-        _embedding_model_identity(key), *[c.input_text() for c in creators], *[c.description for c in categories]
-    )
-    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
-        raise RuntimeError("로컬 bge-m3 캐시가 없거나 현재 데이터와 다릅니다. 먼저 `python3 -m src.pipeline embed`를 실행하세요.")
-    creator_ids, creator_vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
-    _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    creator_ids, creator_vectors, _, category_vectors = _load_embedding_cache(key, creators, categories)
     if creator_ids != [c.id for c in creators]:
         raise RuntimeError("로컬 bge-m3 캐시의 크리에이터 순서가 현재 데이터와 다릅니다. `embed --force`로 다시 만드세요.")
     return creator_ids, creator_vectors, category_vectors
@@ -1136,14 +1163,14 @@ def cmd_api_select_params(args: argparse.Namespace, api_client: OpenAIEmbeddingC
     from src.api_parity import compare_decisions
     from src.config import API_BGE_M3_MODEL, API_BGE_M3_PRICE_PER_1M
 
-    key, local_key = "bge-m3-api", "bge-m3"
+    key, local_key = API_EMBEDDING_KEY, "bge-m3"
     creators, categories = load_creators(), load_categories()
     creator_texts = [c.input_text() for c in creators]
     category_texts = [c.description for c in categories]
     creator_ids, local_creators, local_categories = _load_local_bge_m3(creators, categories)
     params, llm_tags_by_id = _load_params_and_llm_tags()  # API를 부르기 전에 필요한 입력이 있는지 확인한다
 
-    input_hash = _content_hash(f"{API_BGE_M3_MODEL}@api:{LOCAL_EMBEDDING_MODELS[local_key]['dim']}", *creator_texts, *category_texts)
+    input_hash = _embedding_input_hash(key, creators, categories)
     hash_path = CACHE_DIR / f"embed_{key}.input_hash"
     total_tokens = 0
     cached = None if getattr(args, "force", False) else _cached_api_vectors(key, creators, categories, input_hash)
