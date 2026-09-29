@@ -559,3 +559,12 @@ def test_model_spot_check_args_requires_separate_file_for_non_default_comparison
         pipeline._model_spot_check_args(argparse.Namespace(target="A", baseline=["B"], out="spot_check_models.csv"))
     with pytest.raises(ValueError):
         pipeline._model_spot_check_args(argparse.Namespace(baseline=["B"]))
+
+
+def test_method_cutoff_maps_method_id_and_skips_m5() -> None:
+    params = {"cutoff_r1": 0.5, "per_embedding": {"bge-m3": {"cutoff_m2": 0.51, "cutoff_r2": 0.6, "cutoff_m4": 0.7}}}
+
+    assert pipeline._method_cutoff("R1", params) == 0.5
+    assert pipeline._method_cutoff("M2_bge-m3", params) == 0.51
+    assert pipeline._method_cutoff("R2_bge-m3", params) == 0.6
+    assert pipeline._method_cutoff("M5_bge-m3", params) is None

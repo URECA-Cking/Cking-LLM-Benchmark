@@ -79,3 +79,36 @@ def check_case(top_ids: list[str], must_include: set[str] | None = None, must_ex
     if must_exclude is not None and (present & must_exclude):
         return False
     return True
+
+
+def cutoff_effect(
+    top_lists: dict[str, list[list]],
+    cutoff: float,
+    gold_by_id: dict[str, frozenset[str]],
+    query_ids: list[str],
+    k: int = 5,
+) -> dict[str, float | None]:
+    """쿼리들의 상위 k 후보에 컷오프(점수 >= cutoff만 남김)를 적용했을 때의 효과를 잰다.
+
+    무관 = 정답 분야를 하나도 공유하지 않는 후보. 무관 쌍 제거율·관련 쌍 보존율은 해당 쌍이 하나도
+    없으면 None이다. 빈 결과 비율은 컷오프 뒤 후보가 하나도 안 남은 쿼리의 비율이다.
+    """
+    unrelated = removed_unrelated = related = kept_related = empty = 0
+    for query_id in query_ids:
+        gold = gold_by_id[query_id]
+        kept = 0
+        for candidate_id, score in top_lists[query_id][:k]:
+            keep = score >= cutoff
+            kept += keep
+            if gold_by_id[candidate_id] & gold:
+                related += 1
+                kept_related += keep
+            else:
+                unrelated += 1
+                removed_unrelated += not keep
+        empty += kept == 0
+    return {
+        "unrelated_removed_rate": removed_unrelated / unrelated if unrelated else None,
+        "related_kept_rate": kept_related / related if related else None,
+        "empty_result_rate": empty / len(query_ids) if query_ids else 0.0,
+    }
