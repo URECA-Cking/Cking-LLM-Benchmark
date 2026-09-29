@@ -402,19 +402,28 @@ def _query_prompted_vectors(
     return vectors
 
 
+def _load_params_and_llm_tags() -> tuple[dict, dict[str, frozenset[str]]]:
+    """select-params가 고른 파라미터와 그때 쓴 LLM 태그(run0)를 읽는다. 아직 없으면 먼저 실행할 단계를 알려준다."""
+    params_path = RESULTS_DIR / "selected_params.json"
+    if not params_path.exists():
+        raise RuntimeError("results/selected_params.json이 없습니다. 먼저 tag-llm, select-params 단계를 실행하세요.")
+    with params_path.open(encoding="utf-8") as f:
+        params = json.load(f)
+    tags_path = CACHE_DIR / f"llm_tags_{params['llm_model'].replace('/', '_')}_run0.json"
+    if not tags_path.exists():
+        raise RuntimeError(f"{tags_path.name}이 없습니다. 먼저 tag-llm 단계를 실행하세요.")
+    with tags_path.open(encoding="utf-8") as f:
+        llm_tags_raw = json.load(f)
+    return params, {cid: frozenset(tags) for cid, tags in llm_tags_raw.items()}
+
+
 def cmd_candidates(_: argparse.Namespace) -> None:
     """설정(임베딩 모델 x 방식) 각각에 대해 크리에이터 100명의 상위 20명 후보를 계산해 저장한다."""
     categories = load_categories()
     creators = load_creators()
     declared_by_id = {c.id: frozenset(c.declared) for c in creators}
 
-    with (RESULTS_DIR / "selected_params.json").open(encoding="utf-8") as f:
-        params = json.load(f)
-    llm_model = params["llm_model"]
-    safe_name = llm_model.replace("/", "_")
-    with (CACHE_DIR / f"llm_tags_{safe_name}_run0.json").open(encoding="utf-8") as f:
-        llm_tags_raw = json.load(f)
-    llm_tags_by_id = {cid: frozenset(tags) for cid, tags in llm_tags_raw.items()}
+    params, llm_tags_by_id = _load_params_and_llm_tags()
 
     all_candidates: dict[str, dict[str, list[list]]] = {}
 
@@ -991,6 +1000,93 @@ def cmd_memory(args: argparse.Namespace) -> None:
         )
 
 
+def _api_bge_m3_client() -> OpenAIEmbeddingClient:
+    """DEEPINFRA_API_KEY로 API bge-m3 클라이언트를 만든다. 키가 없으면 무엇을 채울지 알려준다."""
+    import os
+
+    from openai import OpenAI
+
+    from src.config import API_BGE_M3_BASE_URL, API_BGE_M3_MODEL
+
+    api_key = os.environ.get("DEEPINFRA_API_KEY")
+    if not api_key:
+        raise RuntimeError(".env의 DEEPINFRA_API_KEY가 비어 있습니다. api-parity 단계에는 DeepInfra 키가 필요합니다.")
+    client = OpenAI(api_key=api_key, base_url=API_BGE_M3_BASE_URL)
+    return OpenAIEmbeddingClient(client=client, model=API_BGE_M3_MODEL, dim=LOCAL_EMBEDDING_MODELS["bge-m3"]["dim"])
+
+
+def cmd_api_parity(_: argparse.Namespace, api_client: OpenAIEmbeddingClient | None = None) -> None:
+    """캐시된 로컬 bge-m3 벡터와 API bge-m3 벡터를 비교해 results/api_parity.json에 남긴다.
+
+    로컬 벡터는 embed 단계 캐시를 그대로 쓰고(모델을 다시 올리지 않는다), 입력이 바뀌어 캐시가 오래됐으면 중단한다.
+    """
+    from src.api_parity import compare_decisions, compare_embeddings
+    from src.config import API_BGE_M3_PRICE_PER_1M, PARITY_MAX_ABS_DIFF, PARITY_MIN_TOP5_OVERLAP
+
+    key = "bge-m3"
+    creators, categories = load_creators(), load_categories()
+    creator_texts = [c.input_text() for c in creators]
+    category_texts = [c.description for c in categories]
+    input_hash = _content_hash(_embedding_model_identity(key), *creator_texts, *category_texts)
+    if not _cached_hash_matches(CACHE_DIR / f"embed_{key}.input_hash", input_hash):
+        raise RuntimeError("로컬 bge-m3 캐시가 없거나 현재 데이터와 다릅니다. 먼저 `python3 -m src.pipeline embed`를 실행하세요.")
+    creator_ids, local_creators = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
+    _, local_categories = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
+    if creator_ids != [c.id for c in creators]:
+        raise RuntimeError("로컬 bge-m3 캐시의 크리에이터 순서가 현재 데이터와 다릅니다. `embed --force`로 다시 만드세요.")
+
+    params, llm_tags_by_id = _load_params_and_llm_tags()  # API를 부르기 전에 필요한 입력이 있는지 확인한다
+    client = api_client or _api_bge_m3_client()
+    api_creators = client.embed(creator_texts)
+    creator_tokens = client.last_input_tokens or 0
+    api_categories = client.embed(category_texts)
+    total_tokens = creator_tokens + (client.last_input_tokens or 0)
+
+    report = compare_embeddings(
+        local_creators, api_creators, local_categories, api_categories,
+        k=5, max_abs_diff_limit=PARITY_MAX_ABS_DIFF, min_top_k_overlap=PARITY_MIN_TOP5_OVERLAP,
+    )
+    p = params["per_embedding"][key]
+    decisions = compare_decisions(
+        creator_ids, local_creators, api_creators, local_categories, api_categories,
+        [c.code for c in categories], [llm_tags_by_id[cid] for cid in creator_ids],
+        tau=p["tau"], max_tags=LLM_TAG_MAX,
+        bonuses={"M3": p["bonus_m3"], "M4": p["bonus_m4"]},
+        cutoffs={m: p[f"cutoff_{m.lower()}"] for m in ("M1", "M2", "M3", "M4")}, k=5,
+    )
+    report.update(decisions)
+    report["parameters_reusable"] = bool(report["similarity_equivalent"] and decisions["decisions_identical"])
+    report.update(
+        {
+            "api_model": client.name,
+            "input_tokens": total_tokens,
+            "cost_usd": total_tokens / 1_000_000 * API_BGE_M3_PRICE_PER_1M,
+            "criteria": {"max_abs_diff": PARITY_MAX_ABS_DIFF, "min_top5_overlap_mean": PARITY_MIN_TOP5_OVERLAP},
+        }
+    )
+    with (RESULTS_DIR / "api_parity.json").open("w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    if report["parameters_reusable"]:
+        verdict = "동등 — 같은 tau·bonus·컷오프로 태그와 컷오프 뒤 후보가 모두 같음"
+    elif report["similarity_equivalent"]:
+        verdict = "유사도는 사실상 같지만 경계값 근처 크리에이터의 태그·후보가 달라짐 — 파라미터를 그대로 쓰면 일부 결과가 바뀜"
+    else:
+        verdict = "차이 있음 — API 벡터로 파라미터 재선택 필요"
+    mismatch = report["candidates_after_cutoff_mismatch"]
+    print(
+        f"[api-parity] {verdict}\n"
+        f"  자기 코사인 최소 {report['self_cosine_min']:.6f} / 평균 {report['self_cosine_mean']:.6f}\n"
+        f"  유사도 최대 차이: 크리에이터끼리 {report['creator_similarity_max_abs_diff']:.6f}, "
+        f"크리에이터↔카테고리 {report['category_similarity_max_abs_diff']:.6f}\n"
+        f"  상위 5 이웃 겹침 평균 {report['top5_overlap_mean']:.3f} / 최소 {report['top5_overlap_min']:.3f}, "
+        f"1순위 일치 {report['top1_agreement']:.3f}\n"
+        f"  같은 파라미터로 비교: zero-shot 태그가 달라진 크리에이터 {report['zero_shot_tag_mismatch']['count']}명, "
+        f"컷오프 뒤 후보가 달라진 크리에이터 "
+        + ", ".join(f"{m} {v['count']}명" for m, v in mismatch.items())
+        + f"\n  토큰 {total_tokens}, 비용 약 ${report['cost_usd']:.6f}"
+    )
+
+
 def main() -> None:
     """서브커맨드를 파싱해 해당 단계 함수를 실행한다."""
     parser = argparse.ArgumentParser(description="추천 방식 비교 실험 파이프라인")
@@ -1010,6 +1106,7 @@ def main() -> None:
         "spot-check-models-report": cmd_spot_check_models_report,
         "dev-sensitivity": cmd_dev_sensitivity,
         "memory": cmd_memory,
+        "api-parity": cmd_api_parity,
         "taste-eval": cmd_taste_eval,
         "taste-judge": cmd_taste_judge,
     }

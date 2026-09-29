@@ -45,6 +45,16 @@ OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_EMBEDDING_DIM = 1536
 OPENAI_EMBEDDING_PRICE_PER_1M = 0.02  # USD / 1,000,000 input tokens
 
+# 로컬 bge-m3와 같은 가중치를 API로 제공하는 호스팅(DeepInfra, OpenAI 호환). 가격은 2026-09-29 공식 문서 기준
+API_BGE_M3_BASE_URL = "https://api.deepinfra.com/v1/openai"
+API_BGE_M3_MODEL = "BAAI/bge-m3"
+API_BGE_M3_PRICE_PER_1M = 0.01  # USD / 1,000,000 input tokens
+# 로컬↔API 유사도 동등성 판정 기준. 서버 정밀도(fp16 등) 차이로 유사도가 흔들려도 bonus 그리드 간격(0.1)보다
+# 한 자릿수 작고 상위 5 이웃이 거의 그대로면 "유사도가 같다"고 본다. 이 기준은 tau·컷오프 같은 경계 판정의
+# 결과까지 보장하지 않아, 파라미터 재사용 여부는 같은 파라미터로 태그·후보를 직접 비교해(compare_decisions) 따로 본다
+PARITY_MAX_ABS_DIFF = 0.01
+PARITY_MIN_TOP5_OVERLAP = 0.95
+
 LOCAL_EMBEDDING_MODELS = {
     "bge-m3": {"model_name": "BAAI/bge-m3", "dim": 1024},
     # bge-m3를 한국어 데이터로 파인튜닝한 모델. 같은 베이스에서 한국어 특화가 도움이 되는지 비교 (2026-09-28 추가)
