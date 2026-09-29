@@ -771,8 +771,8 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
     """dev 크기(30/60/120/240)별로 tau·bonus 선택이 얼마나 흔들리는지 잰다 (이슈 #8).
 
     dev 후보 풀 = 기존 dev 30명 + 합성 300명. test = 기존 100명(쿼리 30명 포함)이며, test 성적은
-    LLM 판정 없는 gold 기준 대리 지표다. 쿼리 프롬프트(Qwen3)는 적용하지 않는다.
-    기존 dev 30명 그대로 고른 값이 selected_params.json과 같은지도 확인해 함께 기록한다(프롬프트 모델 제외).
+    LLM 판정 없는 gold 기준 대리 지표다. 쿼리 프롬프트가 있는 모델(Qwen3)은 평가와 같은 조건으로 dev·쿼리 행에 프롬프트를 적용한다.
+    기존 dev 30명 그대로 고른 값이 selected_params.json과 같은지도 확인해 함께 기록한다.
     """
     from src.data import load_large_creators
     from src.sensitivity import CreatorSet, run_sensitivity, select_on_subset, summarize
@@ -800,12 +800,17 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
     for key in EMBEDDING_MODEL_KEYS:
         ids, vectors = _load_vectors(CACHE_DIR / f"creators_{key}.npz")
         _, category_vectors = _load_vectors(CACHE_DIR / f"categories_{key}.npz")
-        test = CreatorSet(list(ids), vectors, rank_all(vectors, category_vectors, codes), orig_gold, orig_llm, orig_declared)
+        # 쿼리 프롬프트가 있는 모델(Qwen3)은 평가와 같은 조건으로 test 쿼리 행·dev 행에 프롬프트를 적용한다
+        prompted = bool(LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name"))
+        test_query_vectors = _query_prompted_vectors(key, list(ids), vectors, creators) if prompted else None
+        test = CreatorSet(list(ids), vectors, rank_all(vectors, category_vectors, codes), orig_gold, orig_llm, orig_declared, test_query_vectors)
 
         dev_index = [i for i, cid in enumerate(ids) if cid in dev_ids]
         large_vectors = _large_vectors(key, large)
         pool_ids = [ids[i] for i in dev_index] + [c.id for c in large]
         pool_vectors = np.vstack([vectors[dev_index], large_vectors])
+        pool_creators = [c for c in creators if c.id in dev_ids] + large
+        pool_query_vectors = _query_prompted_vectors(key, pool_ids, pool_vectors, pool_creators, target_ids=set(pool_ids)) if prompted else None
         pool = CreatorSet(
             pool_ids,
             pool_vectors,
@@ -813,19 +818,18 @@ def cmd_dev_sensitivity(_: argparse.Namespace) -> None:
             {**orig_gold, **large_gold},
             {**orig_llm, **large_llm},
             {**orig_declared, **large_declared},
+            pool_query_vectors,
         )
 
         tau, bonuses = select_on_subset(pool, list(range(len(dev_index))), BONUS_GRID, LLM_TAG_MAX)
         expected = selected["per_embedding"][key]
-        # 쿼리 프롬프트가 있는 모델은 selected_params가 프롬프트 적용 dev로 골라져 이 실험(미적용)과 조건이 달라 비교하지 않는다
-        prompted = bool(LOCAL_EMBEDDING_MODELS.get(key, {}).get("query_prompt_name"))
-        matches = None if prompted else abs(tau - expected["tau"]) < 1e-9 and all(bonuses[n] == expected[n] for n in bonuses)
+        matches = abs(tau - expected["tau"]) < 1e-9 and all(bonuses[n] == expected[n] for n in bonuses)
         records = run_sensitivity(pool, test, test_ids, query_ids, SENSITIVITY_SIZES, SENSITIVITY_REPS, BONUS_GRID, LLM_TAG_MAX, SENSITIVITY_SEED)
         output["per_embedding"][key] = {
             "original_dev30": {"tau": tau, **bonuses, "matches_selected_params": matches},
             "summary": summarize(records),
         }
-        print(f"[dev-sensitivity] {key}: 기존 dev 30 재현={'제외(쿼리 프롬프트 모델)' if matches is None else 'OK' if matches else 'MISMATCH'}")
+        print(f"[dev-sensitivity] {key}: 기존 dev 30 재현={'OK' if matches else 'MISMATCH'}")
         for row in output["per_embedding"][key]["summary"]:
             print(
                 f"  size={row['size']:>3} tau={row['tau_mean']:.3f}±{row['tau_std']:.3f} "

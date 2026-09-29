@@ -140,3 +140,47 @@ def test_main_rejects_cache_made_with_another_model(tmp_path, monkeypatch) -> No
 
     with pytest.raises(ValueError, match="캐시"):
         gl.main()
+
+
+def test_validate_batch_rejects_subtopic_duplicated_within_category() -> None:
+    slots = gl.build_slots("MUSIC", 0)
+    items = _items(slots)
+    items[1]["subtopic"] = " 주제 0 "  # 같은 배치 안 0번과 공백·대소문자만 다름
+
+    assert any("subtopic" in e for e in gl.validate_batch(items, slots, set()))
+    assert gl.validate_batch(_items(slots), slots, set(), {"다른주제"}) == []
+    assert any("subtopic" in e for e in gl.validate_batch(_items(slots), slots, set(), {"주제0"}))
+
+
+def test_main_reuses_cache_with_soft_length_violation_but_rejects_duplicate_subtopic(tmp_path, monkeypatch) -> None:
+    import json
+    import sys
+
+    from src.data import load_categories
+
+    monkeypatch.setattr(gl, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(gl, "CREATORS_LARGE_CSV", tmp_path / "large.csv")
+    monkeypatch.setattr(gl, "OpenAI", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["generate_large", "--model", "gpt-5.4-mini-2026-03-17"])
+    (tmp_path / "large_gen").mkdir()
+    for c_index, category in enumerate(load_categories()):
+        for batch in range(gl.BATCHES_PER_CATEGORY):
+            items = _items(gl.build_slots(category.code, batch))
+            for k, item in enumerate(items):
+                item["name"] = f"이름{c_index}_{batch}_{k}"
+                item["subtopic"] = f"주제{c_index}_{batch}_{k}"
+            if (c_index, batch) == (0, 0):
+                items[gl.STYLE_BY_SLOT.index("long_polished")]["bio"] = "짧은 긴글"  # 길이(소프트)만 위반
+            (tmp_path / "large_gen" / f"{category.code}_{batch}.json").write_text(
+                json.dumps({"model": "gpt-5.4-mini-2026-03-17", "items": items}, ensure_ascii=False), encoding="utf-8"
+            )
+
+    gl.main()  # 소프트 위반 캐시도 거부하지 않고 CSV까지 만든다
+    assert (tmp_path / "large.csv").exists()
+
+    dup = tmp_path / "large_gen" / f"{load_categories()[0].code}_1.json"
+    data = json.loads(dup.read_text(encoding="utf-8"))
+    data["items"][0]["subtopic"] = "주제0_0_0"
+    dup.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="subtopic"):
+        gl.main()

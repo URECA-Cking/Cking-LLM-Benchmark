@@ -28,6 +28,8 @@ class CreatorSet:
     gold: dict[str, frozenset[str]]
     llm_tags: dict[str, frozenset[str]]
     declared: dict[str, frozenset[str]]
+    # 쿼리 프롬프트를 적용한 쿼리 쪽(행) 벡터. None이면 vectors를 그대로 쓴다(프롬프트 없는 모델)
+    query_vectors: np.ndarray | None = None
 
 
 def select_on_subset(
@@ -39,7 +41,8 @@ def select_on_subset(
     ranked_by_id = {pool.ids[i]: pool.ranked[i] for i in subset}
     tau = select_tau(ranked_by_id, gold, max_tags)
 
-    cosine = cosine_matrix(pool.vectors[subset])
+    query_rows = None if pool.query_vectors is None else pool.query_vectors[subset]
+    cosine = cosine_matrix(pool.vectors[subset], query_vectors=query_rows)
     zero_shot_sets = [ranked_by_id[cid].assigned(tau, max_tags) for cid in sub_ids]
     llm_sets = [pool.llm_tags[cid] for cid in sub_ids]
     declared_sets = [pool.declared[cid] for cid in sub_ids]
@@ -59,7 +62,7 @@ def evaluate_on_test(
     zero_shot_sets = [ranked.assigned(tau, max_tags) for ranked in test.ranked]
     tag_f1 = mean(f1_against_gold(zero_shot_sets[index[cid]], test.gold[cid]) for cid in test_ids)
 
-    cosine = cosine_matrix(test.vectors)
+    cosine = cosine_matrix(test.vectors, query_vectors=test.query_vectors)
     sources = {
         "bonus_m3": zero_shot_sets,
         "bonus_m4": [test.llm_tags[cid] for cid in test.ids],

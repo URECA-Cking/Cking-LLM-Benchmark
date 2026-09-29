@@ -81,3 +81,17 @@ def test_summarize_reports_mode_share_and_spread() -> None:
     assert row["bonus_m3"]["distribution"] == {0.1: 3, 0.2: 1}
     assert row["bonus_m4"]["mode_share"] == 1.0
     assert row["test_tag_f1"]["mean"] == pytest.approx(0.9)
+
+
+def test_query_vectors_change_row_side_only() -> None:
+    """프롬프트 적용 쿼리 벡터는 행에만 쓰이므로, 후보 쪽 벡터가 같으면 선택된 bonus 형식은 유지되고 결과는 달라질 수 있다."""
+    pool = _creator_set(12, seed=1)
+    flipped = sv.CreatorSet(**{**pool.__dict__, "query_vectors": pool.vectors[::-1].copy()})
+
+    _, plain = sv.select_on_subset(pool, list(range(8)), [0.0, 0.1, 0.3], 3)
+    _, prompted = sv.select_on_subset(flipped, list(range(8)), [0.0, 0.1, 0.3], 3)
+
+    assert set(plain) == set(prompted)
+    same = sv.evaluate_on_test(pool, pool.ids[:6], pool.ids[:3], 0.5, {"bonus_m3": 0.1, "bonus_m4": 0.1, "bonus_r2": 0.1}, 3)
+    diff = sv.evaluate_on_test(flipped, pool.ids[:6], pool.ids[:3], 0.5, {"bonus_m3": 0.1, "bonus_m4": 0.1, "bonus_r2": 0.1}, 3)
+    assert same["p5_m3"] != diff["p5_m3"] or same != diff

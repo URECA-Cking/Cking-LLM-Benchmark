@@ -329,7 +329,7 @@ python3 -m src.judge_cli
 ```
 creators.csv sha256 e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32ea2e01a
 split.csv    sha256 cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6
-creators_large.csv sha256 4ac22daa0708e44debccfc65d5af47a722be1a0b351ea2a0b33ed50cf1c09512
+creators_large.csv sha256 152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac
 ```
 
 ## 8. 비교 대상 방식

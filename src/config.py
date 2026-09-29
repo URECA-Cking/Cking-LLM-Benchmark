@@ -30,7 +30,7 @@ CREATORS_CSV_SHA256 = "e4c14bf750a17ec33d430b1958e397c986238dcd3073a41be566cec32
 SPLIT_CSV_SHA256 = "cb95606e41c46dea323d74db75ee8b8edb4e136e8eb11e875850ab574d5545b6"
 # creators_large.csv(2026-09-29, gpt-5.4-mini로 생성한 합성 300명, 카테고리당 30명)의 확정 hash.
 # 값이 바뀌면 이 hash와 docs를 함께 갱신한다(None이면 검증하지 않음).
-CREATORS_LARGE_CSV_SHA256: str | None = "4ac22daa0708e44debccfc65d5af47a722be1a0b351ea2a0b33ed50cf1c09512"
+CREATORS_LARGE_CSV_SHA256: str | None = "152aeb4be4dce9cc65fbd6261ddc894965ee611a461c437b8354d5ce08869aac"
 
 TAXONOMY_VERSION = "v0.1"
 

@@ -127,19 +127,33 @@ def build_prompt(categories: dict[str, Category], slots: list[Slot], avoid: list
     )
 
 
-def validate_batch(items: list[dict], slots: list[Slot], used_names: set[str]) -> list[str]:
-    """모델 응답이 슬롯 요구를 지켰는지 확인하고 위반 사항을 문자열 목록으로 돌려준다."""
+def _norm_subtopic(text: str) -> str:
+    return "".join(text.split()).lower()
+
+
+def validate_batch(
+    items: list[dict], slots: list[Slot], used_names: set[str], used_subtopics: set[str] | None = None
+) -> list[str]:
+    """모델 응답이 슬롯 요구를 지켰는지 확인하고 위반 사항을 문자열 목록으로 돌려준다.
+
+    used_subtopics는 같은 카테고리에서 앞선 배치가 쓴 세부주제(정규화본)다. 배치 안 중복도 함께 막는다.
+    """
     if len(items) != len(slots):
         return [f"항목 수 {len(items)} != 슬롯 수 {len(slots)}"]
     errors = []
     seen = {name.lower() for name in used_names}
+    seen_subtopics = set(used_subtopics or ())
     for n, (item, slot) in enumerate(zip(items, slots), start=1):
         name = item["name"].strip()
         if not name or name.lower() in seen:
             errors.append(f"{n}번 이름이 비었거나 중복: {name!r}")
         seen.add(name.lower())
-        if not item["subtopic"].strip():
+        subtopic = _norm_subtopic(item["subtopic"])
+        if not subtopic:
             errors.append(f"{n}번 subtopic 비어 있음")
+        elif subtopic in seen_subtopics:
+            errors.append(f"{n}번 subtopic이 같은 카테고리에서 중복: {item['subtopic'].strip()!r}")
+        seen_subtopics.add(subtopic)
         bio, events = item["bio"].strip(), item["events"].strip()
         if slot.style == "events_only":
             if bio or not events:
@@ -177,7 +191,9 @@ def write_csv(rows: list[dict[str, str]], path: Path) -> None:
         writer.writerows(rows)
 
 
-def _generate_batch(client: OpenAI, model: str, prompt: str, slots: list[Slot], used_names: set[str]) -> tuple[list[dict], int, int]:
+def _generate_batch(
+    client: OpenAI, model: str, prompt: str, slots: list[Slot], used_names: set[str], used_subtopics: set[str] | None = None
+) -> tuple[list[dict], int, int]:
     """배치 하나를 생성하고 검증한다. 위반이면 MAX_ATTEMPTS번까지 다시 시도하며 토큰은 시도마다 합산한다."""
     in_tokens = out_tokens = 0
     last_errors: list[str] = []
@@ -191,7 +207,7 @@ def _generate_batch(client: OpenAI, model: str, prompt: str, slots: list[Slot], 
         in_tokens += response.usage.prompt_tokens
         out_tokens += response.usage.completion_tokens
         items = json.loads(response.choices[0].message.content)["creators"]
-        last_errors = validate_batch(items, slots, used_names)
+        last_errors = validate_batch(items, slots, used_names, used_subtopics)
         if not last_errors:
             return items, in_tokens, out_tokens
     if all(error.startswith(SOFT_PREFIX) for error in last_errors):
@@ -239,16 +255,19 @@ def main() -> None:
     next_id = 1
     for category in categories:
         avoid: list[str] = []
+        used_subtopics: set[str] = set()
         for batch in range(BATCHES_PER_CATEGORY):
             slots = build_slots(category.code, batch)
             cache_path = cache_dir / f"{category.code}_{batch}.json"
             if cache_path.exists():
                 items = json.loads(cache_path.read_text(encoding="utf-8"))["items"]
-                if validate_batch(items, slots, used_names):
-                    raise ValueError(f"{cache_path.name} 캐시가 현재 검증 규칙을 통과하지 못합니다. 지우고 다시 만드세요.")
+                # 최초 생성과 같은 기준: 길이(소프트) 위반은 허용하고 그 외 위반만 거부한다
+                errors = [e for e in validate_batch(items, slots, used_names, used_subtopics) if not e.startswith(SOFT_PREFIX)]
+                if errors:
+                    raise ValueError(f"{cache_path.name} 캐시가 현재 검증 규칙을 통과하지 못합니다({errors}). 지우고 다시 만드세요.")
             else:
                 prompt = build_prompt(by_code, slots, avoid)
-                items, in_tokens, out_tokens = _generate_batch(client, args.model, prompt, slots, used_names)
+                items, in_tokens, out_tokens = _generate_batch(client, args.model, prompt, slots, used_names, used_subtopics)
                 total_in += in_tokens
                 total_out += out_tokens
                 cache_path.write_text(json.dumps({"model": args.model, "items": items}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -256,6 +275,7 @@ def main() -> None:
             for item, slot in zip(items, slots):
                 rows.append(to_csv_row(f"L{next_id:03d}", item, slot))
                 used_names.add(item["name"].strip())
+                used_subtopics.add(_norm_subtopic(item["subtopic"]))
                 avoid.append(f"{item['name'].strip()}({item['subtopic'].strip()})")
                 next_id += 1
     write_csv(rows, CREATORS_LARGE_CSV)
