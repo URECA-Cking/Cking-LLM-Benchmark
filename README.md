@@ -453,4 +453,4 @@ python3 -m src.real_eval candidates && python3 -m src.real_eval judge-sheet && p
 python3 -m src.real_eval human-sheet   # 사람이 채운 뒤 human-agree, 마지막에 score
 ```
 
-데이터 폴더 구조, 단계별 설명, **결과를 보기 전에 정한 판정 기준**(M4 − M3 ≥ +0.05이고 95% 구간이 0을 넘지 않을 때만 M4 채택), 비용 추정, 해석 주의는 [`docs/real-data-eval.md`](docs/real-data-eval.md)에 있습니다. 이 도구는 API 비용이 들고(`tag-llm`·`auto-judge` 합쳐 대략 $2~3 추정) 기존 `pipeline` 결과와 테스트에는 영향을 주지 않습니다.
+데이터 폴더 구조, 단계별 설명, **결과를 보기 전에 정한 판정 기준**(M4 − M3 ≥ +0.05이고 95% 구간의 하한이 0보다 클 때만 M4 채택), 비용 추정, 해석 주의는 [`docs/real-data-eval.md`](docs/real-data-eval.md)에 있습니다. 이 도구는 API 비용이 들고(`tag-llm`·`auto-judge` 합쳐 대략 $2~3 추정) 기존 `pipeline` 결과와 테스트에는 영향을 주지 않습니다.
