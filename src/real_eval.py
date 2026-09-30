@@ -749,6 +749,13 @@ def cmd_select_params(args: argparse.Namespace) -> None:
     print(f"   쿼리: 일반 {len(queries['regular'])}개, 짧은 소개글 {len(queries['short'])}개")
 
 
+def _candidates_fingerprint() -> str:
+    """후보를 만드는 데 쓴 입력의 지문이다: 선택 파라미터(tau·bonus·쿼리), 임베딩 입력 해시, LLM 태그, 저장 후보 수."""
+    saved_embedding = np.load(REAL_DIR / "embed.npz", allow_pickle=False)
+    dump = lambda obj: json.dumps(obj, sort_keys=True, ensure_ascii=False)
+    return _hash(dump(_read_json("params.json")), str(saved_embedding["input_hash"]), dump(_read_json("tags_llm.json")), str(REAL_STORE_K))
+
+
 def cmd_candidates(args: argparse.Namespace) -> None:
     """쿼리별 M2·M3·M4 상위 후보를 계산해 results/real/candidates.json에 저장한다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
@@ -757,6 +764,7 @@ def cmd_candidates(args: argparse.Namespace) -> None:
     query_ids = params["queries"]["regular"] + params["queries"]["short"]
     candidates = compute_candidates(data.pool, vectors, category_vectors, data.codes, params, _llm_tags(data), query_ids, REAL_STORE_K)
     _write_json("candidates.json", candidates)
+    _write_json("candidates_meta.json", {"fingerprint": _candidates_fingerprint()})
     print(f"[candidates] 쿼리 {len(query_ids)}개 x 방식 {len(METHODS)}종 저장 완료")
 
 
@@ -769,7 +777,9 @@ def cmd_judge_sheet(args: argparse.Namespace) -> None:
 
 
 def _assert_pairs_in_sync() -> None:
-    """저장된 pairs.json(쌍과 뽑은 방식)이 현재 candidates.json에서 다시 만든 것과 같은지 확인한다. 후보를 다시 만들고 judge-sheet를 건너뛰면 옛 출처로 채점·보정이 계산되기 때문이다."""
+    """후보가 현재 입력(파라미터·임베딩·LLM 태그)으로 만든 것이고, 저장된 pairs.json(쌍과 뽑은 방식)이 그 후보에서 다시 만든 것과 같은지 확인한다. 후보를 다시 만들고 judge-sheet를 건너뛰면 옛 출처로 채점·보정이 계산되기 때문이다."""
+    if _read_json("candidates_meta.json", default={}).get("fingerprint") != _candidates_fingerprint():
+        raise RuntimeError("candidates.json이 현재 파라미터·임베딩·LLM 태그로 만든 것이 아닙니다(또는 지문이 없습니다). `candidates`와 `judge-sheet`를 다시 실행하세요.")
     saved = _read_json("pairs.json")
     pairs, provenance = build_pairs(_read_json("candidates.json"), REAL_TOP_K)
     if [list(p) for p in saved["pairs"]] != [list(p) for p in pairs] or saved["provenance"] != provenance:

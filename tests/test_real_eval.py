@@ -1144,3 +1144,28 @@ def test_freshness_pairs_provenance_must_match_current_candidates(tmp_path, monk
         re_.cmd_human_agree(args)
     re_.cmd_judge_sheet(args)  # 다시 만들면 통과
     re_.cmd_score(args)
+
+
+def test_freshness_candidates_must_match_current_params_embeddings_and_tags(tmp_path, monkeypatch):
+    """bonus·tau가 바뀌었는데 candidates를 다시 만들지 않았다면 옛 후보로 채점하지 않는다."""
+    args, _ = _run_flow(tmp_path, monkeypatch)
+    re_.cmd_score(args)  # 그대로면 통과
+    path = tmp_path / "real" / "params.json"
+    params = json.loads(path.read_text(encoding="utf-8"))
+    params["bonus_m4"] = params["bonus_m4"] + 0.25
+    path.write_text(json.dumps(params), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="candidates"):
+        re_.cmd_score(args)
+    with pytest.raises(RuntimeError, match="candidates"):
+        re_.cmd_human_agree(args)
+    re_.cmd_candidates(args)  # 후보를 다시 만들면 지문은 맞지만, 쌍·출처가 달라졌다면 judge-sheet를 요구한다
+    re_.cmd_judge_sheet(args)
+    re_.cmd_auto_judge(args)
+    re_.cmd_score(args)
+
+
+def test_freshness_candidates_without_fingerprint_are_rejected(tmp_path, monkeypatch):
+    args, _ = _run_flow(tmp_path, monkeypatch)
+    (tmp_path / "real" / "candidates_meta.json").unlink()
+    with pytest.raises(RuntimeError, match="candidates"):
+        re_.cmd_score(args)
