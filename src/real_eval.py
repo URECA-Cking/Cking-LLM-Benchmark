@@ -544,6 +544,12 @@ def adjusted_judgments(
     return adjusted
 
 
+def _m4_direction(group: str) -> int:
+    """이 조합의 긍정률이 커질 때 M4 − M3가 커지면 +1(M4만·M2+M4), 작아지면 -1(M3만·M2+M3)이다."""
+    parts = group.split("+")
+    return 1 if "M4" in parts and "M3" not in parts else -1 if "M3" in parts and "M4" not in parts else 0
+
+
 def calibrated_summary(
     candidates: dict[str, dict[str, list]],
     auto: dict[str, int],
@@ -553,7 +559,7 @@ def calibrated_summary(
     k: int,
     min_gain: float = REAL_MIN_GAIN,
 ) -> dict:
-    """사람 채점으로 보정한 정밀도@k와 M4 − M3를 계산하고, offset이 표준오차만큼 틀렸을 때(M4에 가장 유리·불리한 경우)의 평균 차이도 함께 돌려준다."""
+    """사람 채점으로 보정한 정밀도@k와 M4 − M3를 계산하고, 보정한 모든 조합의 긍정률이 표준오차만큼 M4에 유리하게·불리하게 틀렸을 때의 평균 차이도 함께 돌려준다."""
     offsets = group_offsets(human, auto, provenance)
 
     def summary(shift):
@@ -568,9 +574,8 @@ def calibrated_summary(
     for group in offsets:
         keys = [k for k in provenance if group_of(provenance[k]) == group]
         applied[group] = {"n": len(keys), "auto_positive": sum(auto[k] for k in keys) / len(keys), "applied_positive": sum(adjusted[k] for k in keys) / len(keys)}
-    se4, se3 = offsets.get("M4", {}).get("se", 0.0), offsets.get("M3", {}).get("se", 0.0)
-    favorable = summary({"M4": se4, "M3": -se3})["groups"]["regular"]["m4_minus_m3"]["mean"]
-    unfavorable = summary({"M4": -se4, "M3": se3})["groups"]["regular"]["m4_minus_m3"]["mean"]
+    favorable = summary({g: _m4_direction(g) * o["se"] for g, o in offsets.items()})["groups"]["regular"]["m4_minus_m3"]["mean"]
+    unfavorable = summary({g: -_m4_direction(g) * o["se"] for g, o in offsets.items()})["groups"]["regular"]["m4_minus_m3"]["mean"]
     return {
         "offsets": offsets,
         "applied": applied,
@@ -594,17 +599,23 @@ def mix_judgments(auto: dict[str, int], rejudged: dict[str, int]) -> dict[str, i
     return {k: rejudged.get(k, v) for k, v in auto.items()}
 
 
-def agreement_fingerprint(pair_ids: list[str], judgments: dict[str, dict]) -> str:
-    """사람(또는 2차) 채점과 비교한 LLM 판정 입력의 지문이다. 쌍 목록, 각 쌍의 판정 점수, 텍스트 해시가 하나라도 바뀌면 달라진다."""
-    return _hash(*[f"{k}:{judgments[k]['score']}:{judgments[k]['hash']}" for k in sorted(pair_ids)])
+def agreement_fingerprint(pair_ids: list[str], judgments: dict[str, dict], provenance: dict[str, list[str]]) -> str:
+    """일치율을 계산한 입력의 지문이다. 채점 표본뿐 아니라 전체 평가 쌍(판정 점수·텍스트 해시)과 모든 쌍의 뽑은 방식 조합(provenance)을 함께 해시한다.
+
+    표본은 그대로여도 후보 집합이나 표본 밖 판정, 어느 방식이 뽑았는지가 바뀌면 조합별 긍정률과 채택 결과가 달라지므로 이전 일치율을 재사용하면 안 된다.
+    """
+    sample = _hash(*[f"{k}:{judgments[k]['score']}:{judgments[k]['hash']}" for k in sorted(pair_ids)])
+    universe = _hash(*[f"{k}:{v['score']}:{v['hash']}" for k, v in sorted(judgments.items())])
+    origin = _hash(*[f"{k}:{group_of(v)}" for k, v in sorted(provenance.items())])
+    return _hash(sample, universe, origin)
 
 
-def agreement_is_current(agree: dict, judgments: dict[str, dict]) -> bool:
-    """저장된 일치율 결과가 현재 판정·후보 쌍·텍스트에서 계산된 것인지 확인한다. 옛 결과가 새 실험에 붙는 것을 막는다."""
+def agreement_is_current(agree: dict, judgments: dict[str, dict], provenance: dict[str, list[str]]) -> bool:
+    """저장된 일치율 결과가 현재 평가 쌍 전체·판정·후보 출처와 같은 입력에서 계산된 것인지 확인한다. 옛 결과가 새 실험에 붙는 것을 막는다."""
     ids = list(agree.get("human", {}))
     if not agree or not ids or any(k not in judgments for k in ids):
         return False
-    return agree.get("fingerprint") == agreement_fingerprint(ids, judgments)
+    return agree.get("fingerprint") == agreement_fingerprint(ids, judgments, provenance)
 
 
 def adoption_status(agree: dict) -> str:
@@ -829,9 +840,10 @@ def cmd_human_agree(args: argparse.Namespace) -> None:
     stats = agreement_stats(human, auto)
     stats["source"] = args.source  # human=사람 채점, claude=다른 모델의 2차 판정(독립성이 약함)
     stats["passed"] = stats["agree_rate"] >= REAL_HUMAN_AGREE_MIN
-    stats["groups"] = group_offsets(human, auto, _read_json("pairs.json")["provenance"])
+    provenance = _read_json("pairs.json")["provenance"]
+    stats["groups"] = group_offsets(human, auto, provenance)
     stats["human"] = human
-    stats["fingerprint"] = agreement_fingerprint(list(human), judgments)
+    stats["fingerprint"] = agreement_fingerprint(list(human), judgments, provenance)
     _write_json(result_name, stats)
     print(f"[human-agree] {stats['n']}쌍 일치율 {stats['agree_rate']:.2f}, kappa {stats['kappa']:.2f}, 채점 긍정 {stats['human_positive_rate']:.2f} / LLM 긍정 {stats['auto_positive_rate']:.2f}")
     print(f"   기준 {REAL_HUMAN_AGREE_MIN:.2f}: {'통과' if stats['passed'] else '미달 — 판정 기준을 고치고 사람 채점을 늘린 뒤 다시 판정하세요'} (채점 출처: {args.source})")
@@ -862,7 +874,7 @@ def cmd_rejudge(args: argparse.Namespace) -> None:
 def _current_agreement(name: str, judgments: dict[str, dict], label: str) -> dict:
     """저장된 일치율 결과를 읽어 현재 판정과 맞는 것만 돌려준다. 다른 입력에서 계산된 옛 결과면 경고하고 없는 것으로 다룬다."""
     saved = _read_json(name, default={})
-    if saved and not agreement_is_current(saved, judgments):
+    if saved and not agreement_is_current(saved, judgments, _read_json("pairs.json")["provenance"]):
         print(f"주의: 저장된 {label} 일치율 결과가 현재 판정·후보 쌍과 다른 입력에서 계산됐습니다. 무시합니다. `human-agree`를 다시 실행하세요.")
         return {}
     return saved
@@ -935,7 +947,7 @@ def cmd_score(args: argparse.Namespace) -> None:
             o, ap = calibrated["offsets"][group], calibrated["applied"][group]
             print(f"   {group:6s} 표본 {o['n']}쌍: 채점 긍정 {o['human_positive']:.2f} / LLM 긍정 {o['auto_positive']:.2f} → 조합 전체({ap['n']}쌍)에 적용한 긍정률 {ap['applied_positive']:.2f} (LLM {ap['auto_positive']:.2f})")
         _print_groups(calibrated["summary"])
-        print(f"   조합별 긍정률이 표준오차만큼 틀린다면 일반 M4 − M3는 {calibrated['m4_minus_m3_if_m4_unfavorable']:+.3f} ~ {calibrated['m4_minus_m3_if_m4_favorable']:+.3f}")
+        print(f"   보정한 모든 조합의 긍정률이 표준오차만큼 M4에 불리·유리하게 틀린다면 일반 M4 − M3는 {calibrated['m4_minus_m3_if_m4_unfavorable']:+.3f} ~ {calibrated['m4_minus_m3_if_m4_favorable']:+.3f}")
         print(f"   보정 후 사전 기준 적용 시 채택: {calibrated['summary']['adopted']} (참고: 사전 기준의 공식 결정은 위 LLM 판정 기준)")
         if targeted["source"] != "human":
             print(f"   주의: 이 보정은 사람 채점이 아니라 '{targeted['source']}'의 2차 판정으로 계산했습니다.")

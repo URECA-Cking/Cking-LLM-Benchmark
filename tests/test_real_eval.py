@@ -818,15 +818,38 @@ def test_rejudge_stage_and_score_rejudged_flow(tmp_path, monkeypatch, capsys):
 # ---- 리뷰 반영: 일치율 지문 · 잠정/확정 · 재판정 검증 ------------------------------------------------------------------
 
 
+PROV = {"q::a": ["M2", "M3", "M4"], "q::b": ["M4"]}
+
+
 def test_agreement_is_current_detects_changed_judgments_texts_and_missing_fingerprint():
-    judg = {"q::a": {"score": 1, "hash": "h"}}
-    agree = {"human": {"q::a": 1}, "fingerprint": re_.agreement_fingerprint(["q::a"], judg)}
-    assert re_.agreement_is_current(agree, judg)
-    assert not re_.agreement_is_current(agree, {"q::a": {"score": 0, "hash": "h"}})  # LLM 판정이 바뀜
-    assert not re_.agreement_is_current(agree, {"q::a": {"score": 1, "hash": "h2"}})  # 텍스트가 바뀜
-    assert not re_.agreement_is_current(agree, {})  # 그 쌍이 더는 없음
-    assert not re_.agreement_is_current({"human": {"q::a": 1}}, judg)  # 지문이 없는 옛 결과
-    assert not re_.agreement_is_current({}, judg)
+    judg = {"q::a": {"score": 1, "hash": "h"}, "q::b": {"score": 0, "hash": "hb"}}
+    agree = {"human": {"q::a": 1}, "fingerprint": re_.agreement_fingerprint(["q::a"], judg, PROV)}
+    assert re_.agreement_is_current(agree, judg, PROV)
+    assert not re_.agreement_is_current(agree, {**judg, "q::a": {"score": 0, "hash": "h"}}, PROV)  # 표본 쌍의 LLM 판정이 바뀜
+    assert not re_.agreement_is_current(agree, {**judg, "q::a": {"score": 1, "hash": "h2"}}, PROV)  # 표본 쌍의 텍스트가 바뀜
+    assert not re_.agreement_is_current(agree, {"q::b": judg["q::b"]}, PROV)  # 표본 쌍이 더는 없음
+    assert not re_.agreement_is_current({"human": {"q::a": 1}}, judg, PROV)  # 지문이 없는 옛 결과
+    assert not re_.agreement_is_current({}, judg, PROV)
+
+
+def test_agreement_is_stale_when_the_evaluation_set_or_provenance_changes_but_the_sample_does_not():
+    """채점 표본은 그대로여도 전체 평가 쌍이나 어느 방식이 뽑았는지가 바뀌면 이전 일치율·확정 상태를 재사용하면 안 된다."""
+    judg = {"q::a": {"score": 1, "hash": "h"}, "q::b": {"score": 0, "hash": "hb"}}
+    agree = {"human": {"q::a": 1}, "fingerprint": re_.agreement_fingerprint(["q::a"], judg, PROV)}
+    assert not re_.agreement_is_current(agree, {**judg, "q::new": {"score": 1, "hash": "hn"}}, {**PROV, "q::new": ["M4"]})  # 새 후보 쌍 추가
+    assert not re_.agreement_is_current(agree, {**judg, "q::b": {"score": 1, "hash": "hb"}}, PROV)  # 표본 밖 쌍의 판정이 바뀜
+    assert not re_.agreement_is_current(agree, {**judg, "q::b": {"score": 0, "hash": "다른-텍스트"}}, PROV)  # 표본 밖 쌍의 텍스트가 바뀜
+    assert not re_.agreement_is_current(agree, judg, {**PROV, "q::b": ["M3"]})  # 같은 쌍인데 뽑은 방식이 바뀜
+    assert not re_.agreement_is_current(agree, judg, {**PROV, "q::extra": ["M3"]})  # 판정은 없고 후보 출처만 늘어남
+
+
+def test_agreement_is_stale_when_the_stored_sample_differs_from_the_fingerprinted_sample():
+    """일치율 파일의 채점 표본이 지문을 만든 표본과 다르면(파일이 편집되거나 다른 표본에서 계산됨) 무효다."""
+    judg = {"q::a": {"score": 1, "hash": "h"}, "q::b": {"score": 0, "hash": "hb"}}
+    agree = {"human": {"q::a": 1, "q::b": 0}, "fingerprint": re_.agreement_fingerprint(["q::a", "q::b"], judg, PROV)}
+    assert re_.agreement_is_current(agree, judg, PROV)
+    assert not re_.agreement_is_current({**agree, "human": {"q::a": 1}}, judg, PROV)  # 표본에서 한 쌍이 빠짐
+    assert not re_.agreement_is_current({**agree, "human": {"q::b": 0}}, judg, PROV)  # 다른 쌍으로 바뀜
 
 
 def test_adoption_status_is_confirmed_only_when_a_human_check_passed():
@@ -844,7 +867,7 @@ def _score_fixture(tmp_path, agree_fingerprint_ok: bool, source: str = "human"):
     write("judgments.json", judg)
     write("params.json", {"queries": {"regular": ["q"], "short": []}})
     write("pairs.json", {"pairs": [["q", "a"]], "provenance": {"q::a": ["M2", "M3", "M4"]}})
-    fingerprint = re_.agreement_fingerprint(["q::a"], judg) if agree_fingerprint_ok else "옛-지문"
+    fingerprint = re_.agreement_fingerprint(["q::a"], judg, {"q::a": ["M2", "M3", "M4"]}) if agree_fingerprint_ok else "옛-지문"
     write("human_agree.json", {"source": source, "passed": True, "human": {"q::a": 1}, "fingerprint": fingerprint})
 
 
@@ -912,3 +935,59 @@ def test_read_filled_sheets_merges_multiple_files_and_rejects_conflicts_and_blan
         re_._read_filled_sheets([a, sheet("c.csv", [["q::2", "x", "y", "1", ""]])])
     with pytest.raises(ValueError, match="비었거나"):
         re_._read_filled_sheets([sheet("d.csv", [["q::9", "x", "y", "", ""]])])
+
+
+def test_score_does_not_carry_confirmed_status_to_an_extended_candidate_set(tmp_path, monkeypatch, capsys):
+    """표본은 그대로 두고 평가 쌍만 늘려도(후보 집합이 바뀜) 이전의 확정 상태가 붙으면 안 된다."""
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
+    _score_fixture(tmp_path, agree_fingerprint_ok=True)
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "확정"
+    judg = json.loads((tmp_path / "judgments.json").read_text(encoding="utf-8"))
+    pairs = json.loads((tmp_path / "pairs.json").read_text(encoding="utf-8"))
+    judg["q::z"] = {"score": 1, "hash": "hz"}
+    pairs["provenance"]["q::z"] = ["M4"]
+    (tmp_path / "judgments.json").write_text(json.dumps(judg), encoding="utf-8")
+    (tmp_path / "pairs.json").write_text(json.dumps(pairs), encoding="utf-8")
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "잠정"
+    assert "다른 입력에서 계산됐습니다" in capsys.readouterr().out
+
+
+def _four_group_fixture():
+    """모든 쿼리가 M4만·M2+M4·M3만·M2+M3 후보를 하나씩 가지고, 앞 절반은 조합마다 1/0이 섞이게 채점된 데이터를 만든다."""
+    queries = [f"r{i}" for i in range(20)]
+    candidates, auto, human, prov = {m: {} for m in re_.METHODS}, {}, {}, {}
+    for i, q in enumerate(queries):
+        ids = {"M4": f"a-{q}", "M2+M4": f"b-{q}", "M3": f"c-{q}", "M2+M3": f"d-{q}"}
+        candidates["M2"][q] = [(ids["M2+M3"], 1.0), (ids["M2+M4"], 1.0)]
+        candidates["M3"][q] = [(ids["M3"], 1.0), (ids["M2+M3"], 1.0)]
+        candidates["M4"][q] = [(ids["M4"], 1.0), (ids["M2+M4"], 1.0)]
+        for group, cid in ids.items():
+            key = f"{q}::{cid}"
+            auto[key], prov[key] = 0, group.split("+")
+            if i < 10:
+                human[key] = i % 2  # 조합마다 채점이 엇갈려 표준오차가 0보다 크다
+    return candidates, auto, human, prov, {"regular": queries, "short": []}
+
+
+def test_sensitivity_range_moves_every_calibrated_group_not_only_m4_and_m3():
+    candidates, auto, human, prov, groups = _four_group_fixture()
+    result = re_.calibrated_summary(candidates, auto, human, prov, groups, k=2)
+    offsets = result["offsets"]
+    assert all(offsets[g]["se"] > 0 for g in ("M4", "M2+M4", "M3", "M2+M3"))
+    sign = {"M4": 1, "M2+M4": 1, "M3": -1, "M2+M3": -1}
+
+    def mean_diff(shift):
+        adjusted = re_.adjusted_judgments(auto, human, prov, offsets, shift)
+        summary = re_.summarize_scores(candidates, {tuple(k.split("::")): v for k, v in adjusted.items()}, groups, k=2)
+        return summary["groups"]["regular"]["m4_minus_m3"]["mean"]
+
+    assert result["m4_minus_m3_if_m4_favorable"] == pytest.approx(mean_diff({g: sign[g] * offsets[g]["se"] for g in sign}))
+    assert result["m4_minus_m3_if_m4_unfavorable"] == pytest.approx(mean_diff({g: -sign[g] * offsets[g]["se"] for g in sign}))
+    only_two = mean_diff({"M4": offsets["M4"]["se"], "M3": -offsets["M3"]["se"]})
+    assert result["m4_minus_m3_if_m4_favorable"] > only_two  # M2+M4·M2+M3까지 움직이면 범위가 더 넓다
+
+
+def test_m4_direction_signs():
+    assert [re_._m4_direction(g) for g in ("M4", "M2+M4", "M3", "M2+M3", "M3+M4", "M2")] == [1, 1, -1, -1, 0, 0]
