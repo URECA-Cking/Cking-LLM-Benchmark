@@ -62,9 +62,11 @@
 
 **v3 정답.** 위 규칙을 적용해 8개 라벨을 바꾼 정답을 만들었다(정답 채널 수는 532개로 같음). 나머지 변경·제외 제안은 아직 결정하지 않았다.
 
-**v3로 다시 실행하는 법.** 정답 파일은 데이터 폴더의 `labels/gold_v2.csv`를 읽는다. v3 파일을 그 이름으로 둔 데이터 폴더 사본(나머지는 원본으로 연결)을 만들고, 산출물 폴더는 `REAL_RESULTS_DIR`로 나눠 기존 결과를 덮어쓰지 않는다. 임베딩·LLM 태그·판정·재판정 캐시를 새 폴더에 복사해 두면 새로 필요한 쌍만 호출한다.
+**v3로 다시 실행하는 법.** 정답 파일은 데이터 폴더의 `labels/gold_v2.csv`를 읽는다. v3 파일을 그 이름으로 둔 데이터 폴더 사본(나머지는 원본으로 연결)을 만들고, 산출물 폴더는 `REAL_RESULTS_DIR`로 나눠 기존 결과를 덮어쓰지 않는다. **새 산출물 폴더는 비어 있으므로 `select-params`는 `embed.npz`와 `tags_llm.json`이 있어야 시작한다.** 소개글이 같으니 기존 캐시를 복사(필수)하고 `embed`·`tag-llm`을 실행해 캐시가 현재 데이터와 맞는지 확인한다(맞으면 호출 없이 끝난다). 캐시를 복사하지 않으면 두 단계가 처음부터 실행돼 시간과 비용이 든다(LLM 태깅 약 $1~2). 판정·재판정 캐시(`judgments*.json`)는 복사하면 새로 필요한 쌍만 호출하고, 복사하지 않아도 동작하지만 전체를 다시 판정한다.
 ```bash
 export REAL_DATA_DIR=<v3 정답을 gold_v2.csv로 둔 데이터 폴더 사본> REAL_RESULTS_DIR=results/real_v3
+mkdir -p results/real_v3 && cp results/real/{embed.npz,tags_llm.json,judgments.json,judgments_rejudge.json} results/real_v3/
+python3 -m src.real_eval embed && python3 -m src.real_eval tag-llm            # 캐시 검증(복사했다면 호출 없음)
 python3 -m src.real_eval select-params && python3 -m src.real_eval candidates && python3 -m src.real_eval judge-sheet
 python3 -m src.real_eval auto-judge && python3 -m src.real_eval rejudge && python3 -m src.real_eval score --rejudged
 ```
