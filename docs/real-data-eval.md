@@ -1,6 +1,6 @@
 # 실제 크리에이터 데이터로 M2·M3·M4 비교
 
-합성 100명 결과([`embedding-method-selection.md`](embedding-method-selection.md))가 실제 소개글에서도 유지되는지 확인하는 실행 도구(`src/real_eval.py`, 이슈 [#28](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/28))의 사용법과 사전 판정 기준이다. 실행 결과는 아래 [실행 결과](#실행-결과-2026-09-30) 절에 있다(이슈 [#14](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/14)). **사람 채점 확인은 하지 않았다.**
+합성 100명 결과([`embedding-method-selection.md`](embedding-method-selection.md))가 실제 소개글에서도 유지되는지 확인하는 실행 도구(`src/real_eval.py`, 이슈 [#28](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/28))의 사용법과 사전 판정 기준이다. 실행 결과는 아래 [실행 결과](#실행-결과-2026-09-30) 절에 있다(이슈 [#14](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/14)). **사람이 결정을 가르는 150쌍을 채점했고 일치율은 0.75로 사전 게이트(0.80)에 못 미쳤다(자세한 내용은 결과 절).**
 
 ## 왜 별도 도구인가
 기존 `pipeline`은 합성 100명에 묶여 있다(데이터 해시 고정, 정확히 100명, 특정 ID 기반 대표 사례). 실데이터는 규모·분야 수·라벨 체계가 달라서 `similarity`·`tagging`·`metrics`·`judge`·`clients`는 재사용하고 실행 흐름만 새로 두었다. 기존 결과와 테스트는 바뀌지 않는다.
@@ -61,7 +61,7 @@ python3 -m src.real_eval rejudge                          # 722쌍을 더 큰 �
 python3 -m src.real_eval score --rejudged                 # 재판정 결과로 M4 − M3
 ```
 - **보정 방식.** 채점하지 않은 쌍의 점수를, 같은 방식 조합에서 LLM이 같은 판정(0/1)을 낸 표본 쌍에 사람이 준 긍정률로 바꾼다. 표본을 뽑지 않은 조합은 보정하지 않고, `score`가 보정 범위와 "조합 전체에 적용한 긍정률"을 함께 출력해 표본의 채점 긍정률과 어긋나지 않는지 볼 수 있다. (처음에는 이진 판정에 offset을 더하고 0~1로 잘라서, 이미 1인 쌍이 올라가지 못해 보고한 offset보다 적게 반영됐다. 리뷰에서 지적돼 고쳤다.)
-- 보정한 **모든 조합**(M4만·M3만·M2+M4·M2+M3)의 긍정률이 각자 표준오차만큼 M4에 유리하게, 또는 불리하게 동시에 틀릴 때의 M4 − M3 범위도 함께 나온다(M4가 뽑은 조합은 +, M3가 뽑은 조합은 −). 이 범위는 조합별 긍정률의 불확실성만 반영하고, 표본 채점자가 사람이 아닌 점은 반영하지 않는다.
+- 보정한 **모든 조합**(M4만·M3만·M2+M4·M2+M3)의 긍정률이 각자 표준오차만큼 M4에 유리하게, 또는 불리하게 동시에 틀릴 때의 M4 − M3 범위도 함께 나온다(M4가 뽑은 조합은 +, M3가 뽑은 조합은 −). 이 범위는 조합별 긍정률의 불확실성만 반영하고, 채점자가 한 명이라는 점(채점자 간 차이)이나 채점자의 기대가 미친 영향은 반영하지 않는다.
 - `--source`로 채점 출처를 남긴다. 사람이 아니면(`claude`) `score`가 독립성이 약하다고 경고한다.
 
 ## 실행 결과 (2026-09-30)
