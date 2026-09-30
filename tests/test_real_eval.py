@@ -564,6 +564,7 @@ def test_score_refuses_when_judgments_are_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
     (tmp_path / "candidates.json").write_text(json.dumps({m: {"q": [["a", 1.0]]} for m in re_.METHODS}), encoding="utf-8")
     (tmp_path / "judgments.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "pairs.json").write_text(json.dumps({"pairs": [["q", "a"]], "provenance": {"q::a": ["M2", "M3", "M4"]}}), encoding="utf-8")
     (tmp_path / "params.json").write_text(json.dumps({"queries": {"regular": ["q"], "short": []}}), encoding="utf-8")
     with pytest.raises(RuntimeError, match="판정이 없는 쌍"):
         re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
@@ -991,3 +992,15 @@ def test_sensitivity_range_moves_every_calibrated_group_not_only_m4_and_m3():
 
 def test_m4_direction_signs():
     assert [re_._m4_direction(g) for g in ("M4", "M2+M4", "M3", "M2+M3", "M3+M4", "M2")] == [1, 1, -1, -1, 0, 0]
+
+
+def test_stale_cached_judgments_are_ignored_by_sheet_score_and_agreement(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
+    _score_fixture(tmp_path, agree_fingerprint_ok=True)
+    judg = json.loads((tmp_path / "judgments.json").read_text(encoding="utf-8"))
+    judg["옛질의::옛후보"] = {"score": 1, "hash": "옛"}  # 후보를 다시 만들기 전에 캐시된 쌍
+    (tmp_path / "judgments.json").write_text(json.dumps(judg), encoding="utf-8")
+    assert set(re_._current_judgments()) == {"q::a"}
+    # 옛 쌍이 있어도 현재 판정만으로 만든 일치율 지문과 같아 확정이 유지된다
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "확정"

@@ -764,6 +764,12 @@ def _text_of(data: RealData) -> dict[str, str]:
     return {c.id: c.text() for c in data.pool}
 
 
+def _current_judgments() -> dict[str, dict]:
+    """저장된 판정 중 현재 pairs.json의 쌍만 돌려준다. 후보를 다시 만들면 캐시에 남은 옛 쌍이 표본·점수·지문에 섞이지 않게 한다."""
+    current = {"::".join(pair) for pair in _read_json("pairs.json")["pairs"]}
+    return {k: v for k, v in _read_json("judgments.json").items() if k in current}
+
+
 def cmd_auto_judge(args: argparse.Namespace) -> None:
     """쌍을 LLM으로 "추천에 넣을 만한가"(0/1) 자동 판정해 results/real/judgments.json에 저장한다. 끊겨도 이어서 한다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
@@ -781,8 +787,9 @@ def cmd_auto_judge(args: argparse.Namespace) -> None:
         min_interval=REAL_JUDGE_MIN_INTERVAL,
     )
     _write_json("judgments.json", saved)
-    positive = sum(v["score"] for v in saved.values()) / len(saved)
-    print(f"[auto-judge] 완료: {len(saved)}쌍, '추천에 넣을 만함' 비율 {positive:.1%}")
+    current = _current_judgments()
+    positive = sum(v["score"] for v in current.values()) / len(current)
+    print(f"[auto-judge] 완료: {len(current)}쌍, '추천에 넣을 만함' 비율 {positive:.1%}")
 
 
 def _human_paths(targeted: bool) -> tuple[str, str]:
@@ -793,7 +800,7 @@ def _human_paths(targeted: bool) -> tuple[str, str]:
 def cmd_human_sheet(args: argparse.Namespace) -> None:
     """채점용 CSV를 만든다. 기본은 LLM이 판정한 쌍 중 무작위 표본이고, --targeted는 M3·M4 결과를 가르는 쌍을 조합별(M4만·M3만·M2+M4·M2+M3, --groups로 일부만)로 뽑은 표본이다. LLM 점수는 보여주지 않는다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
-    judgments = _read_json("judgments.json")
+    judgments = _current_judgments()
     if args.targeted:
         groups = tuple(args.groups.split(",")) if args.groups else TARGETED_GROUPS
         unknown = set(groups) - set(TARGETED_GROUPS)
@@ -835,7 +842,7 @@ def cmd_human_agree(args: argparse.Namespace) -> None:
     sheet_name, result_name = _human_paths(args.targeted)
     files = [Path(f) for f in args.file.split(",")] if args.file else [REAL_DIR / sheet_name]
     human = _read_filled_sheets(files)
-    judgments = _read_json("judgments.json")
+    judgments = _current_judgments()
     auto = {k: v["score"] for k, v in judgments.items()}
     stats = agreement_stats(human, auto)
     stats["source"] = args.source  # human=사람 채점, claude=다른 모델의 2차 판정(독립성이 약함)
@@ -887,7 +894,7 @@ def cmd_score(args: argparse.Namespace) -> None:
     --rejudged는 다른 쌍의 재판정 결과, --calibrated는 결정을 가르는 쌍의 채점으로 보정한 결과도 함께 낸다.
     """
     candidates = _read_json("candidates.json")
-    judgments = _read_json("judgments.json")
+    judgments = _current_judgments()
     params = _read_json("params.json")
     judged = {tuple(k.split("::")): v["score"] for k, v in judgments.items()}
     needed, _ = build_pairs(candidates, REAL_TOP_K)
