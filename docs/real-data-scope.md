@@ -56,7 +56,7 @@
 
 **이미 받아 둔 데이터.** `raw/channels_raw.csv`, `raw/channels_more.csv`(5,128채널)에 `keywords`(2,875채널), `country`, `uploads_playlist`가 있다. 평가 풀 4,743채널 중 `keywords`가 있는 채널은 2,681개이고, 소개글이 짧은 채널 957개 중에서는 236개(25%)뿐이라 `keywords`만으로는 짧은 소개글 문제가 크게 줄지 않는다. 데이터 수집 폴더(`youtube-collect/`, **이 저장소 밖**)의 `scripts/build_pool_extra.py`가 이를 `raw/pool_extra.csv`(channel_id, country, keywords)로 만든다(API 호출 없음). 2026-09-30에 실행해 4,743채널(keywords 있음 2,681)이 나오는 것을 확인했다.
 
-**새로 받을 데이터.** 같은 폴더의 `scripts/collect_videos.py`가 채널별 최근 영상 20개의 제목·설명을 `raw/videos.jsonl`에 모은다(`playlistItems.list`, 채널당 1 quota, 전체 약 4,743). 원문은 로컬 전용이다. **이 스크립트는 아직 실행하지 않았다**(API 키 필요). 두 스크립트와 그 결과를 읽는 `real_eval` 코드는 이 저장소에 아직 없으며, 다음 실험을 시작할 때 별도 이슈·PR로 추가한다.
+**새로 받을 데이터.** 같은 폴더의 `scripts/collect_videos.py`가 채널별 최근 영상 20개의 제목·설명을 `raw/videos.jsonl`에 모은다(`playlistItems.list`, 채널당 1 quota, 전체 약 4,743). 원문은 로컬 전용이다. **수집은 진행 중이다:** 2026-09-30 시점에 `raw/videos.jsonl`에 4,743채널 중 2,931채널이 들어 있고(영상 20개 채운 채널 2,096개, 영상 0개 33개) 나머지 1,812채널은 할당량이 초기화된 뒤 다시 실행해 이어서 모은다. 두 스크립트와 그 결과를 읽는 `real_eval` 코드는 이 저장소에 아직 없으며, 다음 실험을 시작할 때 별도 이슈·PR로 추가한다.
 
 **비교 조건과 절차.** (A) 소개글만(현재 결과), (B) 소개글 + `keywords`, (C) 소개글 + `keywords` + 영상 제목 20개. 결과를 보기 전에 사전 기준(M4 − M3 ≥ +0.05, 구간 하한 > 0)을 적어 두고 조건별로 임베딩·태깅·판정을 다시 한다. 결과를 가르는 쌍이 새로 생기면 사람 채점 표본을 다시 뽑는다.
 
