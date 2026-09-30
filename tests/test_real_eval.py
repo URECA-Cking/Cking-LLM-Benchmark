@@ -1223,3 +1223,19 @@ def test_missing_intermediate_file_error_names_the_actual_results_dir(tmp_path, 
     _write_data(tmp_path / "data")
     with pytest.raises(RuntimeError, match=re.escape(str(tmp_path / "v3" / "embed.npz"))):
         re_.load_embeddings(re_.load_real_data(tmp_path / "data"))
+
+
+def test_human_agree_file_paths_expand_home_and_ignore_spaces_around_commas(tmp_path, monkeypatch):
+    """셸은 쉼표 뒤의 ~를 풀어 주지 않으므로 --file의 각 경로에서 ~를 홈 폴더로 바꾸고, 쉼표 앞뒤 공백은 무시한다."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path / "real")
+    (tmp_path / "real").mkdir()
+    (tmp_path / "real" / "judgments.json").write_text(json.dumps({"q::a": {"score": 1, "hash": "h1"}, "q::b": {"score": 0, "hash": "h2"}}), encoding="utf-8")
+    (tmp_path / "real" / "pairs.json").write_text(json.dumps({"pairs": [["q", "a"], ["q", "b"]], "provenance": {"q::a": ["M4"], "q::b": ["M3"]}}), encoding="utf-8")
+    header = "채점(1=추천에 넣을 만함, 0=아님)"
+    for name, row in (("s1.csv", ["q::a", "x", "y", "1", ""]), ("s2.csv", ["q::b", "x", "y", "0", ""])):
+        with (tmp_path / name).open("w", encoding="utf-8-sig", newline="") as f:
+            csv.writer(f).writerows([["pair_id", "쿼리 소개", "후보 소개", header, "메모"], row])
+    re_.cmd_human_agree(argparse.Namespace(file="~/s1.csv, ~/s2.csv", source="human", targeted=False))
+    saved = json.loads((tmp_path / "real" / "human_agree.json").read_text(encoding="utf-8"))
+    assert saved["n"] == 2 and set(saved["human"]) == {"q::a", "q::b"}

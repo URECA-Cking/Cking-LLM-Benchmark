@@ -894,7 +894,7 @@ def cmd_human_agree(args: argparse.Namespace) -> None:
     """채운 시트(--file, 쉼표로 여러 개 가능)와 LLM 판정의 일치율을 계산해 기준(80%) 통과 여부를 기록한다. 방식 조합별 긍정률 차이와 LLM 판정값별 사람 긍정률, 그리고 비교한 입력의 지문도 함께 저장한다."""
     _assert_pairs_in_sync(load_real_data(resolve_data_dir(getattr(args, "data_dir", None))))
     sheet_name, result_name = _human_paths(args.targeted)
-    files = [Path(f) for f in args.file.split(",")] if args.file else [REAL_DIR / sheet_name]
+    files = [Path(f.strip()).expanduser() for f in args.file.split(",")] if args.file else [REAL_DIR / sheet_name]
     human = _read_filled_sheets(files)
     judgments = _current_judgments()
     auto = {k: v["score"] for k, v in judgments.items()}
