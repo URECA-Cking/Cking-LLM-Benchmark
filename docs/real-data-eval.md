@@ -17,7 +17,7 @@
    ├─ reference_hidden.csv      번호, channel_id, ...                   번호 ↔ 채널 ID
    └─ categories_v2.csv         code, name, description                분야 목록(설명문은 zero-shot·LLM 태깅에 쓴다)
 ```
-- 모델에 넣는 텍스트는 소개글이고, 소개글이 비어 있으면 채널명이다(서비스가 가진 정보만 쓴다. 구독자 수·영상 제목 등은 넣지 않는다).
+- 모델에 넣는 텍스트는 소개글이고, 소개글이 비어 있으면 채널명이다(서비스가 가진 정보만 쓴다. 구독자 수·영상 제목 등은 넣지 않는다). 분야 목록, 방식별 GPT 사용 여부, 평가 범위, 다음 실험(영상 제목·keywords 추가)은 [`real-data-scope.md`](real-data-scope.md)에 있다.
 
 ## 실행 순서
 ```bash
