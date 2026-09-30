@@ -633,7 +633,7 @@ tau는 "점수가 tau 이상이면 태그", 컷오프는 "점수가 컷오프 �
 ## 남은 과제
 
 - **서비스 취향 쿼리 형식 확정 후 재확인 ([#16](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/16)):** 위 취향 쿼리 절은 "취향 요약문" 가정 하의 탐색 실험이다. 형식이 정해져야 그 형식으로 다시 확인하고 사람 spot-check까지 할 수 있다.
-- **실제 크리에이터 데이터 검증 ([#14](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/14)):** 합성 데이터는 문체가 균일하다. 실제 소개글과 정답 분야 라벨이 생기면 순위와 tau·bonus·컷오프가 유지되는지 확인해야 한다. 실행 도구, 사전 판정 기준, 실행 결과는 [`real-data-eval.md`](real-data-eval.md)(이슈 [#28](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/28))에 있다. 요약: 실데이터 4,743채널에서 사전 기준의 공식 결과는 M3(M4 − M3 = +0.041, 기준 미달)이지만, 판정자를 바꾼 사후 분석(gpt-5.5 재판정 +0.063, 2차 판정 보정 +0.074)은 M4를 가리킨다. 판정자에 따라 결론이 갈리고 사람 채점이 없어서 확정하지 않았고(잠정 권고: M4), zero-shot 태그 보정(M3)은 임베딩 단독(M2)보다 거의 낫지 않았다.
+- **실제 크리에이터 데이터 검증 ([#14](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/14)):** 합성 데이터는 문체가 균일하다. 실제 소개글과 정답 분야 라벨이 생기면 순위와 tau·bonus·컷오프가 유지되는지 확인해야 한다. 실행 도구, 사전 판정 기준, 실행 결과는 [`real-data-eval.md`](real-data-eval.md)(이슈 [#28](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/28))에 있다. 요약: 실데이터 4,743채널에서 사전 기준의 공식 결과는 M3(M4 − M3 = +0.041, 기준 미달)이지만, 사후 분석(gpt-5.5 재판정 +0.063, 사람 채점 150쌍으로 보정 +0.074)은 M4를 가리킨다. 다만 사람과 판정기의 일치율이 0.75로 사전 게이트(0.80)에 못 미쳐 확정하지 않았고(잠정 권고: M4), zero-shot 태그 보정(M3)은 임베딩 단독(M2)보다 거의 낫지 않았다.
 - 위 두 가지가 정해지기 전까지 이 문서의 결론은 확정 성능이 아니라 100명 합성 데이터의 경향이다.
 
 ## 변경 이력
