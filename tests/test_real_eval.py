@@ -488,7 +488,7 @@ class _FakeJudge:
 
 
 def _args(data_dir, **kw):
-    return argparse.Namespace(data_dir=str(data_dir), api=False, force=False, file=None, source="human", targeted=False, calibrated=False, rejudged=False, **kw)
+    return argparse.Namespace(data_dir=str(data_dir), api=False, force=False, file=None, source="human", targeted=False, calibrated=False, rejudged=False, groups=None, out=None, **kw)
 
 
 def test_full_stage_flow_with_fake_clients(tmp_path, monkeypatch, capsys):
@@ -571,7 +571,7 @@ def test_score_refuses_when_judgments_are_missing(tmp_path, monkeypatch):
 
 def test_human_agree_records_source_and_score_warns_when_not_human(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
-    (tmp_path / "judgments.json").write_text(json.dumps({"q::a": {"score": 1}, "q::b": {"score": 0}}), encoding="utf-8")
+    (tmp_path / "judgments.json").write_text(json.dumps({"q::a": {"score": 1, "hash": "h1"}, "q::b": {"score": 0, "hash": "h2"}}), encoding="utf-8")
     (tmp_path / "pairs.json").write_text(json.dumps({"pairs": [["q", "a"], ["q", "b"]], "provenance": {"q::a": ["M4"], "q::b": ["M3"]}}), encoding="utf-8")
     header = "채점(1=추천에 넣을 만함, 0=아님)"
     sheet = tmp_path / "sheet.csv"
@@ -599,15 +599,17 @@ def _provenance():
     return prov
 
 
-def test_sample_targeted_pairs_takes_only_m4_only_and_m3_only_and_shuffles():
-    prov = _provenance()
-    chosen = re_.sample_targeted_pairs(prov, 4, seed=1)
+def test_sample_targeted_pairs_covers_every_group_that_changes_m4_minus_m3_and_shuffles():
+    prov = _provenance() | {f"q::d{i}": ["M2", "M4"] for i in range(1, 4)} | {f"q::e{i}": ["M2", "M3"] for i in range(1, 4)}
+    chosen = re_.sample_targeted_pairs(prov, 2, seed=1)
     assert len(chosen) == 8 and len(set(chosen)) == 8
-    assert sum(1 for k in chosen if prov[k] == ["M4"]) == 4 and sum(1 for k in chosen if prov[k] == ["M3"]) == 4
-    assert not any(prov[k] == ["M2", "M3", "M4"] for k in chosen)
-    assert chosen == re_.sample_targeted_pairs(prov, 4, seed=1)
-    assert chosen != sorted(chosen, key=lambda k: prov[k])  # 방식별로 묶여 있지 않다(섞임)
-    assert len(re_.sample_targeted_pairs(prov, 99, seed=1)) == 12  # 가진 만큼만
+    assert sorted(re_.group_of(prov[k]) for k in chosen) == ["M2+M3"] * 2 + ["M2+M4"] * 2 + ["M3"] * 2 + ["M4"] * 2
+    assert not any(prov[k] == ["M2", "M3", "M4"] for k in chosen)  # 세 방식이 모두 뽑은 쌍은 M4 − M3와 무관
+    assert set(re_.differing_pairs(prov)) >= set(chosen)  # 표본이 재판정 대상 범위 안에 있다
+    assert chosen == re_.sample_targeted_pairs(prov, 2, seed=1)
+    assert chosen != sorted(chosen, key=lambda k: prov[k])  # 조합별로 묶여 있지 않다(섞임)
+    assert len(re_.sample_targeted_pairs(prov, 99, seed=1)) == 6 + 6 + 3 + 3  # 가진 만큼만
+    assert {re_.group_of(prov[k]) for k in re_.sample_targeted_pairs(prov, 2, seed=1, groups=("M4",))} == {"M4"}
 
 
 def test_group_offsets_computes_offset_and_standard_error():
@@ -620,18 +622,54 @@ def test_group_offsets_computes_offset_and_standard_error():
     assert offsets["M3"]["offset"] == pytest.approx(-0.5)
 
 
-def test_adjusted_judgments_uses_human_shifts_measured_groups_and_clips():
+def test_adjusted_judgments_uses_human_rate_given_llm_verdict_and_leaves_other_groups():
     prov = _provenance()
-    auto = {"q::a1": 0, "q::a2": 0, "q::b1": 1, "q::c1": 1, "q::c2": 0}
+    auto = {"q::a1": 0, "q::a2": 0, "q::a3": 1, "q::b1": 1, "q::c1": 1, "q::c2": 0}
     human = {"q::a1": 1}
-    offsets = {"M4": {"offset": 0.3}, "M3": {"offset": -0.4}}
+    offsets = {
+        "M4": {"rate_if_auto_0": 0.4, "rate_if_auto_1": 0.9, "human_positive": 0.6},
+        "M3": {"rate_if_auto_0": None, "rate_if_auto_1": 0.7, "human_positive": 0.3},
+    }
     adjusted = re_.adjusted_judgments(auto, human, prov, offsets)
     assert adjusted["q::a1"] == 1.0  # 사람이 채점한 쌍은 그 값
-    assert adjusted["q::a2"] == pytest.approx(0.3)  # M4만 뽑은 쌍은 offset만큼 위로
-    assert adjusted["q::b1"] == pytest.approx(0.6)  # M3만 뽑은 쌍은 아래로
-    assert adjusted["q::c1"] == 1.0 and adjusted["q::c2"] == 0.0  # offset을 안 잰 조합은 그대로
-    assert re_.adjusted_judgments({"q::a2": 1}, {}, prov, {"M4": {"offset": 0.5}})["q::a2"] == 1.0  # 1을 넘지 않게 자른다
-    assert re_.adjusted_judgments(auto, human, prov, offsets, shift={"M4": 0.1})["q::a2"] == pytest.approx(0.4)
+    assert adjusted["q::a2"] == pytest.approx(0.4) and adjusted["q::a3"] == pytest.approx(0.9)  # LLM이 같은 판정을 낸 표본에서 사람이 준 긍정률
+    assert adjusted["q::b1"] == pytest.approx(0.7)
+    assert adjusted["q::c1"] == 1.0 and adjusted["q::c2"] == 0.0  # 표본이 없는 조합은 그대로
+    assert re_.adjusted_judgments({"q::b2": 0}, {}, prov, offsets)["q::b2"] == pytest.approx(0.3)  # 그 칸에 표본이 없으면 조합 전체 사람 긍정률
+    assert re_.adjusted_judgments(auto, human, prov, offsets, shift={"M4": 0.1})["q::a2"] == pytest.approx(0.5)
+    assert re_.adjusted_judgments({"q::a3": 1}, {}, prov, {"M4": {"rate_if_auto_1": 0.95, "human_positive": 0.6}}, shift={"M4": 0.2})["q::a3"] == 1.0  # 1을 넘지 않는다
+
+
+def test_group_offsets_reports_human_rate_by_llm_verdict():
+    prov = _provenance()
+    human = {"q::a1": 1, "q::a2": 1, "q::a3": 0, "q::a4": 1}
+    auto = {"q::a1": 0, "q::a2": 1, "q::a3": 0, "q::a4": 1}
+    o = re_.group_offsets(human, auto, prov)["M4"]
+    assert o["rate_if_auto_0"] == pytest.approx(0.5) and o["rate_if_auto_1"] == pytest.approx(1.0)
+    assert re_.group_offsets({"q::a1": 1}, {"q::a1": 1}, prov)["M4"]["rate_if_auto_0"] is None  # 표본이 없는 칸은 None
+
+
+def test_applied_positive_rate_matches_the_reported_human_rate_when_sample_is_the_whole_group():
+    """보고하는 채점 긍정률과 실제로 적용된 긍정률이 어긋나지 않아야 한다(가법 offset을 더하고 자르던 때는 어긋났다)."""
+    queries = [f"r{i}" for i in range(10)]
+    candidates, auto, human, prov = {m: {} for m in re_.METHODS}, {}, {}, {}
+    for i, q in enumerate(queries):
+        m4, m3 = f"m4-{q}", f"m3-{q}"
+        candidates["M2"][q], candidates["M3"][q], candidates["M4"][q] = [(m3, 1.0)], [(m3, 1.0)], [(m4, 1.0)]
+        auto[f"{q}::{m4}"], prov[f"{q}::{m4}"] = int(i < 5), ["M4"]  # LLM은 절반만 1
+        auto[f"{q}::{m3}"], prov[f"{q}::{m3}"] = 0, ["M3"]
+        human[f"{q}::{m4}"] = 1  # 사람은 전부 1 → 채점 긍정률 1.0
+        human[f"{q}::{m3}"] = 0
+    result = re_.calibrated_summary(candidates, auto, human, prov, {"regular": queries, "short": []}, k=1)
+    assert result["offsets"]["M4"]["human_positive"] == 1.0
+    assert result["applied"]["M4"]["applied_positive"] == pytest.approx(1.0) and result["applied"]["M4"]["auto_positive"] == pytest.approx(0.5)
+    assert result["coverage"] == {"differing": 20, "calibrated": 20}
+
+
+def test_calibrated_summary_reports_uncovered_groups():
+    prov = _provenance() | {"q::d1": ["M2", "M4"], "q::e1": ["M2", "M3"]}
+    result = re_.calibrated_summary({m: {"q": [("a1", 1.0)]} for m in re_.METHODS}, {k: 0 for k in prov}, {"q::a1": 1, "q::b1": 0}, prov, {"regular": ["q"], "short": []}, k=1)
+    assert result["coverage"]["differing"] == 6 + 6 + 1 + 1 and result["coverage"]["calibrated"] == 12  # M2+M4·M2+M3 조합은 표본이 없어 보정 안 됨
 
 
 def test_calibrated_summary_can_flip_the_decision_when_human_disagrees_with_llm():
@@ -683,7 +721,7 @@ def test_targeted_sheet_and_calibrated_score_flow(tmp_path, monkeypatch, capsys)
     re_.cmd_human_sheet(args)
     sheet = tmp_path / "real" / "human_sheet_targeted.csv"
     rows = list(csv.DictReader(sheet.open(encoding="utf-8-sig")))
-    assert rows and all(prov[r["pair_id"]] in (["M4"], ["M3"]) for r in rows)
+    assert rows and set(r["pair_id"] for r in rows) <= set(re_.differing_pairs(prov))
     header = "채점(1=추천에 넣을 만함, 0=아님)"
     for r in rows:
         r[header] = "1"
@@ -775,3 +813,102 @@ def test_rejudge_stage_and_score_rejudged_flow(tmp_path, monkeypatch, capsys):
     score = json.loads((tmp_path / "real" / "score.json").read_text(encoding="utf-8"))
     assert score["rejudged"]["model"] == re_.REAL_REJUDGE_MODEL and score["rejudged"]["summary"]["adopted"] in ("M3", "M4")
     assert "재판정" in capsys.readouterr().out
+
+
+# ---- 리뷰 반영: 일치율 지문 · 잠정/확정 · 재판정 검증 ------------------------------------------------------------------
+
+
+def test_agreement_is_current_detects_changed_judgments_texts_and_missing_fingerprint():
+    judg = {"q::a": {"score": 1, "hash": "h"}}
+    agree = {"human": {"q::a": 1}, "fingerprint": re_.agreement_fingerprint(["q::a"], judg)}
+    assert re_.agreement_is_current(agree, judg)
+    assert not re_.agreement_is_current(agree, {"q::a": {"score": 0, "hash": "h"}})  # LLM 판정이 바뀜
+    assert not re_.agreement_is_current(agree, {"q::a": {"score": 1, "hash": "h2"}})  # 텍스트가 바뀜
+    assert not re_.agreement_is_current(agree, {})  # 그 쌍이 더는 없음
+    assert not re_.agreement_is_current({"human": {"q::a": 1}}, judg)  # 지문이 없는 옛 결과
+    assert not re_.agreement_is_current({}, judg)
+
+
+def test_adoption_status_is_confirmed_only_when_a_human_check_passed():
+    assert re_.adoption_status({"source": "human", "passed": True}) == "확정"
+    assert re_.adoption_status({"source": "human", "passed": False}) == "잠정"  # 일치율 미달
+    assert re_.adoption_status({"source": "claude", "passed": True}) == "잠정"  # 사람 채점이 아님
+    assert re_.adoption_status({}) == "잠정"  # 확인 안 함
+
+
+def _score_fixture(tmp_path, agree_fingerprint_ok: bool, source: str = "human"):
+    """후보 쌍 하나짜리 최소 결과 폴더와, 일치율 결과 파일을 만든다."""
+    judg = {"q::a": {"score": 1, "hash": "h"}}
+    write = lambda name, obj: (tmp_path / name).write_text(json.dumps(obj), encoding="utf-8")
+    write("candidates.json", {m: {"q": [["a", 1.0]]} for m in re_.METHODS})
+    write("judgments.json", judg)
+    write("params.json", {"queries": {"regular": ["q"], "short": []}})
+    write("pairs.json", {"pairs": [["q", "a"]], "provenance": {"q::a": ["M2", "M3", "M4"]}})
+    fingerprint = re_.agreement_fingerprint(["q::a"], judg) if agree_fingerprint_ok else "옛-지문"
+    write("human_agree.json", {"source": source, "passed": True, "human": {"q::a": 1}, "fingerprint": fingerprint})
+
+
+def test_score_ignores_agreement_computed_on_other_inputs_and_marks_provisional(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
+    _score_fixture(tmp_path, agree_fingerprint_ok=False)
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
+    out = capsys.readouterr().out
+    assert "다른 입력에서 계산됐습니다" in out and "잠정" in out and "확정" not in out.split("채택:")[1].split("\n")[0]
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "잠정"
+
+
+def test_score_marks_confirmed_only_for_current_passed_human_agreement(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
+    _score_fixture(tmp_path, agree_fingerprint_ok=True)
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "확정"
+    _score_fixture(tmp_path, agree_fingerprint_ok=True, source="claude")
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "잠정"
+    assert "사람 채점이 아니라" in capsys.readouterr().out
+
+
+def test_score_calibrated_refuses_stale_targeted_agreement(tmp_path, monkeypatch):
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
+    _score_fixture(tmp_path, agree_fingerprint_ok=True)
+    (tmp_path / "human_agree_targeted.json").write_text(json.dumps({"source": "human", "human": {"q::a": 1}, "fingerprint": "옛-지문"}), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="human-agree --targeted"):
+        re_.cmd_score(argparse.Namespace(calibrated=True, rejudged=False))
+
+
+def test_score_rejudged_refuses_missing_or_stale_rejudgments(tmp_path, monkeypatch):
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path)
+    write = lambda name, obj: (tmp_path / name).write_text(json.dumps(obj), encoding="utf-8")
+    write("candidates.json", {"M2": {"q": [["b", 1.0]]}, "M3": {"q": [["b", 1.0]]}, "M4": {"q": [["a", 1.0]]}})
+    write("judgments.json", {"q::a": {"score": 1, "hash": "ha"}, "q::b": {"score": 0, "hash": "hb"}})
+    write("params.json", {"queries": {"regular": ["q"], "short": []}})
+    write("pairs.json", {"pairs": [["q", "a"], ["q", "b"]], "provenance": {"q::a": ["M4"], "q::b": ["M3"]}})
+    write("judgments_rejudge.json", {"q::a": {"score": 1, "hash": "ha"}})  # q::b 재판정 없음
+    with pytest.raises(RuntimeError, match="rejudge"):
+        re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=True))
+    write("judgments_rejudge.json", {"q::a": {"score": 1, "hash": "ha"}, "q::b": {"score": 0, "hash": "옛-텍스트"}})  # 텍스트 해시가 다름
+    with pytest.raises(RuntimeError, match="rejudge"):
+        re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=True))
+    write("judgments_rejudge.json", {"q::a": {"score": 1, "hash": "ha"}, "q::b": {"score": 1, "hash": "hb"}})
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=True))  # 맞으면 통과
+    assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["rejudged"]["adopted_status"] == "잠정"
+
+
+def test_read_filled_sheets_merges_multiple_files_and_rejects_conflicts_and_blanks(tmp_path):
+    header = ["pair_id", "쿼리 소개", "후보 소개", "채점(1=추천에 넣을 만함, 0=아님)", "메모"]
+
+    def sheet(name, rows):
+        path = tmp_path / name
+        with path.open("w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(rows)
+        return path
+
+    a = sheet("a.csv", [["q::1", "x", "y", "1", ""], ["q::2", "x", "y", "0", ""]])
+    b = sheet("b.csv", [["q::3", "x", "y", "1", ""], ["q::2", "x", "y", "0", ""]])
+    assert re_._read_filled_sheets([a, b]) == {"q::1": 1, "q::2": 0, "q::3": 1}
+    with pytest.raises(ValueError, match="다르게"):
+        re_._read_filled_sheets([a, sheet("c.csv", [["q::2", "x", "y", "1", ""]])])
+    with pytest.raises(ValueError, match="비었거나"):
+        re_._read_filled_sheets([sheet("d.csv", [["q::9", "x", "y", "", ""]])])
