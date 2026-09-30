@@ -44,8 +44,9 @@ def _build_schema(category_codes: list[str]) -> dict:
 class OpenAITagger:
     """지정한 모델로 크리에이터 입력 텍스트를 카테고리 태그로 분류한다."""
 
-    def __init__(self, model: str, category_codes: list[str], client: OpenAI | None = None) -> None:
+    def __init__(self, model: str, category_codes: list[str], client: OpenAI | None = None, system_prompt: str = SYSTEM_PROMPT) -> None:
         self.model = model
+        self._system_prompt = system_prompt
         self._schema = _build_schema(category_codes)
         self._client = client or OpenAI()
 
@@ -55,7 +56,7 @@ class OpenAITagger:
             model=self.model,
             temperature=LLM_TEMPERATURE,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": f"<creator>{input_text}</creator>"},
             ],
             response_format={"type": "json_schema", "json_schema": {"name": "tags", "strict": True, "schema": self._schema}},

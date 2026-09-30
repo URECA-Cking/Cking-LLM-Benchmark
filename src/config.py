@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -99,3 +100,26 @@ TASTE_TOP_K = 5
 TOP_N_STORED = 20  # 크리에이터별 저장할 유사 후보 수
 JUDGE_TOP_K = 5  # 판정 시트에 합집합으로 모을 상위 개수
 JUDGE_SHUFFLE_SEED = 20260928
+
+# 실제 YouTube 채널 데이터로 M2·M3·M4를 비교하는 실행 도구(src/real_eval.py, 이슈 #28)의 고정값.
+# 소개글 원문·정답 라벨은 저장소에 두지 않고 외부 폴더에서 읽는다(환경변수 또는 --data-dir).
+REAL_DATA_ENV = "REAL_DATA_DIR"
+REAL_RESULTS_ENV = "REAL_RESULTS_DIR"
+REAL_DIR = Path(os.environ[REAL_RESULTS_ENV]) if os.environ.get(REAL_RESULTS_ENV) else RESULTS_DIR / "real"  # 산출물 폴더(results/는 git 제외). 정답 버전 등 조건을 나눠 돌릴 때 환경변수로 바꾼다
+REAL_SEED = 20260930
+REAL_DEV_FRACTION = 0.3  # 정답이 있는 채널 중 tau·bonus를 고르는 dev 비율(분야별 층화)
+REAL_SHORT_BIO_CHARS = 15  # 소개글이 이보다 짧으면 "짧은 소개글" 쿼리 묶음
+REAL_N_REGULAR_QUERIES = 300  # 일반 쿼리(소개글 15자 이상) 수
+REAL_N_SHORT_QUERIES = 100  # 짧은 소개글 쿼리 수
+REAL_TOP_K = 5  # 판정하는 상위 후보 수(정밀도@5)
+REAL_STORE_K = 10  # 후보 파일에 저장하는 상위 후보 수
+REAL_MIN_GAIN = 0.05  # 사전 기준: M4 - M3 정밀도@5가 이 값 이상이고 95% 구간의 하한이 0보다 크면 M4 채택
+REAL_HUMAN_SAMPLE = 150  # 사람이 채점할 무작위 쌍 수
+REAL_HUMAN_AGREE_MIN = 0.80  # 사람과 LLM 판정 일치율이 이 값 이상이어야 LLM 판정을 쓴다
+REAL_CONCURRENCY = 8  # LLM 호출 동시 실행 수
+REAL_BONUS_GRID = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+REAL_TAG_MIN_INTERVAL = 0.5  # 태깅 호출 시작 간격(초). 분당 120건(약 15만 토큰)으로 gpt-5.4-nano의 분당 토큰 한도(TPM 200,000)를 넘지 않게 한다
+REAL_JUDGE_MIN_INTERVAL = 0.25  # 판정 호출 시작 간격(초). 분당 240건
+REAL_RETRIES = 6  # 일시 오류(호출 한도 초과 등) 재시도 횟수. 대기는 2·4·8·16·32초로 늘어난다
+REAL_TARGETED_EACH = 25  # 결정을 가르는 쌍(M4만·M3만·M2+M4·M2+M3 조합)에서 조합마다 사람이 채점할 개수
+REAL_REJUDGE_MODEL = "gpt-5.5-2026-04-23"  # 두 방식이 다르게 뽑은 쌍을 다시 판정하는 더 큰 모델(temperature 0을 지원하지 않아 기본값으로 호출한다)
