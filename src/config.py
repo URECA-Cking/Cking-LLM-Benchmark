@@ -120,3 +120,4 @@ REAL_TAG_MIN_INTERVAL = 0.5  # 태깅 호출 시작 간격(초). 분당 120건(�
 REAL_JUDGE_MIN_INTERVAL = 0.25  # 판정 호출 시작 간격(초). 분당 240건
 REAL_RETRIES = 6  # 일시 오류(호출 한도 초과 등) 재시도 횟수. 대기는 2·4·8·16·32초로 늘어난다
 REAL_TARGETED_EACH = 50  # 결정을 가르는 쌍(M4만 뽑은 것·M3만 뽑은 것)에서 사람이 채점할 개수(각각)
+REAL_REJUDGE_MODEL = "gpt-5.5-2026-04-23"  # 두 방식이 다르게 뽑은 쌍을 다시 판정하는 더 큰 모델(temperature 0을 지원하지 않아 기본값으로 호출한다)

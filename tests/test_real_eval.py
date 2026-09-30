@@ -488,7 +488,7 @@ class _FakeJudge:
 
 
 def _args(data_dir, **kw):
-    return argparse.Namespace(data_dir=str(data_dir), api=False, force=False, file=None, source="human", targeted=False, calibrated=False, **kw)
+    return argparse.Namespace(data_dir=str(data_dir), api=False, force=False, file=None, source="human", targeted=False, calibrated=False, rejudged=False, **kw)
 
 
 def test_full_stage_flow_with_fake_clients(tmp_path, monkeypatch, capsys):
@@ -566,7 +566,7 @@ def test_score_refuses_when_judgments_are_missing(tmp_path, monkeypatch):
     (tmp_path / "judgments.json").write_text("{}", encoding="utf-8")
     (tmp_path / "params.json").write_text(json.dumps({"queries": {"regular": ["q"], "short": []}}), encoding="utf-8")
     with pytest.raises(RuntimeError, match="판정이 없는 쌍"):
-        re_.cmd_score(argparse.Namespace(calibrated=False))
+        re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
 
 
 def test_human_agree_records_source_and_score_warns_when_not_human(tmp_path, monkeypatch, capsys):
@@ -584,7 +584,7 @@ def test_human_agree_records_source_and_score_warns_when_not_human(tmp_path, mon
     assert saved["source"] == "claude" and saved["passed"] is True
     (tmp_path / "candidates.json").write_text(json.dumps({m: {"q": [["a", 1.0], ["b", 0.5]]} for m in re_.METHODS}), encoding="utf-8")
     (tmp_path / "params.json").write_text(json.dumps({"queries": {"regular": ["q"], "short": []}}), encoding="utf-8")
-    re_.cmd_score(argparse.Namespace(calibrated=False))
+    re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
     assert "사람 채점이 아니라 'claude'" in capsys.readouterr().out
 
 
@@ -715,3 +715,63 @@ def test_calibrated_sensitivity_range_is_ordered_when_offsets_are_uncertain():
     result = re_.calibrated_summary(candidates, auto, human, prov, {"regular": queries, "short": []}, k=1)
     assert result["offsets"]["M4"]["se"] > 0
     assert result["m4_minus_m3_if_m4_favorable"] > result["m4_minus_m3_if_m4_unfavorable"]
+
+
+# ---- 재판정(rejudge) ---------------------------------------------------------------------------------------------------
+
+
+def test_differing_pairs_are_those_picked_by_exactly_one_of_m3_and_m4():
+    prov = {"q::a": ["M4"], "q::b": ["M3"], "q::c": ["M2", "M3", "M4"], "q::d": ["M2", "M4"], "q::e": ["M2", "M3"], "q::f": ["M2"], "q::g": ["M3", "M4"]}
+    assert re_.differing_pairs(prov) == ["q::a", "q::b", "q::d", "q::e"]  # M2만·공통 쌍은 M4 − M3에 영향이 없다
+
+
+def test_mix_judgments_replaces_only_rejudged_pairs():
+    mixed = re_.mix_judgments({"q::a": 0, "q::b": 1, "q::c": 1}, {"q::a": 1, "q::b": 0})
+    assert mixed == {"q::a": 1, "q::b": 0, "q::c": 1}
+
+
+def test_m4_minus_m3_depends_only_on_differing_pairs():
+    """공통 쌍의 판정을 어떻게 바꿔도 M4 − M3는 그대로다. 그래서 다른 쌍만 재판정해도 정확하다."""
+    candidates = {"M2": {"q": [("s", 1.0), ("x", 1.0)]}, "M3": {"q": [("s", 1.0), ("x", 1.0)]}, "M4": {"q": [("s", 1.0), ("y", 1.0)]}}
+    groups = {"regular": ["q"], "short": []}
+    base = {("q", "s"): 1, ("q", "x"): 0, ("q", "y"): 1}
+    changed_shared = {**base, ("q", "s"): 0}
+    a = re_.summarize_scores(candidates, base, groups, k=2)["groups"]["regular"]["m4_minus_m3"]["mean"]
+    b = re_.summarize_scores(candidates, changed_shared, groups, k=2)["groups"]["regular"]["m4_minus_m3"]["mean"]
+    assert a == b == pytest.approx(0.5)
+
+
+def test_openai_judge_omits_temperature_when_none():
+    fake = _FakeChat('{"score": 1}')
+    OpenAIJudge(model="m", client=fake, schema=BINARY_SCHEMA, temperature=None).judge("q", "c")
+    assert "temperature" not in fake.kwargs
+    OpenAIJudge(model="m", client=fake, schema=BINARY_SCHEMA).judge("q", "c")
+    assert fake.kwargs["temperature"] == 0
+
+
+def test_rejudge_stage_and_score_rejudged_flow(tmp_path, monkeypatch, capsys):
+    """rejudge는 M3·M4가 다르게 뽑은 쌍만 다시 판정하고, score --rejudged가 그 결과로 M4 − M3를 다시 계산한다."""
+    data_dir = tmp_path / "data"
+    _write_data(data_dir)
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path / "real")
+    monkeypatch.setattr(re_, "REAL_CONCURRENCY", 2)
+    monkeypatch.setattr(re_, "REAL_TAG_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(re_, "REAL_JUDGE_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(re_, "REAL_BONUS_GRID", [0.5])
+    monkeypatch.setattr(re_, "OpenAITagger", _FakeTagger)
+    monkeypatch.setattr(re_, "OpenAIJudge", _FakeJudge)
+    monkeypatch.setattr("src.pipeline._embedding_client", lambda key: _FakeEmbedding())
+    args = _args(data_dir)
+    for stage in (re_.cmd_embed, re_.cmd_tag_llm, re_.cmd_select_params, re_.cmd_candidates, re_.cmd_judge_sheet, re_.cmd_auto_judge):
+        stage(args)
+    prov = json.loads((tmp_path / "real" / "pairs.json").read_text(encoding="utf-8"))["provenance"]
+    expected = set(re_.differing_pairs(prov))
+    assert expected
+    re_.cmd_rejudge(args)
+    saved = json.loads((tmp_path / "real" / "judgments_rejudge.json").read_text(encoding="utf-8"))
+    assert set(saved) == expected  # 다른 쌍만 다시 판정
+    args.rejudged = True
+    re_.cmd_score(args)
+    score = json.loads((tmp_path / "real" / "score.json").read_text(encoding="utf-8"))
+    assert score["rejudged"]["model"] == re_.REAL_REJUDGE_MODEL and score["rejudged"]["summary"]["adopted"] in ("M3", "M4")
+    assert "재판정" in capsys.readouterr().out

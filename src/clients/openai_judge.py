@@ -57,17 +57,19 @@ class JudgeResult:
 class OpenAIJudge:
     """지정한 모델로 쿼리·후보 소개 쌍의 관련도를 0/1/2로 채점한다."""
 
-    def __init__(self, model: str, client: OpenAI | None = None, system_prompt: str = SYSTEM_PROMPT, schema: dict = _SCHEMA) -> None:
+    def __init__(self, model: str, client: OpenAI | None = None, system_prompt: str = SYSTEM_PROMPT, schema: dict = _SCHEMA, temperature: float | None = 0) -> None:
         self.model = model
         self._client = client or OpenAI()
         self._system_prompt = system_prompt
         self._schema = schema
+        self._temperature = temperature
 
     def judge(self, query_text: str, candidate_text: str) -> JudgeResult:
-        """쿼리와 후보의 입력 텍스트를 받아 관련도를 채점한다. temperature=0으로 고정한다."""
+        """쿼리와 후보의 입력 텍스트를 받아 관련도를 채점한다. temperature는 기본 0으로 고정하고, None이면 모델 기본값을 쓴다."""
+        extra = {} if self._temperature is None else {"temperature": self._temperature}  # 일부 모델은 temperature=0을 거부한다
         response = self._client.chat.completions.create(
             model=self.model,
-            temperature=0,
+            **extra,
             messages=[
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": f"<query>{query_text}</query>\n<candidate>{candidate_text}</candidate>"},

@@ -10,7 +10,7 @@
     labels/reference_hidden.csv  번호, channel_id, ...                  (번호 ↔ 채널 ID 매핑)
     labels/categories_v2.csv     code, name, description                (분야 목록)
 
-단계: embed -> tag-llm -> select-params -> candidates -> judge-sheet -> auto-judge -> human-sheet -> human-agree -> score
+단계: embed -> tag-llm -> select-params -> candidates -> judge-sheet -> auto-judge -> human-sheet -> human-agree -> rejudge -> score
 사용법: `python3 -m src.real_eval <단계> --data-dir <외부 데이터 폴더>`
 """
 
@@ -51,6 +51,7 @@ from src.config import (
     REAL_MIN_GAIN,
     REAL_N_REGULAR_QUERIES,
     REAL_N_SHORT_QUERIES,
+    REAL_REJUDGE_MODEL,
     REAL_RETRIES,
     REAL_SEED,
     REAL_SHORT_BIO_CHARS,
@@ -550,6 +551,19 @@ def calibrated_summary(
     return {"offsets": offsets, "summary": base, "m4_minus_m3_if_m4_favorable": favorable, "m4_minus_m3_if_m4_unfavorable": unfavorable}
 
 
+def differing_pairs(provenance: dict[str, list[str]]) -> list[str]:
+    """M3와 M4가 서로 다르게 뽑은 쌍(둘 중 한쪽만 뽑은 쌍)의 키를 돌려준다.
+
+    쿼리별 M4 − M3는 두 방식의 상위 후보 점수 차이라서 둘이 공통으로 뽑은 쌍은 상쇄된다. 따라서 이 쌍의 판정만 바꿔도 M4 − M3가 정확히 바뀐다.
+    """
+    return sorted(k for k, v in provenance.items() if ("M3" in v) != ("M4" in v))
+
+
+def mix_judgments(auto: dict[str, int], rejudged: dict[str, int]) -> dict[str, int]:
+    """기존 판정에서 다시 판정한 쌍만 새 판정으로 바꾼다. 공통 쌍은 그대로라 M4 − M3에는 영향이 없지만, 방식별 절대 정밀도는 판정자가 섞인 값이 된다."""
+    return {k: rejudged.get(k, v) for k, v in auto.items()}
+
+
 # ---- 입출력과 단계 실행 ------------------------------------------------------------------------------------------------
 
 
@@ -759,6 +773,26 @@ def cmd_human_agree(args: argparse.Namespace) -> None:
         print(f"   {group:10s} n={g['n']:3d} 채점 긍정 {g['human_positive']:.2f} / LLM 긍정 {g['auto_positive']:.2f} (차이 {g['offset']:+.2f} ± {g['se']:.2f})")
 
 
+def cmd_rejudge(args: argparse.Namespace) -> None:
+    """M3와 M4가 다르게 뽑은 쌍을 더 큰 모델(REAL_REJUDGE_MODEL)로 다시 판정해 results/real/judgments_rejudge.json에 저장한다. 끊겨도 이어서 한다."""
+    data = load_real_data(resolve_data_dir(args.data_dir))
+    pairs = [tuple(k.split("::")) for k in differing_pairs(_read_json("pairs.json")["provenance"])]
+    judge = OpenAIJudge(model=REAL_REJUDGE_MODEL, system_prompt=BINARY_SYSTEM_PROMPT, schema=BINARY_SCHEMA, temperature=None)
+    saved = {} if args.force else _read_json("judgments_rejudge.json", default={})
+    saved = judge_pairs(
+        pairs,
+        _text_of(data),
+        lambda q, c: judge.judge(q, c).score,
+        saved,
+        judge_config_hash(REAL_REJUDGE_MODEL, BINARY_SYSTEM_PROMPT),
+        REAL_CONCURRENCY,
+        save=lambda s: _write_json("judgments_rejudge.json", s),
+        min_interval=REAL_JUDGE_MIN_INTERVAL,
+    )
+    _write_json("judgments_rejudge.json", saved)
+    print(f"[rejudge] 완료: {len(saved)}쌍({REAL_REJUDGE_MODEL}), '추천에 넣을 만함' 비율 {sum(v['score'] for v in saved.values()) / len(saved):.1%}")
+
+
 def cmd_score(args: argparse.Namespace) -> None:
     """LLM 판정으로 방식별 정밀도@5와 M4 − M3 짝 차이를 계산하고 사전 기준에 따라 채택을 판정해 results/real/score.json에 저장한다. --calibrated면 결정을 가르는 쌍의 사람 채점으로 보정한 결과도 함께 출력한다."""
     candidates = _read_json("candidates.json")
@@ -781,6 +815,21 @@ def cmd_score(args: argparse.Namespace) -> None:
         print(f"주의: 사람과 LLM 판정 일치율이 기준({REAL_HUMAN_AGREE_MIN:.2f})에 못 미쳤습니다. 이 결과를 채택 근거로 쓰지 마세요.")
     if agree and agree.get("source", "human") != "human":
         print(f"주의: 일치율 확인이 사람 채점이 아니라 '{agree['source']}'의 2차 판정입니다. 독립성이 약하니 사람 채점으로 다시 확인하세요.")
+    if getattr(args, "rejudged", False):
+        rejudged = {k: v["score"] for k, v in _read_json("judgments_rejudge.json").items()}
+        auto = {k: v["score"] for k, v in judgments.items()}
+        needed_diff = differing_pairs(_read_json("pairs.json")["provenance"])
+        if any(k not in rejudged for k in needed_diff):
+            raise RuntimeError("재판정하지 않은 쌍이 있습니다. `rejudge`를 다시 실행하세요.")
+        second = summarize_scores(candidates, {tuple(k.split("::")): v for k, v in mix_judgments(auto, rejudged).items()}, params["queries"], REAL_TOP_K)
+        agree_re = agreement_stats(rejudged, auto)
+        summary["rejudged"] = {"model": REAL_REJUDGE_MODEL, "summary": second, "agreement_with_first": agree_re}
+        print(f"\n=== M3·M4가 다르게 뽑은 {len(needed_diff)}쌍을 {REAL_REJUDGE_MODEL}로 재판정한 M4 − M3 (공통 쌍은 상쇄) ===")
+        print(f"   기존 판정과의 일치 {agree_re['agree_rate']:.2f} (kappa {agree_re['kappa']:.2f}), 긍정률 재판정 {agree_re['human_positive_rate']:.2f} / 기존 {agree_re['auto_positive_rate']:.2f}")
+        for group, g in second["groups"].items():
+            d = g["m4_minus_m3"]
+            print(f"   [{group}] M4 − M3 = {d['mean']:+.3f} [{d['ci_lower']:+.3f}, {d['ci_upper']:+.3f}]  (M4 승 {d['wins']} / M3 승 {d['losses']} / 동점 {d['ties']})  → 기준 적용 시 {g['decision']}")
+        print(f"   재판정 기준 사전 기준 적용 시 채택: {second['adopted']}")
     if getattr(args, "calibrated", False):
         targeted = _read_json("human_agree_targeted.json")
         provenance = _read_json("pairs.json")["provenance"]
@@ -818,6 +867,7 @@ STAGES = {
     "auto-judge": cmd_auto_judge,
     "human-sheet": cmd_human_sheet,
     "human-agree": cmd_human_agree,
+    "rejudge": cmd_rejudge,
     "score": cmd_score,
 }
 
@@ -835,7 +885,10 @@ def main() -> None:
             stage.add_argument("--force", action="store_true", help="캐시가 있어도 다시 계산한다")
         if name in ("human-sheet", "human-agree"):
             stage.add_argument("--targeted", action="store_true", help="무작위 표본 대신 M3·M4 결과를 가르는 쌍(M4만·M3만 뽑은 쌍) 시트를 쓴다")
+        if name in ("rejudge",):
+            stage.add_argument("--force", action="store_true", help="저장된 재판정이 있어도 다시 판정한다")
         if name == "score":
+            stage.add_argument("--rejudged", action="store_true", help="rejudge 결과(M3·M4가 다르게 뽑은 쌍의 재판정)로 계산한 M4 − M3도 함께 낸다")
             stage.add_argument("--calibrated", action="store_true", help="결정을 가르는 쌍의 사람 채점(human-agree --targeted)으로 보정한 결과도 함께 낸다")
         if name == "human-agree":
             stage.add_argument("--file", help="채운 시트 경로(기본 results/real/ 아래 단계별 시트)")
