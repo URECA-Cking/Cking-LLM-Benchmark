@@ -22,6 +22,7 @@ Ticle(Cking) 2차 MVP **AI 크리에이터 추천**의 임베딩 모델과 추�
 8. [비교 대상 방식](#8-비교-대상-방식)
 9. [평가 지표](#9-평가-지표)
 10. [코드 규칙](#10-코드-규칙)
+11. [실제 크리에이터 데이터로 비교](#11-실제-크리에이터-데이터로-비교)
 
 ---
 
@@ -440,3 +441,16 @@ M1~M3·R2는 모델 4종 각각, M4의 LLM 태그는 1회 생성해 네 모델�
 - 테스트는 `tests/`에 pytest로 작성합니다. 순수 로직은 반드시 테스트를 붙이고, 실제 API를 부르는 클라이언트는 가짜 클라이언트로 배선만 검증합니다
 - 모델·방식 채택 근거는 `docs/<주제>-selection.md`로 분리해 기록합니다
 - 모델 호출 결과·raw·summary는 `results/`에 저장하고 커밋하지 않습니다. 다만 커밋된 통계 결과를 재현하는 데 꼭 필요한 최소 입력(`data/e2_judgments.json`)만 해시를 고정해 `data/`에 둡니다
+
+## 11. 실제 크리에이터 데이터로 비교
+
+합성 100명 결과가 실제 소개글에서도 유지되는지 보기 위해, 외부 폴더의 실제 YouTube 채널 데이터로 M2·M3·M4를 같은 조건에서 비교하는 별도 도구(`src/real_eval.py`)가 있습니다. 소개글 원문과 정답 라벨은 **저장소에 커밋하지 않고** `--data-dir`(또는 `REAL_DATA_DIR`)의 외부 폴더에서만 읽으며, 산출물은 `results/real/`(git 제외)에 저장합니다.
+
+```bash
+export REAL_DATA_DIR=<데이터 폴더>
+python3 -m src.real_eval embed && python3 -m src.real_eval tag-llm && python3 -m src.real_eval select-params
+python3 -m src.real_eval candidates && python3 -m src.real_eval judge-sheet && python3 -m src.real_eval auto-judge
+python3 -m src.real_eval human-sheet   # 사람이 채운 뒤 human-agree, 마지막에 score
+```
+
+데이터 폴더 구조, 단계별 설명, **결과를 보기 전에 정한 판정 기준**(M4 − M3 ≥ +0.05이고 95% 구간이 0을 넘지 않을 때만 M4 채택), 비용 추정, 해석 주의는 [`docs/real-data-eval.md`](docs/real-data-eval.md)에 있습니다. 이 도구는 API 비용이 들고(`tag-llm`·`auto-judge` 합쳐 대략 $2~3 추정) 기존 `pipeline` 결과와 테스트에는 영향을 주지 않습니다.
