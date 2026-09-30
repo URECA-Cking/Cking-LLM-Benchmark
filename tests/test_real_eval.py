@@ -1199,3 +1199,17 @@ def test_freshness_candidates_reject_regenerated_vectors_with_same_input_hash(tm
     np.savez(path, **saved)
     with pytest.raises(RuntimeError, match="candidates"):
         re_.cmd_score(args)
+
+
+def test_results_dir_can_be_overridden_by_environment_variable(tmp_path):
+    """정답 버전이 다른 실행이 서로의 산출물을 덮어쓰지 않도록 REAL_RESULTS_DIR로 산출물 폴더를 바꿀 수 있다(기본은 results/real)."""
+    import os
+    import subprocess
+    import sys
+
+    code = "from src.config import REAL_DIR; print(REAL_DIR)"
+    env = {k: v for k, v in os.environ.items() if k != "REAL_RESULTS_DIR"}
+    default = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=re_.__file__.rsplit("/src/", 1)[0]).stdout.strip()
+    assert default.endswith("results/real")
+    other = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env={**env, "REAL_RESULTS_DIR": str(tmp_path / "v3")}, cwd=re_.__file__.rsplit("/src/", 1)[0]).stdout.strip()
+    assert other == str(tmp_path / "v3")

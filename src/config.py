@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -103,7 +104,8 @@ JUDGE_SHUFFLE_SEED = 20260928
 # 실제 YouTube 채널 데이터로 M2·M3·M4를 비교하는 실행 도구(src/real_eval.py, 이슈 #28)의 고정값.
 # 소개글 원문·정답 라벨은 저장소에 두지 않고 외부 폴더에서 읽는다(환경변수 또는 --data-dir).
 REAL_DATA_ENV = "REAL_DATA_DIR"
-REAL_DIR = RESULTS_DIR / "real"  # 산출물 폴더(results/는 git 제외)
+REAL_RESULTS_ENV = "REAL_RESULTS_DIR"
+REAL_DIR = Path(os.environ[REAL_RESULTS_ENV]) if os.environ.get(REAL_RESULTS_ENV) else RESULTS_DIR / "real"  # 산출물 폴더(results/는 git 제외). 정답 버전 등 조건을 나눠 돌릴 때 환경변수로 바꾼다
 REAL_SEED = 20260930
 REAL_DEV_FRACTION = 0.3  # 정답이 있는 채널 중 tau·bonus를 고르는 dev 비율(분야별 층화)
 REAL_SHORT_BIO_CHARS = 15  # 소개글이 이보다 짧으면 "짧은 소개글" 쿼리 묶음
