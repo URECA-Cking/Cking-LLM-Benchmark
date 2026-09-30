@@ -1213,3 +1213,13 @@ def test_results_dir_can_be_overridden_by_environment_variable(tmp_path):
     assert default.endswith("results/real")
     other = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env={**env, "REAL_RESULTS_DIR": str(tmp_path / "v3")}, cwd=re_.__file__.rsplit("/src/", 1)[0]).stdout.strip()
     assert other == str(tmp_path / "v3")
+
+
+def test_missing_intermediate_file_error_names_the_actual_results_dir(tmp_path, monkeypatch):
+    """산출물 폴더를 바꿨을 때 없는 파일 오류가 기본 폴더(results/real)가 아니라 실제 경로를 알려 준다."""
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path / "v3")
+    with pytest.raises(RuntimeError, match=re.escape(str(tmp_path / "v3" / "params.json"))):
+        re_._read_json("params.json")
+    _write_data(tmp_path / "data")
+    with pytest.raises(RuntimeError, match=re.escape(str(tmp_path / "v3" / "embed.npz"))):
+        re_.load_embeddings(re_.load_real_data(tmp_path / "data"))

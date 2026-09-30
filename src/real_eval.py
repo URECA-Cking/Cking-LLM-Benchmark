@@ -639,7 +639,7 @@ def _read_json(name: str, default=None):
         return json.loads(path.read_text(encoding="utf-8"))
     if default is not None:
         return default
-    raise RuntimeError(f"results/real/{name}이 없습니다. 앞 단계를 먼저 실행하세요.")
+    raise RuntimeError(f"{path}이 없습니다. 앞 단계를 먼저 실행하세요(산출물 폴더를 바꿨다면 필요한 캐시를 그 폴더로 복사하세요).")
 
 
 def _embed_input_hash(identity: str, data: RealData) -> str:
@@ -657,7 +657,7 @@ def load_embeddings(data: RealData) -> tuple[np.ndarray, np.ndarray]:
     """embed 단계가 저장한 (채널 벡터, 분야 벡터)를 읽는다. 입력 해시가 현재 데이터와 다르면 다시 실행하라고 알려준다."""
     path = REAL_DIR / "embed.npz"
     if not path.exists():
-        raise RuntimeError("results/real/embed.npz가 없습니다. 먼저 `python3 -m src.real_eval embed`를 실행하세요.")
+        raise RuntimeError(f"{path}가 없습니다. 먼저 `python3 -m src.real_eval embed`를 실행하세요(산출물 폴더를 바꿨다면 embed.npz를 그 폴더로 복사해도 됩니다).")
     saved = np.load(path, allow_pickle=False)
     if str(saved["input_hash"]) != _embed_input_hash(str(saved["identity"]), data):
         raise RuntimeError("임베딩 캐시가 현재 데이터와 다릅니다. `embed --force`로 다시 만드세요.")
