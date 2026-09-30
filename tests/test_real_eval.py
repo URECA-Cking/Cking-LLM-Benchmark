@@ -1004,3 +1004,120 @@ def test_stale_cached_judgments_are_ignored_by_sheet_score_and_agreement(tmp_pat
     # 옛 쌍이 있어도 현재 판정만으로 만든 일치율 지문과 같아 확정이 유지된다
     re_.cmd_score(argparse.Namespace(calibrated=False, rejudged=False))
     assert json.loads((tmp_path / "score.json").read_text(encoding="utf-8"))["adopted_status"] == "확정"
+
+
+@pytest.fixture(autouse=True)
+def _hand_built_results_skip_freshness(request, tmp_path_factory, monkeypatch):
+    """손으로 만든 결과 파일(해시 없음)을 쓰는 단위 테스트는 데이터 폴더만 채워 주고 최신성 검사는 건너뛴다.
+    전체 흐름(flow)·최신성(freshness) 테스트는 진짜 검사를 그대로 쓴다."""
+    if "flow" in request.node.name or "freshness" in request.node.name:
+        return
+    root = tmp_path_factory.mktemp("hand_built_data")
+    _write_data(root)
+    monkeypatch.setenv(re_.REAL_DATA_ENV, str(root))
+    monkeypatch.setattr(re_, "_assert_judgments_fresh", lambda *a, **k: None)
+
+
+def _run_flow(tmp_path, monkeypatch, through_rejudge: bool = False):
+    """가짜 클라이언트로 auto-judge(와 선택적으로 rejudge)까지 실행하고 (args, data_dir)를 돌려준다."""
+    data_dir = tmp_path / "data"
+    _write_data(data_dir)
+    monkeypatch.setattr(re_, "REAL_DIR", tmp_path / "real")
+    monkeypatch.setattr(re_, "REAL_CONCURRENCY", 2)
+    monkeypatch.setattr(re_, "REAL_TAG_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(re_, "REAL_JUDGE_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(re_, "REAL_TARGETED_EACH", 5)
+    monkeypatch.setattr(re_, "REAL_BONUS_GRID", [0.5])
+    monkeypatch.setattr(re_, "OpenAITagger", _FakeTagger)
+    monkeypatch.setattr(re_, "OpenAIJudge", _FakeJudge)
+    monkeypatch.setattr("src.pipeline._embedding_client", lambda key: _FakeEmbedding())
+    args = _args(data_dir)
+    stages = [re_.cmd_embed, re_.cmd_tag_llm, re_.cmd_select_params, re_.cmd_candidates, re_.cmd_judge_sheet, re_.cmd_auto_judge]
+    if through_rejudge:
+        stages.append(re_.cmd_rejudge)
+    for stage in stages:
+        stage(args)
+    return args, data_dir
+
+
+def _change_bio(data_dir, channel_id):
+    """풀 CSV에서 해당 채널의 소개글만 바꾼다."""
+    pool = data_dir / "raw" / "pool.csv"
+    rows = list(csv.reader(pool.open(encoding="utf-8-sig")))
+    for row in rows[1:]:
+        if row[0] == channel_id:
+            row[2] = "완전히 바뀐 소개글 내용입니다 열다섯 글자를 넘김"
+    with pool.open("w", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f).writerows(rows)
+
+
+def _judged_query(tmp_path):
+    """판정한 쌍에 실제로 들어 있는 채널 하나(쿼리 쪽)를 돌려준다."""
+    return json.loads((tmp_path / "real" / "pairs.json").read_text(encoding="utf-8"))["pairs"][0][0]
+
+
+def test_freshness_score_rejects_judgments_when_bio_or_judge_settings_change(tmp_path, monkeypatch):
+    args, data_dir = _run_flow(tmp_path, monkeypatch)
+    re_.cmd_score(args)  # 그대로면 통과
+    original = re_.BINARY_SYSTEM_PROMPT
+    monkeypatch.setattr(re_, "BINARY_SYSTEM_PROMPT", original + " 바뀐 판정 기준")
+    with pytest.raises(RuntimeError, match="auto-judge"):
+        re_.cmd_score(args)
+    monkeypatch.setattr(re_, "BINARY_SYSTEM_PROMPT", original)
+    re_.cmd_score(args)  # 되돌리면 다시 통과
+    _change_bio(data_dir, _judged_query(tmp_path))
+    with pytest.raises(RuntimeError, match="auto-judge"):
+        re_.cmd_score(_args(data_dir))
+
+
+def test_freshness_llm_tags_reject_changed_bio_or_tag_prompt(tmp_path, monkeypatch):
+    args, data_dir = _run_flow(tmp_path, monkeypatch)
+    data = re_.load_real_data(data_dir)
+    assert re_._llm_tags(data)  # 그대로면 통과
+    _change_bio(data_dir, "c0_0")
+    with pytest.raises(RuntimeError, match="tag-llm"):
+        re_._llm_tags(re_.load_real_data(data_dir))
+    monkeypatch.setattr(re_, "LLM_TAG_MAX", re_.LLM_TAG_MAX + 1)
+    with pytest.raises(RuntimeError, match="tag-llm"):
+        re_._llm_tags(data)
+
+
+def test_freshness_rejudged_rejects_results_from_another_model(tmp_path, monkeypatch):
+    args, _ = _run_flow(tmp_path, monkeypatch, through_rejudge=True)
+    args.rejudged = True
+    re_.cmd_score(args)  # 같은 모델이면 통과
+    monkeypatch.setattr(re_, "REAL_REJUDGE_MODEL", "다른-모델")
+    with pytest.raises(RuntimeError, match="rejudge"):
+        re_.cmd_score(args)
+
+
+def test_freshness_human_sheet_refuses_to_overwrite_filled_sheet_unless_forced(tmp_path, monkeypatch):
+    args, _ = _run_flow(tmp_path, monkeypatch)
+    sheet = tmp_path / "real" / "human_sheet.csv"
+    re_.cmd_human_sheet(args)  # 빈 시트는 다시 만들어도 된다
+    re_.cmd_human_sheet(args)
+    header = "채점(1=추천에 넣을 만함, 0=아님)"
+    rows = list(csv.DictReader(sheet.open(encoding="utf-8-sig")))
+    rows[0][header] = "1"
+    with sheet.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    with pytest.raises(FileExistsError, match="채점"):
+        re_.cmd_human_sheet(args)
+    assert list(csv.DictReader(sheet.open(encoding="utf-8-sig")))[0][header] == "1"  # 채점이 남아 있다
+    args.force = True
+    re_.cmd_human_sheet(args)
+    assert list(csv.DictReader(sheet.open(encoding="utf-8-sig")))[0][header] == ""
+
+
+def test_freshness_targeted_sheet_n_each_reproduces_uneven_group_sizes(tmp_path, monkeypatch):
+    """보고한 150쌍(M4만 50·M3만 50 + M2+M4 25·M2+M3 25)은 --groups와 --n-each로 다시 만들 수 있다."""
+    args, _ = _run_flow(tmp_path, monkeypatch)
+    prov = json.loads((tmp_path / "real" / "pairs.json").read_text(encoding="utf-8"))["provenance"]
+    args.targeted, args.n_each = True, 2
+    args.groups, args.out = "M4,M3", "a.csv"
+    re_.cmd_human_sheet(args)
+    ids = [r["pair_id"] for r in csv.DictReader((tmp_path / "real" / "a.csv").open(encoding="utf-8-sig"))]
+    assert ids == re_.sample_targeted_pairs(prov, 2, re_.REAL_SEED, ("M4", "M3"))
+    assert all(re_.group_of(prov[k]) in ("M4", "M3") for k in ids)

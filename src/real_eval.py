@@ -698,15 +698,14 @@ def cmd_embed(args: argparse.Namespace) -> None:
 def cmd_tag_llm(args: argparse.Namespace) -> None:
     """후보 풀 전체를 LLM으로 태깅해 results/real/tags_llm.json에 저장한다. 끊겨도 이어서 하고, 프롬프트에 분야 설명문을 포함한다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
-    model = next(iter(OPENAI_LLM_MODEL_CANDIDATES))
-    prompt = tag_system_prompt(data.categories, LLM_TAG_MAX)
+    model, prompt, config_hash = _tag_settings(data)
     tagger = OpenAITagger(model=model, category_codes=data.codes, system_prompt=prompt)
     cache = {} if args.force else _read_json("tags_llm.json", default={})
     cache = tag_pool(
         data.pool,
         lambda text: tagger.tag(text).tags,
         cache,
-        _hash(model, prompt, str(LLM_TAG_MAX)),
+        config_hash,
         REAL_CONCURRENCY,
         save=lambda c: _write_json("tags_llm.json", c),
         min_interval=REAL_TAG_MIN_INTERVAL,
@@ -716,12 +715,22 @@ def cmd_tag_llm(args: argparse.Namespace) -> None:
     print(f"[tag-llm] 완료: {len(cache['tags'])}명, 태그 없음(UNCLASSIFIED) {empty}명 ({empty / len(cache['tags']):.1%})")
 
 
+def _tag_settings(data: RealData) -> tuple[str, str, str]:
+    """(태깅 모델, 시스템 프롬프트, 설정 해시)다. tag-llm과 태그 최신성 검사가 같은 값을 쓴다."""
+    model = next(iter(OPENAI_LLM_MODEL_CANDIDATES))
+    prompt = tag_system_prompt(data.categories, LLM_TAG_MAX)
+    return model, prompt, _hash(model, prompt, str(LLM_TAG_MAX))
+
+
 def _llm_tags(data: RealData) -> dict[str, frozenset[str]]:
-    """tag-llm 결과를 채널 ID별 태그 집합으로 읽는다. 풀 전체가 태깅돼 있지 않으면 다시 실행하라고 알려준다."""
-    cache = _read_json("tags_llm.json")["tags"]
-    missing = [c.id for c in data.pool if c.id not in cache]
-    if missing:
-        raise RuntimeError(f"LLM 태그가 없는 채널이 {len(missing)}명 있습니다. `tag-llm`을 다시 실행하세요.")
+    """tag-llm 결과를 채널 ID별 태그 집합으로 읽는다. 풀 전체가 현재 소개글·모델·프롬프트로 태깅돼 있지 않으면 다시 실행하라고 알려준다."""
+    saved = _read_json("tags_llm.json")
+    cache = saved["tags"]
+    if saved.get("config") != _tag_settings(data)[2]:
+        raise RuntimeError("저장된 LLM 태그가 현재 모델·프롬프트·분야 목록으로 만든 것이 아닙니다. `tag-llm`을 다시 실행하세요.")
+    stale = [c.id for c in data.pool if c.id not in cache or cache[c.id].get("h") != _hash(c.text())]
+    if stale:
+        raise RuntimeError(f"LLM 태그가 없거나 현재 소개글과 다른 채널이 {len(stale)}명 있습니다. `tag-llm`을 다시 실행하세요.")
     return {cid: frozenset(v["tags"]) for cid, v in cache.items()}
 
 
@@ -770,6 +779,18 @@ def _current_judgments() -> dict[str, dict]:
     return {k: v for k, v in _read_json("judgments.json").items() if k in current}
 
 
+def _assert_judgments_fresh(judgments: dict[str, dict], data: RealData, config_hash: str, command: str) -> None:
+    """저장된 판정이 현재 소개글과 판정 조건(모델·프롬프트)으로 만든 것인지 확인한다. 아니면 다시 실행하라고 알려준다."""
+    text_of = _text_of(data)
+    stale = []
+    for key, value in judgments.items():
+        q, c = key.split("::")
+        if q not in text_of or c not in text_of or value.get("judge") != config_hash or value.get("hash") != pair_text_hash(text_of[q], text_of[c]):
+            stale.append(key)
+    if stale:
+        raise RuntimeError(f"판정 {len(stale)}쌍이 현재 소개글이나 판정 조건(모델·프롬프트)과 다릅니다. `{command}`를 다시 실행하세요.")
+
+
 def cmd_auto_judge(args: argparse.Namespace) -> None:
     """쌍을 LLM으로 "추천에 넣을 만한가"(0/1) 자동 판정해 results/real/judgments.json에 저장한다. 끊겨도 이어서 한다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
@@ -801,16 +822,19 @@ def cmd_human_sheet(args: argparse.Namespace) -> None:
     """채점용 CSV를 만든다. 기본은 LLM이 판정한 쌍 중 무작위 표본이고, --targeted는 M3·M4 결과를 가르는 쌍을 조합별(M4만·M3만·M2+M4·M2+M3, --groups로 일부만)로 뽑은 표본이다. LLM 점수는 보여주지 않는다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
     judgments = _current_judgments()
+    n_each = getattr(args, "n_each", None) or REAL_TARGETED_EACH
     if args.targeted:
         groups = tuple(args.groups.split(",")) if args.groups else TARGETED_GROUPS
         unknown = set(groups) - set(TARGETED_GROUPS)
         if unknown:
             raise ValueError(f"알 수 없는 조합입니다: {sorted(unknown)} (가능: {', '.join(TARGETED_GROUPS)})")
-        chosen = sample_targeted_pairs(_read_json("pairs.json")["provenance"], REAL_TARGETED_EACH, REAL_SEED, groups)
+        chosen = sample_targeted_pairs(_read_json("pairs.json")["provenance"], n_each, REAL_SEED, groups)
     else:
         chosen = sample_human_pairs(list(judgments), REAL_HUMAN_SAMPLE, REAL_SEED)
     text_of = _text_of(data)
     path = REAL_DIR / (args.out or _human_paths(args.targeted)[0])
+    if path.exists() and not getattr(args, "force", False) and any(r["채점(1=추천에 넣을 만함, 0=아님)"].strip() for r in _read_csv(path)):
+        raise FileExistsError(f"{path.name}에 이미 채점한 값이 있습니다. 덮어쓰면 사라지므로 --out으로 다른 이름을 쓰거나, 정말 새로 만들려면 --force를 쓰세요.")
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["pair_id", "쿼리 소개", "후보 소개", "채점(1=추천에 넣을 만함, 0=아님)", "메모"])
@@ -893,8 +917,10 @@ def cmd_score(args: argparse.Namespace) -> None:
     채택은 사람 채점 일치율 확인(현재 입력에 대한 것)을 통과한 경우만 "확정"이고 그 외는 "잠정"으로 표시한다.
     --rejudged는 다른 쌍의 재판정 결과, --calibrated는 결정을 가르는 쌍의 채점으로 보정한 결과도 함께 낸다.
     """
+    data = load_real_data(resolve_data_dir(getattr(args, "data_dir", None)))
     candidates = _read_json("candidates.json")
     judgments = _current_judgments()
+    _assert_judgments_fresh(judgments, data, judge_config_hash(OPENAI_JUDGE_MODEL, BINARY_SYSTEM_PROMPT), "auto-judge")
     params = _read_json("params.json")
     judged = {tuple(k.split("::")): v["score"] for k, v in judgments.items()}
     needed, _ = build_pairs(candidates, REAL_TOP_K)
@@ -908,7 +934,7 @@ def cmd_score(args: argparse.Namespace) -> None:
     summary["adopted_status"] = status
     print(f"=== 정밀도@{REAL_TOP_K} (LLM 판정: 추천에 넣을 만한 후보 비율) ===")
     _print_groups(summary)
-    print(f"사전 기준(M4 − M3 ≥ +{REAL_MIN_GAIN:.2f} 이고 구간이 0을 넘지 않음)에 따른 채택: {summary['adopted']} ({status}, 일반 채널 기준)")
+    print(f"사전 기준(M4 − M3 ≥ +{REAL_MIN_GAIN:.2f} 이고 95% 구간의 하한이 0보다 큼)에 따른 채택: {summary['adopted']} ({status}, 일반 채널 기준)")
     if not agree:
         print("주의: 사람 채점 일치율(human-agree)을 확인하지 않았습니다. 이 결과는 LLM 판정만 근거인 잠정 결과입니다.")
     elif not agree["passed"]:
@@ -923,6 +949,7 @@ def cmd_score(args: argparse.Namespace) -> None:
         stale = [k for k in needed_diff if k not in rejudged_raw or rejudged_raw[k]["hash"] != judgments[k]["hash"]]
         if stale:
             raise RuntimeError(f"재판정이 없거나 현재 텍스트와 다른 쌍이 {len(stale)}개 있습니다. `rejudge`를 다시 실행하세요.")
+        _assert_judgments_fresh({k: rejudged_raw[k] for k in needed_diff}, data, judge_config_hash(REAL_REJUDGE_MODEL, BINARY_SYSTEM_PROMPT), "rejudge")
         rejudged = {k: v["score"] for k, v in rejudged_raw.items() if k in judgments}
         second = summarize_scores(candidates, {tuple(k.split("::")): v for k, v in mix_judgments(auto, rejudged).items()}, params["queries"], REAL_TOP_K)
         agree_re = agreement_stats(rejudged, auto)
@@ -938,7 +965,7 @@ def cmd_score(args: argparse.Namespace) -> None:
         for group, g in second["groups"].items():
             d = g["m4_minus_m3"]
             print(f"   [{group}] M4 − M3 = {d['mean']:+.3f} [{d['ci_lower']:+.3f}, {d['ci_upper']:+.3f}]  (M4 승 {d['wins']} / M3 승 {d['losses']} / 동점 {d['ties']})  → 기준 적용 시 {g['decision']}")
-        print(f"   재판정 기준 사전 기준 적용 시 채택: {second['adopted']} (잠정: 판정기를 결과를 본 뒤 바꿨고 사람 채점 확인 전)")
+        print(f"   재판정 기준 사전 기준 적용 시 채택: {second['adopted']} (잠정: 판정기를 결과를 본 뒤 바꾼 사후 분석)")
     if getattr(args, "calibrated", False):
         if not targeted:
             raise RuntimeError("결정을 가르는 쌍의 채점 결과가 없거나 현재 판정과 맞지 않습니다. `human-agree --targeted`를 다시 실행하세요.")
@@ -997,8 +1024,10 @@ def main() -> None:
         if name in ("human-sheet", "human-agree"):
             stage.add_argument("--targeted", action="store_true", help="무작위 표본 대신 M3·M4 결과를 가르는 쌍(M4만·M3만·M2+M4·M2+M3 조합) 시트를 쓴다")
         if name == "human-sheet":
+            stage.add_argument("--n-each", dest="n_each", type=int, help="--targeted에서 조합마다 뽑을 쌍 수(기본 REAL_TARGETED_EACH)")
             stage.add_argument("--groups", help="--targeted에서 표본을 뽑을 조합(쉼표 구분, 기본은 네 조합 전부)")
             stage.add_argument("--out", help="results/real/ 아래에 저장할 시트 파일명(기본은 단계별 기본 이름)")
+            stage.add_argument("--force", action="store_true", help="이미 채점한 시트가 있어도 덮어쓴다(채점이 사라진다)")
         if name in ("rejudge",):
             stage.add_argument("--force", action="store_true", help="저장된 재판정이 있어도 다시 판정한다")
         if name == "score":
