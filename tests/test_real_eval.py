@@ -1016,7 +1016,7 @@ def _hand_built_results_skip_freshness(request, tmp_path_factory, monkeypatch):
     _write_data(root)
     monkeypatch.setenv(re_.REAL_DATA_ENV, str(root))
     monkeypatch.setattr(re_, "_assert_judgments_fresh", lambda *a, **k: None)
-    monkeypatch.setattr(re_, "_assert_pairs_in_sync", lambda: None)
+    monkeypatch.setattr(re_, "_assert_pairs_in_sync", lambda *a, **k: None)
 
 
 def _run_flow(tmp_path, monkeypatch, through_rejudge: bool = False):
@@ -1066,8 +1066,14 @@ def test_freshness_score_rejects_judgments_when_bio_or_judge_settings_change(tmp
         re_.cmd_score(args)
     monkeypatch.setattr(re_, "BINARY_SYSTEM_PROMPT", original)
     re_.cmd_score(args)  # 되돌리면 다시 통과
-    _change_bio(data_dir, _judged_query(tmp_path))
+    path = tmp_path / "real" / "judgments.json"
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    saved[next(iter(saved))]["hash"] = "옛-해시"  # 소개글이 바뀐 뒤의 판정처럼 텍스트 해시가 어긋난 판정
+    path.write_text(json.dumps(saved), encoding="utf-8")
     with pytest.raises(RuntimeError, match="auto-judge"):
+        re_.cmd_score(args)
+    _change_bio(data_dir, _judged_query(tmp_path))  # 소개글 자체가 바뀌면 임베딩 검사가 먼저 막는다
+    with pytest.raises(RuntimeError, match="임베딩"):
         re_.cmd_score(_args(data_dir))
 
 
@@ -1167,5 +1173,29 @@ def test_freshness_candidates_must_match_current_params_embeddings_and_tags(tmp_
 def test_freshness_candidates_without_fingerprint_are_rejected(tmp_path, monkeypatch):
     args, _ = _run_flow(tmp_path, monkeypatch)
     (tmp_path / "real" / "candidates_meta.json").unlink()
+    with pytest.raises(RuntimeError, match="candidates"):
+        re_.cmd_score(args)
+
+
+def test_freshness_candidates_reject_new_channel_outside_judged_pairs(tmp_path, monkeypatch):
+    """판정 쌍에 없는 채널(새로 추가한 채널)이 후보 풀에 생겨도(다른 채널의 후보 순위가 달라질 수 있으므로) 옛 후보로 채점하지 않는다."""
+    args, data_dir = _run_flow(tmp_path, monkeypatch)
+    pool = data_dir / "raw" / "pool.csv"
+    with pool.open("a", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f).writerow(["zz_new", "새채널", "cat0 소개글 열다섯 글자를 넘는 새 채널 내용", "q"])
+    with pytest.raises(RuntimeError, match="임베딩|태그"):
+        re_.cmd_score(args)
+    with pytest.raises(RuntimeError, match="임베딩|태그"):
+        re_.cmd_human_agree(args)
+
+
+def test_freshness_candidates_reject_regenerated_vectors_with_same_input_hash(tmp_path, monkeypatch):
+    """입력 해시는 그대로 두고 벡터만 다시 만들었다면(다른 모델·비결정 재생성) 지문이 달라져 옛 후보를 거부한다."""
+    args, _ = _run_flow(tmp_path, monkeypatch)
+    re_.cmd_score(args)  # 그대로면 통과
+    path = tmp_path / "real" / "embed.npz"
+    saved = dict(np.load(path, allow_pickle=False))
+    saved["vectors"] = saved["vectors"] + np.float32(1e-3)
+    np.savez(path, **saved)
     with pytest.raises(RuntimeError, match="candidates"):
         re_.cmd_score(args)
