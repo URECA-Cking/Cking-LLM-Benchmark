@@ -768,6 +768,14 @@ def cmd_judge_sheet(args: argparse.Namespace) -> None:
     print(f"[judge-sheet] 판정할 쌍 {len(pairs)}개 (방식별 상위 {REAL_TOP_K}의 합집합)")
 
 
+def _assert_pairs_in_sync() -> None:
+    """저장된 pairs.json(쌍과 뽑은 방식)이 현재 candidates.json에서 다시 만든 것과 같은지 확인한다. 후보를 다시 만들고 judge-sheet를 건너뛰면 옛 출처로 채점·보정이 계산되기 때문이다."""
+    saved = _read_json("pairs.json")
+    pairs, provenance = build_pairs(_read_json("candidates.json"), REAL_TOP_K)
+    if [list(p) for p in saved["pairs"]] != [list(p) for p in pairs] or saved["provenance"] != provenance:
+        raise RuntimeError("pairs.json이 현재 candidates.json의 쌍·뽑은 방식과 다릅니다. `judge-sheet`를 다시 실행하세요.")
+
+
 def _text_of(data: RealData) -> dict[str, str]:
     """채널 ID → 판정에 보여줄 텍스트 매핑이다."""
     return {c.id: c.text() for c in data.pool}
@@ -821,6 +829,7 @@ def _human_paths(targeted: bool) -> tuple[str, str]:
 def cmd_human_sheet(args: argparse.Namespace) -> None:
     """채점용 CSV를 만든다. 기본은 LLM이 판정한 쌍 중 무작위 표본이고, --targeted는 M3·M4 결과를 가르는 쌍을 조합별(M4만·M3만·M2+M4·M2+M3, --groups로 일부만)로 뽑은 표본이다. LLM 점수는 보여주지 않는다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
+    _assert_pairs_in_sync()
     judgments = _current_judgments()
     n_each = getattr(args, "n_each", None) or REAL_TARGETED_EACH
     if args.targeted:
@@ -863,6 +872,7 @@ def _read_filled_sheets(files: list[Path]) -> dict[str, int]:
 
 def cmd_human_agree(args: argparse.Namespace) -> None:
     """채운 시트(--file, 쉼표로 여러 개 가능)와 LLM 판정의 일치율을 계산해 기준(80%) 통과 여부를 기록한다. 방식 조합별 긍정률 차이와 LLM 판정값별 사람 긍정률, 그리고 비교한 입력의 지문도 함께 저장한다."""
+    _assert_pairs_in_sync()
     sheet_name, result_name = _human_paths(args.targeted)
     files = [Path(f) for f in args.file.split(",")] if args.file else [REAL_DIR / sheet_name]
     human = _read_filled_sheets(files)
@@ -885,6 +895,7 @@ def cmd_human_agree(args: argparse.Namespace) -> None:
 def cmd_rejudge(args: argparse.Namespace) -> None:
     """M3와 M4가 다르게 뽑은 쌍을 더 큰 모델(REAL_REJUDGE_MODEL)로 다시 판정해 results/real/judgments_rejudge.json에 저장한다. 끊겨도 이어서 한다."""
     data = load_real_data(resolve_data_dir(args.data_dir))
+    _assert_pairs_in_sync()
     pairs = [tuple(k.split("::")) for k in differing_pairs(_read_json("pairs.json")["provenance"])]
     judge = OpenAIJudge(model=REAL_REJUDGE_MODEL, system_prompt=BINARY_SYSTEM_PROMPT, schema=BINARY_SCHEMA, temperature=None)
     saved = {} if args.force else _read_json("judgments_rejudge.json", default={})
@@ -918,6 +929,7 @@ def cmd_score(args: argparse.Namespace) -> None:
     --rejudged는 다른 쌍의 재판정 결과, --calibrated는 결정을 가르는 쌍의 채점으로 보정한 결과도 함께 낸다.
     """
     data = load_real_data(resolve_data_dir(getattr(args, "data_dir", None)))
+    _assert_pairs_in_sync()
     candidates = _read_json("candidates.json")
     judgments = _current_judgments()
     _assert_judgments_fresh(judgments, data, judge_config_hash(OPENAI_JUDGE_MODEL, BINARY_SYSTEM_PROMPT), "auto-judge")

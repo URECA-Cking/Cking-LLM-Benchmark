@@ -1016,6 +1016,7 @@ def _hand_built_results_skip_freshness(request, tmp_path_factory, monkeypatch):
     _write_data(root)
     monkeypatch.setenv(re_.REAL_DATA_ENV, str(root))
     monkeypatch.setattr(re_, "_assert_judgments_fresh", lambda *a, **k: None)
+    monkeypatch.setattr(re_, "_assert_pairs_in_sync", lambda: None)
 
 
 def _run_flow(tmp_path, monkeypatch, through_rejudge: bool = False):
@@ -1121,3 +1122,25 @@ def test_freshness_targeted_sheet_n_each_reproduces_uneven_group_sizes(tmp_path,
     ids = [r["pair_id"] for r in csv.DictReader((tmp_path / "real" / "a.csv").open(encoding="utf-8-sig"))]
     assert ids == re_.sample_targeted_pairs(prov, 2, re_.REAL_SEED, ("M4", "M3"))
     assert all(re_.group_of(prov[k]) in ("M4", "M3") for k in ids)
+
+
+def test_freshness_pairs_provenance_must_match_current_candidates(tmp_path, monkeypatch):
+    """쌍은 같아도 M3·M4가 뽑은 조합이 달라졌다면 옛 pairs.json의 출처로 계산하지 않고 judge-sheet를 다시 하라고 알린다."""
+    args, _ = _run_flow(tmp_path, monkeypatch)
+    re_.cmd_score(args)  # 그대로면 통과
+    path = tmp_path / "real" / "candidates.json"
+    cands = json.loads(path.read_text(encoding="utf-8"))
+    cands["M3"], cands["M4"] = cands["M4"], cands["M3"]  # 뽑은 쌍 집합은 같고 방식만 뒤바뀐다
+    path.write_text(json.dumps(cands), encoding="utf-8")
+    prov = json.loads((tmp_path / "real" / "pairs.json").read_text(encoding="utf-8"))["provenance"]
+    assert any(v in (["M3"], ["M4"]) for v in prov.values())  # 조합이 실제로 갈리는 쌍이 있어야 이 검사가 의미 있다
+    for run in (re_.cmd_score, re_.cmd_rejudge):
+        with pytest.raises(RuntimeError, match="judge-sheet"):
+            run(args)
+    args.targeted = True
+    with pytest.raises(RuntimeError, match="judge-sheet"):
+        re_.cmd_human_sheet(args)
+    with pytest.raises(RuntimeError, match="judge-sheet"):
+        re_.cmd_human_agree(args)
+    re_.cmd_judge_sheet(args)  # 다시 만들면 통과
+    re_.cmd_score(args)
