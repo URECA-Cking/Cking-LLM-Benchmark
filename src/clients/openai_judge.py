@@ -37,6 +37,14 @@ _SCHEMA = {
 }
 
 
+BINARY_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["score"],
+    "properties": {"score": {"type": "integer", "enum": [0, 1]}},
+}
+
+
 @dataclass(frozen=True)
 class JudgeResult:
     """판정 한 건의 점수와 토큰 사용량이다."""
@@ -49,10 +57,11 @@ class JudgeResult:
 class OpenAIJudge:
     """지정한 모델로 쿼리·후보 소개 쌍의 관련도를 0/1/2로 채점한다."""
 
-    def __init__(self, model: str, client: OpenAI | None = None, system_prompt: str = SYSTEM_PROMPT) -> None:
+    def __init__(self, model: str, client: OpenAI | None = None, system_prompt: str = SYSTEM_PROMPT, schema: dict = _SCHEMA) -> None:
         self.model = model
         self._client = client or OpenAI()
         self._system_prompt = system_prompt
+        self._schema = schema
 
     def judge(self, query_text: str, candidate_text: str) -> JudgeResult:
         """쿼리와 후보의 입력 텍스트를 받아 관련도를 채점한다. temperature=0으로 고정한다."""
@@ -63,7 +72,7 @@ class OpenAIJudge:
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": f"<query>{query_text}</query>\n<candidate>{candidate_text}</candidate>"},
             ],
-            response_format={"type": "json_schema", "json_schema": {"name": "relevance", "strict": True, "schema": _SCHEMA}},
+            response_format={"type": "json_schema", "json_schema": {"name": "relevance", "strict": True, "schema": self._schema}},
         )
         parsed = json.loads(response.choices[0].message.content)
         usage = response.usage
