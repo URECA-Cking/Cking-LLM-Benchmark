@@ -31,8 +31,8 @@
 - 서비스 태그 목록·인기 지표·선택 상한은 미확정이다.
 
 ## 세부 주제 후속 단계
-- 정의와 경계 정본: docs/creator-subtopics.md, data/creator-subtopics.json.
-- 실험 계약과 실행: docs/hierarchical-subtopic-eval.md.
+- 정의와 경계 정본: docs/reference/creator-subtopics.md, data/creator-subtopics.json.
+- 실험 계약과 실행: docs/experiments/subtopics/report.md.
 - 형식은 이번 점수에 사용하지 않는다.
 - 계층 M3의 임계값은 사전 고정 민감도이며 세부 정답 최적값으로 주장하지 않는다.
 - LLM 태깅 승인과 새 추천 쌍 판정 승인을 분리해 추적한다.

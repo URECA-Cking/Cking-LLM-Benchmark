@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import time
 from pathlib import Path
 
 from src.flow_eval import digest
@@ -34,6 +35,7 @@ def run_sheet(rows, path, read=input, emit=print):
     )
     save(path, state)
     for position, row in enumerate(pending, 1):
+        started = time.monotonic()
         emit(
             f"\n{'=' * 60}\n[{position}/{len(pending)}] {row['title']}\n{row['display']}\n"
         )
@@ -62,6 +64,7 @@ def run_sheet(rows, path, read=input, emit=print):
                     "status": "uncertain" if answer == "u" else "rated",
                     "note": note,
                     "evidence_hash": digest(row),
+                    "elapsed_seconds": time.monotonic() - started,
                 }
                 save(path, state)
                 break
@@ -151,9 +154,17 @@ def main():
     args = parse_args()
     path = args.output or Path(f"results/human_check_{args.mode}_{args.limit}.json")
     path.parent.mkdir(parents=True, exist_ok=True)
-    print(
-        "진단용 표본입니다. 최종 성능을 추정하는 표본은 아닙니다. API 호출·비용 없음."
-    )
+    if (
+        args.mode == "recommendations"
+        and (args.experiment_dir / "final_plan.json").exists()
+    ):
+        print(
+            "최종 입력 비교: 1인 평가·같은 후보 풀의 미평가 입력입니다. 실제 사용자 일반화와 구분합니다. API 호출·비용 없음."
+        )
+    else:
+        print(
+            "진단용 표본입니다. 최종 성능을 추정하는 표본은 아닙니다. API 호출·비용 없음."
+        )
     print(
         "추천 점검은 방법명·기존 LLM 점수를 숨깁니다. 태그 점검은 태그 묶음 전체를 판단합니다."
     )

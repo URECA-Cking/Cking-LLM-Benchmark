@@ -19,6 +19,7 @@ def test_resume_keeps_explicit_human_score(tmp_path):
     saved = json.loads(path.read_text())
     assert saved["source"] == "human"
     assert saved["scores"]["a"]["note"] == "reason"
+    assert saved["scores"]["a"]["elapsed_seconds"] >= 0
     assert saved["scores"]["b"]["score"] is None
     with pytest.raises(ValueError):
         run_sheet([{"id": "a", "title": "test", "display": "changed"}], path)

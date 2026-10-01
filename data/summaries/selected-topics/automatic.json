@@ -1,0 +1,4926 @@
+{
+  "contract_verified": true,
+  "plan_hash": "a7f563eb894c1314532c7aa1414d4b0fe0f464ddf7dcc517800001dc6600bc48",
+  "judgment_hash": "2a0459012eda99df8aed02c357167ccc55293ed8710fb6e4d183786526ed6b23",
+  "groups": {
+    "different_parent_pair": {
+      "n": 34,
+      "parent_only": {
+        "p_at_5_any": 0.3470588235294118,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.023529411764705882,
+        "interest_coverage": 0.45588235294117646,
+        "short_bio_at_5": 0.09411764705882353
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.7176470588235295,
+        "p_at_5_all": 0.0058823529411764705,
+        "unknown_at_5": 0.023529411764705882,
+        "interest_coverage": 0.6176470588235294,
+        "short_bio_at_5": 0.07058823529411766
+      },
+      "difference_any": 0.3705882352941177
+    },
+    "same_parent_pair": {
+      "n": 51,
+      "parent_only": {
+        "p_at_5_any": 0.43921568627450985,
+        "p_at_5_all": 0.10196078431372549,
+        "unknown_at_5": 0.0784313725490196,
+        "interest_coverage": 0.5490196078431373,
+        "short_bio_at_5": 0.16470588235294117
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6392156862745099,
+        "p_at_5_all": 0.13333333333333333,
+        "unknown_at_5": 0.05490196078431373,
+        "interest_coverage": 0.7450980392156863,
+        "short_bio_at_5": 0.13333333333333336
+      },
+      "difference_any": 0.2
+    },
+    "single": {
+      "n": 85,
+      "parent_only": {
+        "p_at_5_any": 0.21882352941176472,
+        "p_at_5_all": 0.21882352941176472,
+        "unknown_at_5": 0.05176470588235295,
+        "interest_coverage": 0.4470588235294118,
+        "short_bio_at_5": 0.15058823529411766
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.47058823529411764,
+        "p_at_5_all": 0.47058823529411764,
+        "unknown_at_5": 0.03294117647058824,
+        "interest_coverage": 0.7647058823529411,
+        "short_bio_at_5": 0.10823529411764707
+      },
+      "difference_any": 0.2517647058823529
+    }
+  },
+  "per_case": {
+    "auto-BEAUTY_HAIR": {
+      "group": "single",
+      "topics": [
+        "BEAUTY_HAIR"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-BEAUTY_MAKEUP": {
+      "group": "single",
+      "topics": [
+        "BEAUTY_MAKEUP"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_MAKEUP": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_MAKEUP": 0.6
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-BEAUTY_NAILS": {
+      "group": "single",
+      "topics": [
+        "BEAUTY_NAILS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.8
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-BEAUTY_SKINCARE": {
+      "group": "single",
+      "topics": [
+        "BEAUTY_SKINCARE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_SKINCARE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_SKINCARE": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-ENTERTAIN_ANIMATION": {
+      "group": "single",
+      "topics": [
+        "ENTERTAIN_ANIMATION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_ANIMATION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_ANIMATION": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-ENTERTAIN_DRAMA": {
+      "group": "single",
+      "topics": [
+        "ENTERTAIN_DRAMA"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_DRAMA": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_DRAMA": 0.6
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-ENTERTAIN_FANDOM": {
+      "group": "single",
+      "topics": [
+        "ENTERTAIN_FANDOM"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FANDOM": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FANDOM": 0.6
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-ENTERTAIN_FILM": {
+      "group": "single",
+      "topics": [
+        "ENTERTAIN_FILM"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FILM": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FILM": 0.4
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-ENTERTAIN_VARIETY": {
+      "group": "single",
+      "topics": [
+        "ENTERTAIN_VARIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_VARIETY": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_VARIETY": 0.6
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-ENTERTAIN_WEBTOON": {
+      "group": "single",
+      "topics": [
+        "ENTERTAIN_WEBTOON"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_WEBTOON": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_WEBTOON": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FASHION_ACCESSORIES": {
+      "group": "single",
+      "topics": [
+        "FASHION_ACCESSORIES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FASHION_BAGS": {
+      "group": "single",
+      "topics": [
+        "FASHION_BAGS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-FASHION_CLOTHING": {
+      "group": "single",
+      "topics": [
+        "FASHION_CLOTHING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_CLOTHING": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_CLOTHING": 0.6
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FASHION_SHOES": {
+      "group": "single",
+      "topics": [
+        "FASHION_SHOES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_SHOES": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_SHOES": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_HIKING": {
+      "group": "single",
+      "topics": [
+        "FITNESS_HIKING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_HIKING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_HIKING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_HOME_WORKOUT": {
+      "group": "single",
+      "topics": [
+        "FITNESS_HOME_WORKOUT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_PILATES": {
+      "group": "single",
+      "topics": [
+        "FITNESS_PILATES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_PILATES": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_PILATES": 1.0
+        }
+      },
+      "difference_any": 1.0
+    },
+    "auto-FITNESS_RUNNING": {
+      "group": "single",
+      "topics": [
+        "FITNESS_RUNNING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_RUNNING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_RUNNING": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-FITNESS_WEIGHTS": {
+      "group": "single",
+      "topics": [
+        "FITNESS_WEIGHTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_WEIGHTS": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_WEIGHTS": 0.6
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_WEIGHT_MANAGEMENT": {
+      "group": "single",
+      "topics": [
+        "FITNESS_WEIGHT_MANAGEMENT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_WEIGHT_MANAGEMENT": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_WEIGHT_MANAGEMENT": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_YOGA": {
+      "group": "single",
+      "topics": [
+        "FITNESS_YOGA"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_YOGA": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FITNESS_YOGA": 0.8
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-FOOD_BAKING": {
+      "group": "single",
+      "topics": [
+        "FOOD_BAKING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_BAKING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_BAKING": 0.6
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-FOOD_DESSERT": {
+      "group": "single",
+      "topics": [
+        "FOOD_DESSERT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_DESSERT": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_DESSERT": 1.0
+        }
+      },
+      "difference_any": 1.0
+    },
+    "auto-FOOD_EATING": {
+      "group": "single",
+      "topics": [
+        "FOOD_EATING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_EATING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_EATING": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-FOOD_HOME_COOKING": {
+      "group": "single",
+      "topics": [
+        "FOOD_HOME_COOKING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_HOME_COOKING": 1.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_HOME_COOKING": 1.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FOOD_RESTAURANTS": {
+      "group": "single",
+      "topics": [
+        "FOOD_RESTAURANTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_RESTAURANTS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_RESTAURANTS": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-GAME_ACTION": {
+      "group": "single",
+      "topics": [
+        "GAME_ACTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-GAME_PUZZLE_CASUAL": {
+      "group": "single",
+      "topics": [
+        "GAME_PUZZLE_CASUAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_PUZZLE_CASUAL": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_PUZZLE_CASUAL": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-GAME_RPG": {
+      "group": "single",
+      "topics": [
+        "GAME_RPG"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_RPG": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "GAME_RPG": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-GAME_SIMULATION": {
+      "group": "single",
+      "topics": [
+        "GAME_SIMULATION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_SIMULATION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_SIMULATION": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-GAME_SPORTS_RACING": {
+      "group": "single",
+      "topics": [
+        "GAME_SPORTS_RACING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_SPORTS_RACING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_SPORTS_RACING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-GAME_STRATEGY": {
+      "group": "single",
+      "topics": [
+        "GAME_STRATEGY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_STRATEGY": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_STRATEGY": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HOBBY_COLLECTING": {
+      "group": "single",
+      "topics": [
+        "HOBBY_COLLECTING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "HOBBY_COLLECTING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "HOBBY_COLLECTING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HOBBY_CRAFTS": {
+      "group": "single",
+      "topics": [
+        "HOBBY_CRAFTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "HOBBY_CRAFTS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_CRAFTS": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-HOBBY_DRAWING": {
+      "group": "single",
+      "topics": [
+        "HOBBY_DRAWING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_DRAWING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_DRAWING": 0.8
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-HOBBY_FISHING": {
+      "group": "single",
+      "topics": [
+        "HOBBY_FISHING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_FISHING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_FISHING": 0.6
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-HOBBY_GARDENING": {
+      "group": "single",
+      "topics": [
+        "HOBBY_GARDENING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "HOBBY_GARDENING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "HOBBY_GARDENING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HUMOR_COMEDY": {
+      "group": "single",
+      "topics": [
+        "HUMOR_COMEDY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.4
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HUMOR_HEARTWARMING": {
+      "group": "single",
+      "topics": [
+        "HUMOR_HEARTWARMING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_HEARTWARMING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_HEARTWARMING": 0.8
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-HUMOR_MEMES": {
+      "group": "single",
+      "topics": [
+        "HUMOR_MEMES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_MEMES": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_MEMES": 0.6
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-KNOWLEDGE_BOOKS": {
+      "group": "single",
+      "topics": [
+        "KNOWLEDGE_BOOKS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_BOOKS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_BOOKS": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-KNOWLEDGE_ECONOMICS": {
+      "group": "single",
+      "topics": [
+        "KNOWLEDGE_ECONOMICS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_ECONOMICS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_ECONOMICS": 0.8
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-KNOWLEDGE_FINANCE": {
+      "group": "single",
+      "topics": [
+        "KNOWLEDGE_FINANCE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_FINANCE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_FINANCE": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-KNOWLEDGE_HISTORY": {
+      "group": "single",
+      "topics": [
+        "KNOWLEDGE_HISTORY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_HISTORY": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_HISTORY": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-KNOWLEDGE_SCIENCE": {
+      "group": "single",
+      "topics": [
+        "KNOWLEDGE_SCIENCE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_SCIENCE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_SCIENCE": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-KNOWLEDGE_STUDY": {
+      "group": "single",
+      "topics": [
+        "KNOWLEDGE_STUDY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_STUDY": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_STUDY": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-LIFETIP_HOME_GOODS": {
+      "group": "single",
+      "topics": [
+        "LIFETIP_HOME_GOODS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOME_GOODS": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOME_GOODS": 0.6
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-LIFETIP_HOUSEHOLD": {
+      "group": "single",
+      "topics": [
+        "LIFETIP_HOUSEHOLD"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOUSEHOLD": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOUSEHOLD": 0.6
+        }
+      },
+      "difference_any": -0.20000000000000007
+    },
+    "auto-LIFETIP_INTERIOR": {
+      "group": "single",
+      "topics": [
+        "LIFETIP_INTERIOR"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_INTERIOR": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_INTERIOR": 0.6
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-LIFETIP_KITCHEN_GOODS": {
+      "group": "single",
+      "topics": [
+        "LIFETIP_KITCHEN_GOODS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_KITCHEN_GOODS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_KITCHEN_GOODS": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-LIFETIP_SHOPPING": {
+      "group": "single",
+      "topics": [
+        "LIFETIP_SHOPPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_SHOPPING": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_SHOPPING": 0.6
+        }
+      },
+      "difference_any": -0.20000000000000007
+    },
+    "auto-LIFE_COUPLE": {
+      "group": "single",
+      "topics": [
+        "LIFE_COUPLE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "LIFE_COUPLE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "LIFE_COUPLE": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-LIFE_FAMILY": {
+      "group": "single",
+      "topics": [
+        "LIFE_FAMILY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_FAMILY": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_FAMILY": 1.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-LIFE_PARENTING": {
+      "group": "single",
+      "topics": [
+        "LIFE_PARENTING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PARENTING": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PARENTING": 1.0
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-LIFE_PERSONAL": {
+      "group": "single",
+      "topics": [
+        "LIFE_PERSONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 0.6
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-LIFE_STORIES": {
+      "group": "single",
+      "topics": [
+        "LIFE_STORIES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_STORIES": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_STORIES": 0.8
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-MUSIC_COMPOSITION": {
+      "group": "single",
+      "topics": [
+        "MUSIC_COMPOSITION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_COMPOSITION": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_COMPOSITION": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-MUSIC_DANCE": {
+      "group": "single",
+      "topics": [
+        "MUSIC_DANCE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "MUSIC_DANCE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.8,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_DANCE": 1.0
+        }
+      },
+      "difference_any": 1.0
+    },
+    "auto-MUSIC_INSTRUMENT": {
+      "group": "single",
+      "topics": [
+        "MUSIC_INSTRUMENT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_INSTRUMENT": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_INSTRUMENT": 1.0
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-MUSIC_VOCAL": {
+      "group": "single",
+      "topics": [
+        "MUSIC_VOCAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_VOCAL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_VOCAL": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-NEWS_CELEBRITY_NEWS": {
+      "group": "single",
+      "topics": [
+        "NEWS_CELEBRITY_NEWS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "NEWS_CELEBRITY_NEWS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_CELEBRITY_NEWS": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-NEWS_ECONOMIC_NEWS": {
+      "group": "single",
+      "topics": [
+        "NEWS_ECONOMIC_NEWS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "NEWS_ECONOMIC_NEWS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "NEWS_ECONOMIC_NEWS": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-NEWS_INTERNATIONAL": {
+      "group": "single",
+      "topics": [
+        "NEWS_INTERNATIONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_INTERNATIONAL": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "NEWS_INTERNATIONAL": 0.0
+        }
+      },
+      "difference_any": -0.2
+    },
+    "auto-NEWS_POLITICS": {
+      "group": "single",
+      "topics": [
+        "NEWS_POLITICS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "NEWS_POLITICS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_POLITICS": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-NEWS_SOCIETY": {
+      "group": "single",
+      "topics": [
+        "NEWS_SOCIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_SOCIETY": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_SOCIETY": 0.4
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-PET_ADOPTION": {
+      "group": "single",
+      "topics": [
+        "PET_ADOPTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_ADOPTION": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-PET_CAT": {
+      "group": "single",
+      "topics": [
+        "PET_CAT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_CAT": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_CAT": 1.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-PET_DOG": {
+      "group": "single",
+      "topics": [
+        "PET_DOG"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_DOG": 1.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_DOG": 1.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-PET_OTHER_ANIMALS": {
+      "group": "single",
+      "topics": [
+        "PET_OTHER_ANIMALS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "PET_OTHER_ANIMALS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "PET_OTHER_ANIMALS": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-PET_TRAINING": {
+      "group": "single",
+      "topics": [
+        "PET_TRAINING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_TRAINING": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_TRAINING": 0.8
+        }
+      },
+      "difference_any": 0.20000000000000007
+    },
+    "auto-SPORTS_BASEBALL": {
+      "group": "single",
+      "topics": [
+        "SPORTS_BASEBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "SPORTS_BASEBALL": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "SPORTS_BASEBALL": 1.0
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-SPORTS_BASKETBALL": {
+      "group": "single",
+      "topics": [
+        "SPORTS_BASKETBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_BASKETBALL": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_BASKETBALL": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-SPORTS_COMBAT": {
+      "group": "single",
+      "topics": [
+        "SPORTS_COMBAT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_COMBAT": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_COMBAT": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-SPORTS_FOOTBALL": {
+      "group": "single",
+      "topics": [
+        "SPORTS_FOOTBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "SPORTS_FOOTBALL": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "SPORTS_FOOTBALL": 0.2
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-SPORTS_GOLF": {
+      "group": "single",
+      "topics": [
+        "SPORTS_GOLF"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_GOLF": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "SPORTS_GOLF": 0.8
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-SPORTS_OTHER_SPORTS": {
+      "group": "single",
+      "topics": [
+        "SPORTS_OTHER_SPORTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_OTHER_SPORTS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "SPORTS_OTHER_SPORTS": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TECH_AI": {
+      "group": "single",
+      "topics": [
+        "TECH_AI"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "TECH_AI": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_AI": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-TECH_DEVICES": {
+      "group": "single",
+      "topics": [
+        "TECH_DEVICES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_DEVICES": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_DEVICES": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TECH_MOBILE": {
+      "group": "single",
+      "topics": [
+        "TECH_MOBILE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "TECH_MOBILE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "TECH_MOBILE": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TECH_PC": {
+      "group": "single",
+      "topics": [
+        "TECH_PC"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_PC": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_PC": 0.2
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TECH_PROGRAMMING": {
+      "group": "single",
+      "topics": [
+        "TECH_PROGRAMMING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "TECH_PROGRAMMING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "TECH_PROGRAMMING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TRAVEL_CAMPING": {
+      "group": "single",
+      "topics": [
+        "TRAVEL_CAMPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAMPING": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAMPING": 0.8
+        }
+      },
+      "difference_any": 0.20000000000000007
+    },
+    "auto-TRAVEL_CAR_CAMPING": {
+      "group": "single",
+      "topics": [
+        "TRAVEL_CAR_CAMPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAR_CAMPING": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAR_CAMPING": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-TRAVEL_DOMESTIC": {
+      "group": "single",
+      "topics": [
+        "TRAVEL_DOMESTIC"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_DOMESTIC": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_DOMESTIC": 0.8
+        }
+      },
+      "difference_any": 0.20000000000000007
+    },
+    "auto-TRAVEL_INTERNATIONAL": {
+      "group": "single",
+      "topics": [
+        "TRAVEL_INTERNATIONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_INTERNATIONAL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 1.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_INTERNATIONAL": 1.0
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-FITNESS_HOME_WORKOUT__FITNESS_RUNNING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FITNESS_HOME_WORKOUT",
+        "FITNESS_RUNNING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 1.0,
+          "FITNESS_RUNNING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 1.0,
+          "FITNESS_RUNNING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_HOME_WORKOUT__FITNESS_YOGA": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FITNESS_HOME_WORKOUT",
+        "FITNESS_YOGA"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 0.8,
+          "FITNESS_YOGA": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 0.8,
+          "FITNESS_YOGA": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_PILATES__FITNESS_RUNNING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FITNESS_PILATES",
+        "FITNESS_RUNNING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_PILATES": 0.0,
+          "FITNESS_RUNNING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_PILATES": 1.0,
+          "FITNESS_RUNNING": 0.0
+        }
+      },
+      "difference_any": 1.0
+    },
+    "auto-FOOD_EATING__FOOD_RESTAURANTS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FOOD_EATING",
+        "FOOD_RESTAURANTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_EATING": 0.0,
+          "FOOD_RESTAURANTS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_EATING": 0.2,
+          "FOOD_RESTAURANTS": 0.0
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-FOOD_DESSERT__FOOD_RESTAURANTS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FOOD_DESSERT",
+        "FOOD_RESTAURANTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_DESSERT": 0.0,
+          "FOOD_RESTAURANTS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_DESSERT": 0.8,
+          "FOOD_RESTAURANTS": 0.0
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-FOOD_BAKING__FOOD_EATING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FOOD_BAKING",
+        "FOOD_EATING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FOOD_BAKING": 0.0,
+          "FOOD_EATING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FOOD_BAKING": 0.4,
+          "FOOD_EATING": 0.2
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-GAME_RPG__GAME_SIMULATION": {
+      "group": "same_parent_pair",
+      "topics": [
+        "GAME_RPG",
+        "GAME_SIMULATION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_RPG": 0.0,
+          "GAME_SIMULATION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "GAME_RPG": 0.2,
+          "GAME_SIMULATION": 0.0
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-GAME_ACTION__GAME_SIMULATION": {
+      "group": "same_parent_pair",
+      "topics": [
+        "GAME_ACTION",
+        "GAME_SIMULATION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.0,
+          "GAME_SIMULATION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.2,
+          "GAME_SIMULATION": 0.0
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-GAME_ACTION__GAME_SPORTS_RACING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "GAME_ACTION",
+        "GAME_SPORTS_RACING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.0,
+          "GAME_SPORTS_RACING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.2,
+          "GAME_SPORTS_RACING": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-BEAUTY_NAILS__BEAUTY_SKINCARE": {
+      "group": "same_parent_pair",
+      "topics": [
+        "BEAUTY_NAILS",
+        "BEAUTY_SKINCARE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.0,
+          "BEAUTY_SKINCARE": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.0,
+          "BEAUTY_SKINCARE": 0.6
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-BEAUTY_HAIR__BEAUTY_MAKEUP": {
+      "group": "same_parent_pair",
+      "topics": [
+        "BEAUTY_HAIR",
+        "BEAUTY_MAKEUP"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.2,
+          "BEAUTY_MAKEUP": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.2,
+          "BEAUTY_MAKEUP": 0.6
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-BEAUTY_HAIR__BEAUTY_NAILS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "BEAUTY_HAIR",
+        "BEAUTY_NAILS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.2,
+          "BEAUTY_NAILS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.2,
+          "BEAUTY_NAILS": 0.6
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-FASHION_ACCESSORIES__FASHION_BAGS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FASHION_ACCESSORIES",
+        "FASHION_BAGS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0,
+          "FASHION_BAGS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0,
+          "FASHION_BAGS": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FASHION_ACCESSORIES__FASHION_CLOTHING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FASHION_ACCESSORIES",
+        "FASHION_CLOTHING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0,
+          "FASHION_CLOTHING": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0,
+          "FASHION_CLOTHING": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FASHION_BAGS__FASHION_CLOTHING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "FASHION_BAGS",
+        "FASHION_CLOTHING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "FASHION_CLOTHING": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "FASHION_CLOTHING": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TRAVEL_CAR_CAMPING__TRAVEL_DOMESTIC": {
+      "group": "same_parent_pair",
+      "topics": [
+        "TRAVEL_CAR_CAMPING",
+        "TRAVEL_DOMESTIC"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAR_CAMPING": 0.2,
+          "TRAVEL_DOMESTIC": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAR_CAMPING": 0.2,
+          "TRAVEL_DOMESTIC": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TRAVEL_CAMPING__TRAVEL_DOMESTIC": {
+      "group": "same_parent_pair",
+      "topics": [
+        "TRAVEL_CAMPING",
+        "TRAVEL_DOMESTIC"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAMPING": 0.6,
+          "TRAVEL_DOMESTIC": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAMPING": 0.6,
+          "TRAVEL_DOMESTIC": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-TRAVEL_CAMPING__TRAVEL_INTERNATIONAL": {
+      "group": "same_parent_pair",
+      "topics": [
+        "TRAVEL_CAMPING",
+        "TRAVEL_INTERNATIONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAMPING": 0.6,
+          "TRAVEL_INTERNATIONAL": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TRAVEL_CAMPING": 0.6,
+          "TRAVEL_INTERNATIONAL": 0.8
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-MUSIC_COMPOSITION__MUSIC_INSTRUMENT": {
+      "group": "same_parent_pair",
+      "topics": [
+        "MUSIC_COMPOSITION",
+        "MUSIC_INSTRUMENT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_COMPOSITION": 0.4,
+          "MUSIC_INSTRUMENT": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_COMPOSITION": 0.8,
+          "MUSIC_INSTRUMENT": 0.8
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-MUSIC_DANCE__MUSIC_VOCAL": {
+      "group": "same_parent_pair",
+      "topics": [
+        "MUSIC_DANCE",
+        "MUSIC_VOCAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "MUSIC_DANCE": 0.0,
+          "MUSIC_VOCAL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "MUSIC_DANCE": 0.0,
+          "MUSIC_VOCAL": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-MUSIC_COMPOSITION__MUSIC_VOCAL": {
+      "group": "same_parent_pair",
+      "topics": [
+        "MUSIC_COMPOSITION",
+        "MUSIC_VOCAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_COMPOSITION": 0.4,
+          "MUSIC_VOCAL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_COMPOSITION": 0.4,
+          "MUSIC_VOCAL": 0.4
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-PET_CAT__PET_DOG": {
+      "group": "same_parent_pair",
+      "topics": [
+        "PET_CAT",
+        "PET_DOG"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_CAT": 0.6,
+          "PET_DOG": 1.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_CAT": 0.6,
+          "PET_DOG": 1.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-PET_CAT__PET_TRAINING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "PET_CAT",
+        "PET_TRAINING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_CAT": 0.6,
+          "PET_TRAINING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "PET_CAT": 0.6,
+          "PET_TRAINING": 0.2
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-PET_ADOPTION__PET_TRAINING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "PET_ADOPTION",
+        "PET_TRAINING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "PET_ADOPTION": 0.0,
+          "PET_TRAINING": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "PET_ADOPTION": 0.0,
+          "PET_TRAINING": 1.0
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-TECH_DEVICES__TECH_PC": {
+      "group": "same_parent_pair",
+      "topics": [
+        "TECH_DEVICES",
+        "TECH_PC"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_DEVICES": 0.6,
+          "TECH_PC": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_DEVICES": 0.8,
+          "TECH_PC": 0.2
+        }
+      },
+      "difference_any": 0.20000000000000007
+    },
+    "auto-TECH_AI__TECH_DEVICES": {
+      "group": "same_parent_pair",
+      "topics": [
+        "TECH_AI",
+        "TECH_DEVICES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "TECH_AI": 0.0,
+          "TECH_DEVICES": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "TECH_AI": 0.0,
+          "TECH_DEVICES": 1.0
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-TECH_AI__TECH_PROGRAMMING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "TECH_AI",
+        "TECH_PROGRAMMING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "TECH_AI": 0.0,
+          "TECH_PROGRAMMING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "TECH_AI": 0.4,
+          "TECH_PROGRAMMING": 0.2
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-KNOWLEDGE_HISTORY__KNOWLEDGE_SCIENCE": {
+      "group": "same_parent_pair",
+      "topics": [
+        "KNOWLEDGE_HISTORY",
+        "KNOWLEDGE_SCIENCE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_HISTORY": 0.0,
+          "KNOWLEDGE_SCIENCE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_HISTORY": 0.2,
+          "KNOWLEDGE_SCIENCE": 0.0
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-KNOWLEDGE_ECONOMICS__KNOWLEDGE_STUDY": {
+      "group": "same_parent_pair",
+      "topics": [
+        "KNOWLEDGE_ECONOMICS",
+        "KNOWLEDGE_STUDY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_ECONOMICS": 0.0,
+          "KNOWLEDGE_STUDY": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_ECONOMICS": 0.0,
+          "KNOWLEDGE_STUDY": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-KNOWLEDGE_BOOKS__KNOWLEDGE_SCIENCE": {
+      "group": "same_parent_pair",
+      "topics": [
+        "KNOWLEDGE_BOOKS",
+        "KNOWLEDGE_SCIENCE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_BOOKS": 0.0,
+          "KNOWLEDGE_SCIENCE": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_BOOKS": 0.4,
+          "KNOWLEDGE_SCIENCE": 0.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-ENTERTAIN_FANDOM__ENTERTAIN_WEBTOON": {
+      "group": "same_parent_pair",
+      "topics": [
+        "ENTERTAIN_FANDOM",
+        "ENTERTAIN_WEBTOON"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FANDOM": 0.0,
+          "ENTERTAIN_WEBTOON": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FANDOM": 0.6,
+          "ENTERTAIN_WEBTOON": 0.0
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-ENTERTAIN_ANIMATION__ENTERTAIN_WEBTOON": {
+      "group": "same_parent_pair",
+      "topics": [
+        "ENTERTAIN_ANIMATION",
+        "ENTERTAIN_WEBTOON"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_ANIMATION": 0.0,
+          "ENTERTAIN_WEBTOON": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_ANIMATION": 0.4,
+          "ENTERTAIN_WEBTOON": 0.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-ENTERTAIN_DRAMA__ENTERTAIN_VARIETY": {
+      "group": "same_parent_pair",
+      "topics": [
+        "ENTERTAIN_DRAMA",
+        "ENTERTAIN_VARIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_DRAMA": 0.6,
+          "ENTERTAIN_VARIETY": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_DRAMA": 0.8,
+          "ENTERTAIN_VARIETY": 0.2
+        }
+      },
+      "difference_any": 0.20000000000000007
+    },
+    "auto-HUMOR_COMEDY__HUMOR_MEMES": {
+      "group": "same_parent_pair",
+      "topics": [
+        "HUMOR_COMEDY",
+        "HUMOR_MEMES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.8,
+          "HUMOR_MEMES": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.8,
+          "HUMOR_MEMES": 0.4
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HUMOR_COMEDY__HUMOR_HEARTWARMING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "HUMOR_COMEDY",
+        "HUMOR_HEARTWARMING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.6,
+          "HUMOR_HEARTWARMING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.6,
+          "HUMOR_HEARTWARMING": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HUMOR_HEARTWARMING__HUMOR_MEMES": {
+      "group": "same_parent_pair",
+      "topics": [
+        "HUMOR_HEARTWARMING",
+        "HUMOR_MEMES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_HEARTWARMING": 0.2,
+          "HUMOR_MEMES": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HUMOR_HEARTWARMING": 0.2,
+          "HUMOR_MEMES": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-SPORTS_BASKETBALL__SPORTS_FOOTBALL": {
+      "group": "same_parent_pair",
+      "topics": [
+        "SPORTS_BASKETBALL",
+        "SPORTS_FOOTBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "SPORTS_BASKETBALL": 0.0,
+          "SPORTS_FOOTBALL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "SPORTS_BASKETBALL": 0.0,
+          "SPORTS_FOOTBALL": 0.6
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-SPORTS_BASKETBALL__SPORTS_OTHER_SPORTS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "SPORTS_BASKETBALL",
+        "SPORTS_OTHER_SPORTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "SPORTS_BASKETBALL": 0.0,
+          "SPORTS_OTHER_SPORTS": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "SPORTS_BASKETBALL": 0.0,
+          "SPORTS_OTHER_SPORTS": 0.2
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-SPORTS_COMBAT__SPORTS_OTHER_SPORTS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "SPORTS_COMBAT",
+        "SPORTS_OTHER_SPORTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "SPORTS_COMBAT": 0.0,
+          "SPORTS_OTHER_SPORTS": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "SPORTS_COMBAT": 0.0,
+          "SPORTS_OTHER_SPORTS": 0.2
+        }
+      },
+      "difference_any": -0.2
+    },
+    "auto-NEWS_CELEBRITY_NEWS__NEWS_ECONOMIC_NEWS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "NEWS_CELEBRITY_NEWS",
+        "NEWS_ECONOMIC_NEWS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "NEWS_CELEBRITY_NEWS": 0.0,
+          "NEWS_ECONOMIC_NEWS": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_CELEBRITY_NEWS": 0.2,
+          "NEWS_ECONOMIC_NEWS": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-NEWS_INTERNATIONAL__NEWS_POLITICS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "NEWS_INTERNATIONAL",
+        "NEWS_POLITICS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "NEWS_INTERNATIONAL": 0.2,
+          "NEWS_POLITICS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "NEWS_INTERNATIONAL": 0.0,
+          "NEWS_POLITICS": 0.2
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-NEWS_ECONOMIC_NEWS__NEWS_SOCIETY": {
+      "group": "same_parent_pair",
+      "topics": [
+        "NEWS_ECONOMIC_NEWS",
+        "NEWS_SOCIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_ECONOMIC_NEWS": 0.4,
+          "NEWS_SOCIETY": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "NEWS_ECONOMIC_NEWS": 0.2,
+          "NEWS_SOCIETY": 0.4
+        }
+      },
+      "difference_any": -0.19999999999999996
+    },
+    "auto-LIFE_PERSONAL__LIFE_STORIES": {
+      "group": "same_parent_pair",
+      "topics": [
+        "LIFE_PERSONAL",
+        "LIFE_STORIES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 0.8,
+          "LIFE_STORIES": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.8,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 0.8,
+          "LIFE_STORIES": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-LIFE_PARENTING__LIFE_PERSONAL": {
+      "group": "same_parent_pair",
+      "topics": [
+        "LIFE_PARENTING",
+        "LIFE_PERSONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PARENTING": 0.8,
+          "LIFE_PERSONAL": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PARENTING": 0.6,
+          "LIFE_PERSONAL": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-LIFE_COUPLE__LIFE_PARENTING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "LIFE_COUPLE",
+        "LIFE_PARENTING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "LIFE_COUPLE": 0.0,
+          "LIFE_PARENTING": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_COUPLE": 0.2,
+          "LIFE_PARENTING": 1.0
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-HOBBY_COLLECTING__HOBBY_DRAWING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "HOBBY_COLLECTING",
+        "HOBBY_DRAWING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_COLLECTING": 0.0,
+          "HOBBY_DRAWING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_COLLECTING": 0.2,
+          "HOBBY_DRAWING": 0.8
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-HOBBY_DRAWING__HOBBY_FISHING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "HOBBY_DRAWING",
+        "HOBBY_FISHING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.6,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_DRAWING": 0.2,
+          "HOBBY_FISHING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "HOBBY_DRAWING": 0.6,
+          "HOBBY_FISHING": 0.2
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-HOBBY_CRAFTS__HOBBY_GARDENING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "HOBBY_CRAFTS",
+        "HOBBY_GARDENING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.6,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "HOBBY_CRAFTS": 0.0,
+          "HOBBY_GARDENING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_CRAFTS": 0.4,
+          "HOBBY_GARDENING": 0.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-LIFETIP_HOME_GOODS__LIFETIP_KITCHEN_GOODS": {
+      "group": "same_parent_pair",
+      "topics": [
+        "LIFETIP_HOME_GOODS",
+        "LIFETIP_KITCHEN_GOODS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOME_GOODS": 0.2,
+          "LIFETIP_KITCHEN_GOODS": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.6,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOME_GOODS": 0.6,
+          "LIFETIP_KITCHEN_GOODS": 0.6
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-LIFETIP_HOUSEHOLD__LIFETIP_SHOPPING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "LIFETIP_HOUSEHOLD",
+        "LIFETIP_SHOPPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOUSEHOLD": 0.6,
+          "LIFETIP_SHOPPING": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.4,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOUSEHOLD": 0.6,
+          "LIFETIP_SHOPPING": 0.4
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-LIFETIP_KITCHEN_GOODS__LIFETIP_SHOPPING": {
+      "group": "same_parent_pair",
+      "topics": [
+        "LIFETIP_KITCHEN_GOODS",
+        "LIFETIP_SHOPPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_KITCHEN_GOODS": 0.2,
+          "LIFETIP_SHOPPING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFETIP_KITCHEN_GOODS": 0.2,
+          "LIFETIP_SHOPPING": 0.2
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-KNOWLEDGE_FINANCE__NEWS_SOCIETY": {
+      "group": "different_parent_pair",
+      "topics": [
+        "KNOWLEDGE_FINANCE",
+        "NEWS_SOCIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_FINANCE": 0.2,
+          "NEWS_SOCIETY": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "KNOWLEDGE_FINANCE": 0.8,
+          "NEWS_SOCIETY": 0.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-LIFE_PERSONAL__MUSIC_COMPOSITION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "LIFE_PERSONAL",
+        "MUSIC_COMPOSITION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 1.0,
+          "MUSIC_COMPOSITION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 1.0,
+          "MUSIC_COMPOSITION": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-HOBBY_COLLECTING__SPORTS_FOOTBALL": {
+      "group": "different_parent_pair",
+      "topics": [
+        "HOBBY_COLLECTING",
+        "SPORTS_FOOTBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_COLLECTING": 0.0,
+          "SPORTS_FOOTBALL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_COLLECTING": 0.0,
+          "SPORTS_FOOTBALL": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-FITNESS_HOME_WORKOUT__PET_ADOPTION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FITNESS_HOME_WORKOUT",
+        "PET_ADOPTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 0.8,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HOME_WORKOUT": 1.0,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-BEAUTY_NAILS__NEWS_SOCIETY": {
+      "group": "different_parent_pair",
+      "topics": [
+        "BEAUTY_NAILS",
+        "NEWS_SOCIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.0,
+          "NEWS_SOCIETY": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.4,
+          "NEWS_SOCIETY": 0.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-GAME_SIMULATION__NEWS_CELEBRITY_NEWS": {
+      "group": "different_parent_pair",
+      "topics": [
+        "GAME_SIMULATION",
+        "NEWS_CELEBRITY_NEWS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_SIMULATION": 0.0,
+          "NEWS_CELEBRITY_NEWS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "GAME_SIMULATION": 0.0,
+          "NEWS_CELEBRITY_NEWS": 0.0
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-GAME_ACTION__LIFETIP_KITCHEN_GOODS": {
+      "group": "different_parent_pair",
+      "topics": [
+        "GAME_ACTION",
+        "LIFETIP_KITCHEN_GOODS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.2,
+          "LIFETIP_KITCHEN_GOODS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.2,
+          "LIFETIP_KITCHEN_GOODS": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-BEAUTY_HAIR__SPORTS_BASEBALL": {
+      "group": "different_parent_pair",
+      "topics": [
+        "BEAUTY_HAIR",
+        "SPORTS_BASEBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.2,
+          "SPORTS_BASEBALL": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "BEAUTY_HAIR": 0.4,
+          "SPORTS_BASEBALL": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-LIFE_FAMILY__PET_ADOPTION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "LIFE_FAMILY",
+        "PET_ADOPTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "LIFE_FAMILY": 0.0,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.2,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_FAMILY": 0.4,
+          "PET_ADOPTION": 0.6
+        }
+      },
+      "difference_any": 0.8
+    },
+    "auto-HOBBY_GARDENING__KNOWLEDGE_BOOKS": {
+      "group": "different_parent_pair",
+      "topics": [
+        "HOBBY_GARDENING",
+        "KNOWLEDGE_BOOKS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_GARDENING": 0.0,
+          "KNOWLEDGE_BOOKS": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_GARDENING": 0.0,
+          "KNOWLEDGE_BOOKS": 0.8
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-FASHION_CLOTHING__TRAVEL_INTERNATIONAL": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_CLOTHING",
+        "TRAVEL_INTERNATIONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_CLOTHING": 0.2,
+          "TRAVEL_INTERNATIONAL": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_CLOTHING": 0.4,
+          "TRAVEL_INTERNATIONAL": 0.6
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-FOOD_RESTAURANTS__TECH_PC": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FOOD_RESTAURANTS",
+        "TECH_PC"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_RESTAURANTS": 0.0,
+          "TECH_PC": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_RESTAURANTS": 0.0,
+          "TECH_PC": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-LIFETIP_HOME_GOODS__SPORTS_BASKETBALL": {
+      "group": "different_parent_pair",
+      "topics": [
+        "LIFETIP_HOME_GOODS",
+        "SPORTS_BASKETBALL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOME_GOODS": 0.4,
+          "SPORTS_BASKETBALL": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "LIFETIP_HOME_GOODS": 1.0,
+          "SPORTS_BASKETBALL": 0.0
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-HUMOR_COMEDY__MUSIC_VOCAL": {
+      "group": "different_parent_pair",
+      "topics": [
+        "HUMOR_COMEDY",
+        "MUSIC_VOCAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.0,
+          "MUSIC_VOCAL": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.0,
+          "MUSIC_VOCAL": 1.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-GAME_ACTION__TRAVEL_CAMPING": {
+      "group": "different_parent_pair",
+      "topics": [
+        "GAME_ACTION",
+        "TRAVEL_CAMPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.0,
+          "TRAVEL_CAMPING": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "GAME_ACTION": 0.2,
+          "TRAVEL_CAMPING": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-ENTERTAIN_FANDOM__TRAVEL_CAMPING": {
+      "group": "different_parent_pair",
+      "topics": [
+        "ENTERTAIN_FANDOM",
+        "TRAVEL_CAMPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FANDOM": 0.0,
+          "TRAVEL_CAMPING": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_FANDOM": 0.0,
+          "TRAVEL_CAMPING": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-GAME_RPG__PET_ADOPTION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "GAME_RPG",
+        "PET_ADOPTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "GAME_RPG": 0.2,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "GAME_RPG": 0.8,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-LIFE_PERSONAL__TECH_AI": {
+      "group": "different_parent_pair",
+      "topics": [
+        "LIFE_PERSONAL",
+        "TECH_AI"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 0.2,
+          "TECH_AI": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "LIFE_PERSONAL": 0.8,
+          "TECH_AI": 0.2
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-FITNESS_HIKING__PET_ADOPTION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FITNESS_HIKING",
+        "PET_ADOPTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FITNESS_HIKING": 0.0,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_HIKING": 0.0,
+          "PET_ADOPTION": 0.2
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-HUMOR_COMEDY__NEWS_SOCIETY": {
+      "group": "different_parent_pair",
+      "topics": [
+        "HUMOR_COMEDY",
+        "NEWS_SOCIETY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.6,
+          "NEWS_SOCIETY": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HUMOR_COMEDY": 0.8,
+          "NEWS_SOCIETY": 0.0
+        }
+      },
+      "difference_any": 0.20000000000000007
+    },
+    "auto-FASHION_BAGS__TRAVEL_CAMPING": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_BAGS",
+        "TRAVEL_CAMPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "TRAVEL_CAMPING": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "TRAVEL_CAMPING": 0.6
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-FASHION_SHOES__HUMOR_MEMES": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_SHOES",
+        "HUMOR_MEMES"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.2,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_SHOES": 0.0,
+          "HUMOR_MEMES": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.4,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_SHOES": 0.0,
+          "HUMOR_MEMES": 0.6
+        }
+      },
+      "difference_any": 0.39999999999999997
+    },
+    "auto-ENTERTAIN_ANIMATION__NEWS_INTERNATIONAL": {
+      "group": "different_parent_pair",
+      "topics": [
+        "ENTERTAIN_ANIMATION",
+        "NEWS_INTERNATIONAL"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_ANIMATION": 0.0,
+          "NEWS_INTERNATIONAL": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_ANIMATION": 0.0,
+          "NEWS_INTERNATIONAL": 0.4
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-FASHION_ACCESSORIES__FOOD_HOME_COOKING": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_ACCESSORIES",
+        "FOOD_HOME_COOKING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.4,
+          "FOOD_HOME_COOKING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.4,
+          "FOOD_HOME_COOKING": 0.2
+        }
+      },
+      "difference_any": 0.19999999999999996
+    },
+    "auto-FASHION_ACCESSORIES__NEWS_POLITICS": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_ACCESSORIES",
+        "NEWS_POLITICS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.0,
+          "NEWS_POLITICS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_ACCESSORIES": 0.2,
+          "NEWS_POLITICS": 0.0
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-FASHION_BAGS__FOOD_RESTAURANTS": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_BAGS",
+        "FOOD_RESTAURANTS"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.0,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "FOOD_RESTAURANTS": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.4,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.2,
+          "FOOD_RESTAURANTS": 0.4
+        }
+      },
+      "difference_any": 0.6
+    },
+    "auto-BEAUTY_NAILS__LIFE_FAMILY": {
+      "group": "different_parent_pair",
+      "topics": [
+        "BEAUTY_NAILS",
+        "LIFE_FAMILY"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.0,
+          "LIFE_FAMILY": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "BEAUTY_NAILS": 0.4,
+          "LIFE_FAMILY": 0.0
+        }
+      },
+      "difference_any": 0.2
+    },
+    "auto-HOBBY_GARDENING__MUSIC_COMPOSITION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "HOBBY_GARDENING",
+        "MUSIC_COMPOSITION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_GARDENING": 0.0,
+          "MUSIC_COMPOSITION": 0.8
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "HOBBY_GARDENING": 0.0,
+          "MUSIC_COMPOSITION": 0.8
+        }
+      },
+      "difference_any": 0.0
+    },
+    "auto-FITNESS_WEIGHTS__PET_ADOPTION": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FITNESS_WEIGHTS",
+        "PET_ADOPTION"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_WEIGHTS": 0.4,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FITNESS_WEIGHTS": 0.8,
+          "PET_ADOPTION": 0.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-MUSIC_INSTRUMENT__TECH_AI": {
+      "group": "different_parent_pair",
+      "topics": [
+        "MUSIC_INSTRUMENT",
+        "TECH_AI"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "MUSIC_INSTRUMENT": 0.0,
+          "TECH_AI": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 1.0,
+        "per_topic_p_at_5": {
+          "MUSIC_INSTRUMENT": 0.4,
+          "TECH_AI": 0.4
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-FASHION_BAGS__FITNESS_HOME_WORKOUT": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FASHION_BAGS",
+        "FITNESS_HOME_WORKOUT"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.2,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "FITNESS_HOME_WORKOUT": 0.2
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FASHION_BAGS": 0.0,
+          "FITNESS_HOME_WORKOUT": 0.8
+        }
+      },
+      "difference_any": 0.6000000000000001
+    },
+    "auto-FOOD_RESTAURANTS__TECH_MOBILE": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FOOD_RESTAURANTS",
+        "TECH_MOBILE"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.6,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_RESTAURANTS": 0.0,
+          "TECH_MOBILE": 0.6
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 1.0,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_RESTAURANTS": 0.0,
+          "TECH_MOBILE": 1.0
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-ENTERTAIN_DRAMA__TRAVEL_CAMPING": {
+      "group": "different_parent_pair",
+      "topics": [
+        "ENTERTAIN_DRAMA",
+        "TRAVEL_CAMPING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.4,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_DRAMA": 0.0,
+          "TRAVEL_CAMPING": 0.4
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "ENTERTAIN_DRAMA": 0.0,
+          "TRAVEL_CAMPING": 0.8
+        }
+      },
+      "difference_any": 0.4
+    },
+    "auto-FOOD_BAKING__HOBBY_GARDENING": {
+      "group": "different_parent_pair",
+      "topics": [
+        "FOOD_BAKING",
+        "HOBBY_GARDENING"
+      ],
+      "parent_only": {
+        "p_at_5_any": 0.2,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_BAKING": 0.2,
+          "HOBBY_GARDENING": 0.0
+        }
+      },
+      "selected_subtopic": {
+        "p_at_5_any": 0.8,
+        "p_at_5_all": 0.0,
+        "unknown_at_5": 0.0,
+        "short_bio_at_5": 0.0,
+        "interest_coverage": 0.5,
+        "per_topic_p_at_5": {
+          "FOOD_BAKING": 0.8,
+          "HOBBY_GARDENING": 0.0
+        }
+      },
+      "difference_any": 0.6000000000000001
+    }
+  },
+  "human_agreement": {
+    "n": 53,
+    "matched": 23,
+    "matrix": {
+      "human=1,llm=0": 27,
+      "human=1,llm=1": 11,
+      "human=0,llm=1": 1,
+      "human=0,llm=0": 12,
+      "human=1,llm=None": 2
+    }
+  },
+  "usage": {
+    "unique_judgments": 1262,
+    "input_tokens": 414139,
+    "output_tokens": 79933,
+    "actual_invoice": "unverified; unsuccessful requests/retries may add usage"
+  },
+  "limits": "LLM proxy quality; synthetic correlated inputs; no population superiority or automatic adoption"
+}
