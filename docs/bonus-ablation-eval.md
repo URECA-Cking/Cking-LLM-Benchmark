@@ -1,4 +1,4 @@
-# 가산점 분리 실험 결과와 최종 검증 계획
+# 세부 태그 보정·가산점 조건 비교와 최종 검증 계획
 
 ## 이번 결론
 
@@ -16,8 +16,10 @@
 | D | 세부 H4 | 기존의 1.5배 |
 
 기존 v4·468개 입력·임베딩·텍스트·판정 질문/모델·seed별 보정 후 최대 집계를 유지한다.
-B만 새로 생성하고 A/C/D는 계약 해시를 검증해 재사용한다. 후보 합집합 2,651쌍 모두 기존 판정이 있어 신규 API 호출은 0건이다.
-C/D는 세부 불일치의 보정도 줄이므로 같은 최대 가산점 비교는 세부 보정 규칙 전체의 비교다.
+B를 생성하고 A는 재계산 대조한다. C/D도 현재 소개글·상위/세부 태그·정의에서 재계산해 이전 결과와 대조한다. 판정만 계약·텍스트 해시 검증 후 재사용한다. 후보 합집합 2,651쌍 모두 기존 판정이 있어 신규 API 호출은 0건이다.
+C/D는 세부 불일치의 보정도 줄이므로 같은 최대 가산점 비교는 세부 보정 규칙 전체의 비교다. D−B는 상위만 일치하는 후보의 보정 축소와 세부 일치 가산이 섞이며 순수한 가산점 증가 효과가 아니다.
+
+A/B가 같은 순위였던 468개 중 413개는 상위 5명 모두의 점수가 동일하게 0.1씩 증가했다. 이 경우 후보 사이 순서를 바꾸지 못한다. 나머지 55개까지 동일 원인이라고 단정하지 않는다.
 
 ## P@5 결과
 
@@ -59,10 +61,12 @@ C/D는 세부 불일치의 보정도 줄이므로 같은 최대 가산점 비교
 
 | 조건 | 여러 분야 즐겨찾기에서 모든 입력 분야 노출 |
 | --- | ---: |
-| A_M4 | 0.412 |
-| B_M4_x1.5 | 0.412 |
-| C_H4_equal | 0.529 |
-| D_H4_x1.5 | 0.471 |
+| A_M4 | 7/17 (41.2%) |
+| B_M4_x1.5 | 7/17 (41.2%) |
+| C_H4_equal | 9/17 (52.9%) |
+| D_H4_x1.5 | 8/17 (47.1%) |
+
+표본은 17개이며 C와 A의 차이는 입력 2개다. 구간 없는 탐색 진단으로 해석한다.
 
 ## 사람 점검 계획과 실행 범위
 
@@ -87,6 +91,7 @@ C/D는 세부 불일치의 보정도 줄이므로 같은 최대 가산점 비교
   --data-dir ~/Desktop/youtube-collect/gold_variants/v4 \
   --source-dir results/real_v4 --flow-dir results/flow_v4 \
   --baseline-dir results/flow_m234_v4 --hierarchy-dir results/hierarchy_v1 \
+  --subtopic-dir results/subtopics_v1 --taxonomy data/creator-subtopics.json \
   --output-dir results/bonus_ablation_v2
 .venv/bin/python -m src.hierarchy_judge \
   --flow-dir results/flow_v4 --baseline-dir results/flow_m234_v4 \
@@ -95,10 +100,6 @@ C/D는 세부 불일치의 보정도 줄이므로 같은 최대 가산점 비교
 원문·판정·벡터는 Git 제외다. 외부 데이터/캐시 없이 수치의 독립 재현은 불가능하다.
 이번 실행은 API 호출이 없다. 새 후보 생성은 새 폴더를 사용하고 이전 결과를 덮어쓰지 않는다.
 관련 이슈: #32. 선행 결과: [추천 실험 요약](recommendation-results.md).
-
-## 실행 검증
-
-Python 3.12 전체 테스트: `275 passed in 5.94s`. 신규 모듈 Python 3.9 구문 검사와 git diff --check 통과. Python 3.11 런타임 전체 테스트는 미확인이다.
 
 ## 직접 수행한 소규모 점검
 
@@ -118,7 +119,7 @@ Python 3.12 전체 테스트: `275 passed in 5.94s`. 신규 모듈 Python 3.9 �
 ### 터미널 점검 실행
 
 ```bash
-.venv/bin/python -m src.human_check_cli tags
+.venv/bin/python -m src.human_check_cli tags --data-dir ~/Desktop/youtube-collect/gold_variants/v4
 .venv/bin/python -m src.human_check_cli recommendations
 ```
 각 모드는 고정 시드 진단 표본 20개를 사용한다. `--limit`으로 수량을 바꿀 수 있다.
@@ -126,5 +127,8 @@ Python 3.12 전체 테스트: `275 passed in 5.94s`. 신규 모듈 Python 3.9 �
 판단 어려움은 null로 저장하며 부적절 0과 구분한다. 추천 점검에서는 방법명·LLM 점수를 숨긴다.
 소개글·개별 사람 판정은 results/ 안에만 보관한다. 이 점검 도구는 API를 호출하지 않는다.
 
-## PR 제출 전 검증
-전체 테스트: `277 passed in 5.67s` (Python 3.12). 새 모듈 2개 Python 3.9 구문 검사 통과. Python 3.11 런타임 전체 테스트는 미확인.
+## 최신 검증
+
+전체 테스트: `279 passed in 6.30s` (Python 3.12). 새 모듈 2개 Python 3.9 구문 검사 통과. Python 3.11 런타임 전체 테스트는 미확인.
+C/D를 포함한 후보 재계산 대조 후 2,651쌍의 기존 판정을 재집계했다. 신규 API 호출·토큰 0.
+`tags`는 `--data-dir` 필수, `recommendations`는 데이터 폴더 없이 실행 가능하다.

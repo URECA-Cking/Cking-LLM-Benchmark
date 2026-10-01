@@ -11,6 +11,8 @@ from src.flow_m234 import rankings, evidence
 from src.judge import pair_text_hash
 from src.tagging import rank_all
 from src.config import LLM_TAG_MAX
+from src.hierarchy_eval import hierarchical_rank
+from src.subtopic_tags import load_taxonomy, validate_llm_topics
 
 
 def increased_rank(case, ids, vectors, categories, codes, zero, llm, params, k):
@@ -43,6 +45,31 @@ def validate_prior(plan, candidates, judgments, baseline):
             raise ValueError("Prior score is stale or invalid")
 
 
+def recompute_h4(
+    case, ids, vectors, categories, codes, llm, topics, taxonomy, params, k, old
+):
+    """Reject stale C/D artifacts by recomputing both hierarchical conditions."""
+    result = {}
+    for method, detail in (("H4_d0.5", 0.5), ("H4_d1.0", 1.0)):
+        result[method] = hierarchical_rank(
+            case,
+            ids,
+            vectors,
+            categories,
+            codes,
+            llm,
+            topics,
+            taxonomy,
+            params["bonus_m4"],
+            0.5,
+            detail,
+            k,
+        )
+        if result[method] != old[method]:
+            raise ValueError("Prior H4 ranking differs from source recomputation")
+    return result
+
+
 def execute(args):
     """Generate candidates locally and freeze the union for optional judging."""
     data, vectors, categories, llm, previous = flow.load_source(
@@ -70,6 +97,36 @@ def execute(args):
         c.id: r.assigned(params["tau"], LLM_TAG_MAX)
         for c, r in zip(data.pool, rank_all(vectors, categories, data.codes))
     }
+    taxonomy = load_taxonomy(args.taxonomy, data.codes)
+    tag_plan = json.loads((args.subtopic_dir / "subtopic_plan.json").read_text())
+    tagpack = json.loads((args.subtopic_dir / "subtopics_llm.json").read_text())
+    if prior_plan["taxonomy_hash"] != flow.digest(taxonomy) or tag_plan[
+        "taxonomy_hash"
+    ] != flow.digest(taxonomy):
+        raise ValueError("Taxonomy changed")
+    if tagpack["contract_hash"] != flow.digest(tag_plan) or prior_plan[
+        "subtopic_records_hash"
+    ] != flow.digest(tagpack):
+        raise ValueError("Subtopic cache contract changed")
+    source_hash = flow.digest(
+        {
+            "texts": [(c.id, c.text()) for c in data.pool],
+            "llm_parents": {cid: sorted(tags) for cid, tags in llm.items()},
+        }
+    )
+    if tag_plan["source_hash"] != source_hash:
+        raise ValueError("Subtopic source changed")
+    topics = {}
+    for c in data.pool:
+        if not llm[c.id]:
+            topics[c.id] = frozenset()
+            continue
+        record = tagpack["tags"].get(c.id)
+        if record is None or record["text_hash"] != flow.digest(c.text()):
+            raise ValueError("Missing or stale subtopic evidence")
+        topics[c.id] = validate_llm_topics(
+            record["topics"], c.text(), llm[c.id], taxonomy
+        )
     candidates, pairs, reused = {}, {}, {}
     channels = {c.id: c for c in data.pool}
     for case in cases:
@@ -79,6 +136,19 @@ def execute(args):
         )
         if any(recomputed[m] != old[m] for m in ("M2", "M3", "M4")):
             raise ValueError("Baseline ranking changed")
+        h4 = recompute_h4(
+            case,
+            ids,
+            vectors,
+            categories,
+            data.codes,
+            llm,
+            topics,
+            taxonomy,
+            params,
+            base["top_k"],
+            old,
+        )
         selected = {
             "A_M4": old["M4"],
             "B_M4_x1.5": increased_rank(
@@ -92,8 +162,8 @@ def execute(args):
                 params,
                 base["top_k"],
             ),
-            "C_H4_equal": old["H4_d0.5"],
-            "D_H4_x1.5": old["H4_d1.0"],
+            "C_H4_equal": h4["H4_d0.5"],
+            "D_H4_x1.5": h4["H4_d1.0"],
         }
         candidates[case["id"]] = selected
         query = evidence(case, data)
@@ -120,6 +190,8 @@ def execute(args):
         "baseline_hash": flow.digest(baseline),
         "prior_hierarchy_hash": flow.digest(prior_plan),
         "prior_judgments_hash": flow.digest(prior_judgments),
+        "recomputed_subtopics_hash": flow.digest(tagpack),
+        "recomputed_taxonomy_hash": flow.digest(taxonomy),
         "candidate_hash": flow.digest(candidates),
         "pair_hashes": {key: row["hash"] for key, row in sorted(pairs.items())},
         "evaluation_inputs": len(cases),
@@ -158,6 +230,7 @@ def execute(args):
         group: {
             method: {
                 "n": len(values),
+                "exposed_inputs": sum(values),
                 "all_parent_fields_exposed": sum(values) / len(values),
             }
             for method, values in methods.items()
@@ -186,6 +259,8 @@ def main():
         "flow-dir",
         "baseline-dir",
         "hierarchy-dir",
+        "subtopic-dir",
+        "taxonomy",
         "output-dir",
     ):
         parser.add_argument(

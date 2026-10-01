@@ -49,3 +49,39 @@ def test_prior_contract_and_score_are_validated():
     changed["contract_hash"] = "changed"
     with pytest.raises(ValueError):
         validate_prior(plan, candidates, changed, baseline)
+
+
+def test_h4_recomputation_rejects_changed_prior_candidates():
+    from src.bonus_ablation import recompute_h4
+    from src.hierarchy_eval import hierarchical_rank
+
+    ids = ["seed", "candidate"]
+    vectors = np.eye(2)
+    tags = {cid: {"X"} for cid in ids}
+    topics = {cid: {"X_A"} for cid in ids}
+    taxonomy = {"subtopics": [{"code": "X_A", "parent": "X"}]}
+    case = {"route": "creators", "seeds": ["seed"], "tags": []}
+    params = {"bonus_m4": 0.2}
+    old = {
+        f"H4_d{d:.1f}": hierarchical_rank(
+            case,
+            ids,
+            vectors,
+            vectors,
+            ["X", "Y"],
+            tags,
+            topics,
+            taxonomy,
+            0.2,
+            0.5,
+            d,
+            1,
+        )
+        for d in (0.5, 1.0)
+    }
+    args = (case, ids, vectors, vectors, ["X", "Y"], tags, topics, taxonomy, params, 1)
+    assert recompute_h4(*args, old) == old
+    changed = deepcopy(old)
+    changed["H4_d0.5"][0]["score"] += 0.1
+    with pytest.raises(ValueError):
+        recompute_h4(*args, changed)

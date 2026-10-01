@@ -29,3 +29,17 @@ def test_skip_and_quit_never_create_judgment(tmp_path):
     path = tmp_path / "scores.json"
     run_sheet(rows, path, read=lambda _: "s", emit=lambda _: None)
     assert json.loads(path.read_text())["scores"] == {}
+
+
+def test_mode_specific_data_path_validation():
+    from src.human_check_cli import parse_args
+    import pytest
+
+    with pytest.raises(SystemExit) as error:
+        parse_args(["tags"])
+    assert error.value.code == 2
+    assert parse_args(["recommendations"]).data_dir is None
+    assert (
+        parse_args(["tags", "--data-dir", "./external-data"]).data_dir.name
+        == "external-data"
+    )

@@ -119,15 +119,14 @@ def prepare(args):
     return rows[: args.limit]
 
 
-def main():
-    """Open a local review session without calling any provider."""
+def parse_args(argv=None):
+    """Require an external data location only for the tag review mode."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("tags", "recommendations"))
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument(
         "--data-dir",
-        type=Path,
-        default=Path("/Users/castlehouse/Desktop/youtube-collect/gold_variants/v4"),
+        type=lambda value: Path(value).expanduser(),
     )
     parser.add_argument(
         "--subtopic-dir", type=Path, default=Path("results/subtopics_v1")
@@ -139,9 +138,17 @@ def main():
         "--taxonomy", type=Path, default=Path("data/creator-subtopics.json")
     )
     parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.limit < 1:
         parser.error("--limit must be positive")
+    if args.mode == "tags" and args.data_dir is None:
+        parser.error("tags mode requires --data-dir")
+    return args
+
+
+def main():
+    """Open a local review session without calling any provider."""
+    args = parse_args()
     path = args.output or Path(f"results/human_check_{args.mode}_{args.limit}.json")
     path.parent.mkdir(parents=True, exist_ok=True)
     print(
