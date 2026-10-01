@@ -1,0 +1,1279 @@
+{
+  "version": "subtopic-v1-draft",
+  "status": "experimental_not_service_contract",
+  "parents": [
+    "FITNESS",
+    "FOOD",
+    "GAME",
+    "BEAUTY",
+    "FASHION",
+    "TRAVEL",
+    "MUSIC",
+    "PET",
+    "TECH",
+    "KNOWLEDGE",
+    "ENTERTAIN",
+    "HUMOR",
+    "SPORTS",
+    "NEWS",
+    "LIFE",
+    "HOBBY",
+    "LIFETIP"
+  ],
+  "subtopics": [
+    {
+      "code": "FITNESS_WEIGHTS",
+      "parent": "FITNESS",
+      "name": "웨이트",
+      "definition": "저항 운동으로 근력과 근육을 기르는 활동",
+      "include": [
+        "헬스장 근력 운동",
+        "보디빌딩"
+      ],
+      "exclude": [
+        "구기 경기 분석",
+        "일반 제품 소개"
+      ]
+    },
+    {
+      "code": "FITNESS_HOME_WORKOUT",
+      "parent": "FITNESS",
+      "name": "홈트",
+      "definition": "집에서 수행하는 운동 루틴",
+      "include": [
+        "맨몸 루틴",
+        "홈트 운동"
+      ],
+      "exclude": [
+        "일상 기록만 있는 영상",
+        "가전 소개"
+      ]
+    },
+    {
+      "code": "FITNESS_YOGA",
+      "parent": "FITNESS",
+      "name": "요가",
+      "definition": "요가 동작과 수련",
+      "include": [
+        "아사나",
+        "요가 수련"
+      ],
+      "exclude": [
+        "필라테스 동작만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FITNESS_PILATES",
+      "parent": "FITNESS",
+      "name": "필라테스",
+      "definition": "필라테스 동작과 기구 운동",
+      "include": [
+        "매트 필라테스",
+        "리포머"
+      ],
+      "exclude": [
+        "요가 수련"
+      ]
+    },
+    {
+      "code": "FITNESS_RUNNING",
+      "parent": "FITNESS",
+      "name": "러닝",
+      "definition": "달리기 훈련과 참여 활동",
+      "include": [
+        "달리기 자세",
+        "마라톤 훈련"
+      ],
+      "exclude": [
+        "육상 경기 중계만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FITNESS_HIKING",
+      "parent": "FITNESS",
+      "name": "등산",
+      "definition": "산행과 등산 활동",
+      "include": [
+        "등산 코스",
+        "산행 준비"
+      ],
+      "exclude": [
+        "야영만 다루는 캠핑"
+      ]
+    },
+    {
+      "code": "FITNESS_WEIGHT_MANAGEMENT",
+      "parent": "FITNESS",
+      "name": "체중 관리",
+      "definition": "체중 감량과 운동 중심 관리",
+      "include": [
+        "다이어트 운동",
+        "운동 식단"
+      ],
+      "exclude": [
+        "질병 진단·치료 정보"
+      ]
+    },
+    {
+      "code": "FOOD_HOME_COOKING",
+      "parent": "FOOD",
+      "name": "집밥·요리",
+      "definition": "일상 식사 조리와 요리",
+      "include": [
+        "집밥",
+        "반찬",
+        "음식 조리"
+      ],
+      "exclude": [
+        "식당 방문만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FOOD_BAKING",
+      "parent": "FOOD",
+      "name": "베이킹",
+      "definition": "빵과 구움 과자 만들기",
+      "include": [
+        "제빵",
+        "케이크 굽기"
+      ],
+      "exclude": [
+        "디저트 먹방만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FOOD_DESSERT",
+      "parent": "FOOD",
+      "name": "디저트",
+      "definition": "디저트와 음료의 제작·탐구",
+      "include": [
+        "초콜릿",
+        "커피",
+        "음료",
+        "디저트"
+      ],
+      "exclude": [
+        "일반 식사만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FOOD_EATING",
+      "parent": "FOOD",
+      "name": "먹방",
+      "definition": "먹는 경험 자체가 중심인 콘텐츠",
+      "include": [
+        "먹방",
+        "음식 시식"
+      ],
+      "exclude": [
+        "요리 만드는 과정만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FOOD_RESTAURANTS",
+      "parent": "FOOD",
+      "name": "맛집",
+      "definition": "식당과 외식 경험 탐색",
+      "include": [
+        "식당 탐방",
+        "맛집 소개"
+      ],
+      "exclude": [
+        "집밥 조리"
+      ]
+    },
+    {
+      "code": "GAME_ACTION",
+      "parent": "GAME",
+      "name": "액션·슈팅",
+      "definition": "조작 전투와 사격 중심 게임",
+      "include": [
+        "FPS",
+        "TPS",
+        "액션 게임"
+      ],
+      "exclude": [
+        "실제 사격 스포츠"
+      ]
+    },
+    {
+      "code": "GAME_RPG",
+      "parent": "GAME",
+      "name": "RPG",
+      "definition": "캐릭터 성장과 역할 수행 중심 게임",
+      "include": [
+        "MMORPG",
+        "액션 RPG",
+        "턴제 RPG"
+      ],
+      "exclude": [
+        "게임 종류 근거 없는 방송"
+      ]
+    },
+    {
+      "code": "GAME_STRATEGY",
+      "parent": "GAME",
+      "name": "전략·MOBA",
+      "definition": "전략 운영과 팀 전술 중심 게임",
+      "include": [
+        "RTS",
+        "MOBA",
+        "전략 시뮬레이션"
+      ],
+      "exclude": [
+        "실제 스포츠 전술"
+      ]
+    },
+    {
+      "code": "GAME_SIMULATION",
+      "parent": "GAME",
+      "name": "생활·경영 시뮬레이션",
+      "definition": "생활과 경영을 모사하는 게임",
+      "include": [
+        "농장 게임",
+        "도시 경영",
+        "생활 시뮬레이션"
+      ],
+      "exclude": [
+        "실제 생활 기록"
+      ]
+    },
+    {
+      "code": "GAME_SPORTS_RACING",
+      "parent": "GAME",
+      "name": "스포츠·레이싱 게임",
+      "definition": "가상 스포츠 경기와 자동차 경주 게임",
+      "include": [
+        "축구 게임",
+        "레이싱 게임"
+      ],
+      "exclude": [
+        "실제 경기·자동차 리뷰"
+      ]
+    },
+    {
+      "code": "GAME_PUZZLE_CASUAL",
+      "parent": "GAME",
+      "name": "퍼즐·캐주얼",
+      "definition": "퍼즐 풀이와 가벼운 규칙의 게임",
+      "include": [
+        "퍼즐 게임",
+        "캐주얼 게임"
+      ],
+      "exclude": [
+        "실제 공예·보드게임 근거만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "BEAUTY_MAKEUP",
+      "parent": "BEAUTY",
+      "name": "메이크업",
+      "definition": "얼굴 화장과 표현",
+      "include": [
+        "색조 화장",
+        "메이크업"
+      ],
+      "exclude": [
+        "옷 코디"
+      ]
+    },
+    {
+      "code": "BEAUTY_SKINCARE",
+      "parent": "BEAUTY",
+      "name": "스킨케어",
+      "definition": "피부 관리와 관련 화장품",
+      "include": [
+        "보습",
+        "클렌징",
+        "스킨케어"
+      ],
+      "exclude": [
+        "의학적 진단·치료"
+      ]
+    },
+    {
+      "code": "BEAUTY_HAIR",
+      "parent": "BEAUTY",
+      "name": "헤어",
+      "definition": "머리 스타일과 모발 관리",
+      "include": [
+        "헤어 스타일링",
+        "모발 관리"
+      ],
+      "exclude": [
+        "패션 액세서리만 소개"
+      ]
+    },
+    {
+      "code": "BEAUTY_NAILS",
+      "parent": "BEAUTY",
+      "name": "네일",
+      "definition": "손톱 관리와 장식",
+      "include": [
+        "네일 아트",
+        "네일 관리"
+      ],
+      "exclude": [
+        "일반 그림·공예"
+      ]
+    },
+    {
+      "code": "FASHION_CLOTHING",
+      "parent": "FASHION",
+      "name": "의류·코디",
+      "definition": "옷의 조합과 의류 패션",
+      "include": [
+        "옷 코디",
+        "의류"
+      ],
+      "exclude": [
+        "메이크업"
+      ]
+    },
+    {
+      "code": "FASHION_SHOES",
+      "parent": "FASHION",
+      "name": "신발",
+      "definition": "패션 관점의 신발",
+      "include": [
+        "스니커즈",
+        "구두"
+      ],
+      "exclude": [
+        "달리기 훈련만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FASHION_BAGS",
+      "parent": "FASHION",
+      "name": "가방",
+      "definition": "가방 패션과 사용",
+      "include": [
+        "핸드백",
+        "백팩"
+      ],
+      "exclude": [
+        "여행 일정만 소개"
+      ]
+    },
+    {
+      "code": "FASHION_ACCESSORIES",
+      "parent": "FASHION",
+      "name": "액세서리",
+      "definition": "패션 장신구",
+      "include": [
+        "주얼리",
+        "시계",
+        "모자"
+      ],
+      "exclude": [
+        "전자기기 기능만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "TRAVEL_DOMESTIC",
+      "parent": "TRAVEL",
+      "name": "국내 여행",
+      "definition": "국내 목적지의 여행 경험",
+      "include": [
+        "국내 여행지",
+        "국내 여행 일정"
+      ],
+      "exclude": [
+        "거주지 일상만 기록"
+      ]
+    },
+    {
+      "code": "TRAVEL_INTERNATIONAL",
+      "parent": "TRAVEL",
+      "name": "해외 여행",
+      "definition": "해외 목적지의 여행 경험",
+      "include": [
+        "해외 여행",
+        "해외 여행 일정"
+      ],
+      "exclude": [
+        "해외 거주 일상만 기록"
+      ]
+    },
+    {
+      "code": "TRAVEL_CAMPING",
+      "parent": "TRAVEL",
+      "name": "캠핑",
+      "definition": "야영과 캠핑 활동",
+      "include": [
+        "캠핑장",
+        "텐트 야영"
+      ],
+      "exclude": [
+        "등산만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "TRAVEL_CAR_CAMPING",
+      "parent": "TRAVEL",
+      "name": "차박",
+      "definition": "차량 숙박 여행",
+      "include": [
+        "차박",
+        "차량 야영"
+      ],
+      "exclude": [
+        "자동차 성능 리뷰만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "MUSIC_VOCAL",
+      "parent": "MUSIC",
+      "name": "보컬",
+      "definition": "노래와 보컬 활동",
+      "include": [
+        "가창",
+        "보컬 연습"
+      ],
+      "exclude": [
+        "연예 뉴스만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "MUSIC_COMPOSITION",
+      "parent": "MUSIC",
+      "name": "작곡·음악 제작",
+      "definition": "음악 창작과 제작",
+      "include": [
+        "작곡",
+        "편곡",
+        "음악 프로듀싱"
+      ],
+      "exclude": [
+        "전자기기 일반 리뷰"
+      ]
+    },
+    {
+      "code": "MUSIC_INSTRUMENT",
+      "parent": "MUSIC",
+      "name": "악기",
+      "definition": "악기 연주와 학습",
+      "include": [
+        "피아노",
+        "기타",
+        "악기 연주"
+      ],
+      "exclude": [
+        "가창만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "MUSIC_DANCE",
+      "parent": "MUSIC",
+      "name": "댄스",
+      "definition": "음악에 맞춘 춤과 안무",
+      "include": [
+        "안무",
+        "댄스"
+      ],
+      "exclude": [
+        "운동 목적 에어로빅만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "PET_DOG",
+      "parent": "PET",
+      "name": "강아지",
+      "definition": "직접 기르거나 돌보는 개",
+      "include": [
+        "반려견 일상",
+        "개 돌봄"
+      ],
+      "exclude": [
+        "동물 영상 재편집",
+        "야생동물 해설"
+      ]
+    },
+    {
+      "code": "PET_CAT",
+      "parent": "PET",
+      "name": "고양이",
+      "definition": "직접 기르거나 돌보는 고양이",
+      "include": [
+        "반려묘 일상",
+        "고양이 돌봄"
+      ],
+      "exclude": [
+        "동물 소재 애니메이션"
+      ]
+    },
+    {
+      "code": "PET_OTHER_ANIMALS",
+      "parent": "PET",
+      "name": "기타 반려동물",
+      "definition": "직접 기르는 기타 동물",
+      "include": [
+        "반려새",
+        "반려토끼",
+        "관상어"
+      ],
+      "exclude": [
+        "야생동물 관찰 해설"
+      ]
+    },
+    {
+      "code": "PET_TRAINING",
+      "parent": "PET",
+      "name": "반려동물 훈련",
+      "definition": "반려동물 행동 훈련",
+      "include": [
+        "반려견 훈련",
+        "행동 교육"
+      ],
+      "exclude": [
+        "웃긴 동물 영상 모음"
+      ]
+    },
+    {
+      "code": "PET_ADOPTION",
+      "parent": "PET",
+      "name": "입양·구조",
+      "definition": "반려동물 입양과 구조 활동",
+      "include": [
+        "동물 구조",
+        "반려동물 입양"
+      ],
+      "exclude": [
+        "야생 생태 설명만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "TECH_MOBILE",
+      "parent": "TECH",
+      "name": "모바일",
+      "definition": "스마트폰과 모바일 기기 기술",
+      "include": [
+        "스마트폰",
+        "태블릿"
+      ],
+      "exclude": [
+        "통신 정치 뉴스만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "TECH_PC",
+      "parent": "TECH",
+      "name": "PC",
+      "definition": "컴퓨터 하드웨어와 구성",
+      "include": [
+        "PC 조립",
+        "컴퓨터 부품"
+      ],
+      "exclude": [
+        "게임 플레이만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "TECH_DEVICES",
+      "parent": "TECH",
+      "name": "전자기기",
+      "definition": "전자기기 기능과 사용 기술",
+      "include": [
+        "오디오",
+        "카메라",
+        "기기 기능"
+      ],
+      "exclude": [
+        "인테리어 목적 제품 소개만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "TECH_PROGRAMMING",
+      "parent": "TECH",
+      "name": "프로그래밍",
+      "definition": "코드 작성과 소프트웨어 개발",
+      "include": [
+        "코딩 교육",
+        "개발 도구"
+      ],
+      "exclude": [
+        "일반 공부법"
+      ]
+    },
+    {
+      "code": "TECH_AI",
+      "parent": "TECH",
+      "name": "AI 기술·활용",
+      "definition": "AI 개발과 도구 활용",
+      "include": [
+        "AI 도구",
+        "머신러닝 구현"
+      ],
+      "exclude": [
+        "순수 수학 이론",
+        "AI 시사 뉴스만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "KNOWLEDGE_STUDY",
+      "parent": "KNOWLEDGE",
+      "name": "공부법",
+      "definition": "학습 방법과 공부 전략",
+      "include": [
+        "공부법",
+        "학습 습관"
+      ],
+      "exclude": [
+        "코딩 교육"
+      ]
+    },
+    {
+      "code": "KNOWLEDGE_BOOKS",
+      "parent": "KNOWLEDGE",
+      "name": "독서",
+      "definition": "책의 내용과 독서 활동",
+      "include": [
+        "책 소개",
+        "독서"
+      ],
+      "exclude": [
+        "웹툰만 다루는 콘텐츠"
+      ]
+    },
+    {
+      "code": "KNOWLEDGE_HISTORY",
+      "parent": "KNOWLEDGE",
+      "name": "역사",
+      "definition": "역사 사건과 해석",
+      "include": [
+        "역사 교육",
+        "역사 해설"
+      ],
+      "exclude": [
+        "당일 시사 뉴스"
+      ]
+    },
+    {
+      "code": "KNOWLEDGE_SCIENCE",
+      "parent": "KNOWLEDGE",
+      "name": "과학·자연",
+      "definition": "과학 원리와 자연·야생 생태",
+      "include": [
+        "과학 설명",
+        "야생동물 해설"
+      ],
+      "exclude": [
+        "반려동물 일상",
+        "IT 제품 리뷰"
+      ]
+    },
+    {
+      "code": "KNOWLEDGE_ECONOMICS",
+      "parent": "KNOWLEDGE",
+      "name": "경제 지식",
+      "definition": "경제 원리와 구조 설명",
+      "include": [
+        "경제 교육",
+        "경제 원리"
+      ],
+      "exclude": [
+        "속보 중심 경제 뉴스"
+      ]
+    },
+    {
+      "code": "KNOWLEDGE_FINANCE",
+      "parent": "KNOWLEDGE",
+      "name": "재테크",
+      "definition": "자산 관리와 투자 교육",
+      "include": [
+        "재테크",
+        "투자 원리"
+      ],
+      "exclude": [
+        "단순 당일 금융 속보"
+      ]
+    },
+    {
+      "code": "ENTERTAIN_FILM",
+      "parent": "ENTERTAIN",
+      "name": "영화",
+      "definition": "영화 작품을 중심으로 한 콘텐츠",
+      "include": [
+        "영화 해설",
+        "영화 작품"
+      ],
+      "exclude": [
+        "일반 연예 뉴스"
+      ]
+    },
+    {
+      "code": "ENTERTAIN_DRAMA",
+      "parent": "ENTERTAIN",
+      "name": "드라마",
+      "definition": "드라마 작품을 중심으로 한 콘텐츠",
+      "include": [
+        "드라마 해설",
+        "드라마 작품"
+      ],
+      "exclude": [
+        "개인 일상"
+      ]
+    },
+    {
+      "code": "ENTERTAIN_VARIETY",
+      "parent": "ENTERTAIN",
+      "name": "예능",
+      "definition": "예능 프로그램과 콘텐츠",
+      "include": [
+        "예능 프로그램",
+        "예능 장면"
+      ],
+      "exclude": [
+        "일반 웃긴 영상 모음"
+      ]
+    },
+    {
+      "code": "ENTERTAIN_ANIMATION",
+      "parent": "ENTERTAIN",
+      "name": "애니메이션",
+      "definition": "애니메이션 작품 감상과 해설",
+      "include": [
+        "애니 작품",
+        "애니 해설"
+      ],
+      "exclude": [
+        "동물 소재 유머 애니메이션만 제작"
+      ]
+    },
+    {
+      "code": "ENTERTAIN_WEBTOON",
+      "parent": "ENTERTAIN",
+      "name": "웹툰",
+      "definition": "웹툰 작품과 감상",
+      "include": [
+        "웹툰",
+        "만화 작품"
+      ],
+      "exclude": [
+        "일반 그림 기법"
+      ]
+    },
+    {
+      "code": "ENTERTAIN_FANDOM",
+      "parent": "ENTERTAIN",
+      "name": "팬 콘텐츠",
+      "definition": "특정 연예인·작품의 팬 활동",
+      "include": [
+        "연예인 팬 채널",
+        "팬 콘텐츠"
+      ],
+      "exclude": [
+        "아이돌 이슈 속보"
+      ]
+    },
+    {
+      "code": "HUMOR_COMEDY",
+      "parent": "HUMOR",
+      "name": "코미디",
+      "definition": "웃음을 위한 창작과 상황극",
+      "include": [
+        "코미디",
+        "유머 상황극"
+      ],
+      "exclude": [
+        "생활 사연 전달만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "HUMOR_MEMES",
+      "parent": "HUMOR",
+      "name": "밈·웃긴 소재",
+      "definition": "밈과 재미있는 소재 편집",
+      "include": [
+        "밈",
+        "웃긴 영상",
+        "동물 영상 모음",
+        "동물 유머 애니메이션"
+      ],
+      "exclude": [
+        "직접 기르는 반려동물 기록"
+      ]
+    },
+    {
+      "code": "HUMOR_HEARTWARMING",
+      "parent": "HUMOR",
+      "name": "감동 소재",
+      "definition": "감동을 위한 이야기와 소재 편집",
+      "include": [
+        "감동 영상",
+        "따뜻한 이야기 편집"
+      ],
+      "exclude": [
+        "본인의 일상·개인 사연 기록"
+      ]
+    },
+    {
+      "code": "SPORTS_BASEBALL",
+      "parent": "SPORTS",
+      "name": "야구",
+      "definition": "야구 경기와 종목",
+      "include": [
+        "야구 경기",
+        "야구 선수"
+      ],
+      "exclude": [
+        "야구 게임만 플레이"
+      ]
+    },
+    {
+      "code": "SPORTS_FOOTBALL",
+      "parent": "SPORTS",
+      "name": "축구",
+      "definition": "축구 경기와 종목",
+      "include": [
+        "축구 경기",
+        "축구 전술"
+      ],
+      "exclude": [
+        "축구 게임만 플레이"
+      ]
+    },
+    {
+      "code": "SPORTS_GOLF",
+      "parent": "SPORTS",
+      "name": "골프",
+      "definition": "골프 경기와 종목 기술",
+      "include": [
+        "골프 경기",
+        "골프 기술"
+      ],
+      "exclude": [
+        "일반 체력 운동"
+      ]
+    },
+    {
+      "code": "SPORTS_COMBAT",
+      "parent": "SPORTS",
+      "name": "격투기",
+      "definition": "격투 종목 경기와 기술",
+      "include": [
+        "복싱",
+        "MMA",
+        "격투 경기"
+      ],
+      "exclude": [
+        "일반 웨이트"
+      ]
+    },
+    {
+      "code": "SPORTS_BASKETBALL",
+      "parent": "SPORTS",
+      "name": "농구",
+      "definition": "농구 경기와 종목",
+      "include": [
+        "농구 경기",
+        "농구 기술"
+      ],
+      "exclude": [
+        "농구 게임만 플레이"
+      ]
+    },
+    {
+      "code": "SPORTS_OTHER_SPORTS",
+      "parent": "SPORTS",
+      "name": "기타 스포츠",
+      "definition": "다른 스포츠 종목 경기와 분석",
+      "include": [
+        "테니스",
+        "배구",
+        "경기 종목"
+      ],
+      "exclude": [
+        "러닝 체력 훈련",
+        "종목 불명"
+      ]
+    },
+    {
+      "code": "NEWS_POLITICS",
+      "parent": "NEWS",
+      "name": "정치",
+      "definition": "현재 정치 사건과 시사",
+      "include": [
+        "정치 뉴스",
+        "정치 시사"
+      ],
+      "exclude": [
+        "역사 교육"
+      ]
+    },
+    {
+      "code": "NEWS_SOCIETY",
+      "parent": "NEWS",
+      "name": "사회",
+      "definition": "현재 사회 사건과 이슈",
+      "include": [
+        "사회 뉴스",
+        "사회 이슈"
+      ],
+      "exclude": [
+        "개인 생활 사연"
+      ]
+    },
+    {
+      "code": "NEWS_INTERNATIONAL",
+      "parent": "NEWS",
+      "name": "국제",
+      "definition": "현재 해외 사건과 국제 정세",
+      "include": [
+        "국제 뉴스",
+        "해외 시사"
+      ],
+      "exclude": [
+        "해외 여행"
+      ]
+    },
+    {
+      "code": "NEWS_ECONOMIC_NEWS",
+      "parent": "NEWS",
+      "name": "경제 뉴스",
+      "definition": "현재 경제 사건과 속보",
+      "include": [
+        "경제 뉴스",
+        "시장 속보"
+      ],
+      "exclude": [
+        "경제 원리 교육"
+      ]
+    },
+    {
+      "code": "NEWS_CELEBRITY_NEWS",
+      "parent": "NEWS",
+      "name": "연예 뉴스",
+      "definition": "현재 연예계 사건과 이슈",
+      "include": [
+        "아이돌 이슈",
+        "연예 뉴스"
+      ],
+      "exclude": [
+        "연예인 팬 콘텐츠"
+      ]
+    },
+    {
+      "code": "LIFE_PERSONAL",
+      "parent": "LIFE",
+      "name": "개인 일상",
+      "definition": "본인 생활의 일상 기록",
+      "include": [
+        "개인 생활",
+        "일상 기록"
+      ],
+      "exclude": [
+        "여행 목적지 중심 콘텐츠"
+      ]
+    },
+    {
+      "code": "LIFE_PARENTING",
+      "parent": "LIFE",
+      "name": "육아",
+      "definition": "아이 양육과 부모 경험",
+      "include": [
+        "육아",
+        "양육 일상"
+      ],
+      "exclude": [
+        "일반 학습법"
+      ]
+    },
+    {
+      "code": "LIFE_FAMILY",
+      "parent": "LIFE",
+      "name": "가족",
+      "definition": "가족 생활과 관계",
+      "include": [
+        "가족 일상",
+        "가족 관계"
+      ],
+      "exclude": [
+        "양육만 중심인 콘텐츠"
+      ]
+    },
+    {
+      "code": "LIFE_COUPLE",
+      "parent": "LIFE",
+      "name": "커플",
+      "definition": "연인·부부 관계와 생활",
+      "include": [
+        "커플 일상",
+        "부부 관계"
+      ],
+      "exclude": [
+        "연예인 뉴스"
+      ]
+    },
+    {
+      "code": "LIFE_STORIES",
+      "parent": "LIFE",
+      "name": "생활 사연",
+      "definition": "생활 경험과 개인 사연",
+      "include": [
+        "개인 경험",
+        "생활 사연"
+      ],
+      "exclude": [
+        "뉴스 속보",
+        "감동 소재 편집만 있는 콘텐츠"
+      ]
+    },
+    {
+      "code": "HOBBY_FISHING",
+      "parent": "HOBBY",
+      "name": "낚시",
+      "definition": "취미 낚시 활동",
+      "include": [
+        "낚시",
+        "낚시 장비 운용"
+      ],
+      "exclude": [
+        "생태 설명만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "HOBBY_CRAFTS",
+      "parent": "HOBBY",
+      "name": "공예·제작",
+      "definition": "취미 공예와 물건 만들기",
+      "include": [
+        "공예",
+        "취미 DIY"
+      ],
+      "exclude": [
+        "집 수리·실용 보수"
+      ]
+    },
+    {
+      "code": "HOBBY_DRAWING",
+      "parent": "HOBBY",
+      "name": "그림",
+      "definition": "그림과 미술 창작",
+      "include": [
+        "그림",
+        "미술 창작"
+      ],
+      "exclude": [
+        "네일 장식만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "HOBBY_COLLECTING",
+      "parent": "HOBBY",
+      "name": "수집",
+      "definition": "물건을 모으는 취미",
+      "include": [
+        "수집",
+        "컬렉션"
+      ],
+      "exclude": [
+        "일반 쇼핑 정보"
+      ]
+    },
+    {
+      "code": "HOBBY_GARDENING",
+      "parent": "HOBBY",
+      "name": "원예",
+      "definition": "식물 재배와 원예",
+      "include": [
+        "식물 기르기",
+        "정원 가꾸기"
+      ],
+      "exclude": [
+        "야생 자연 해설"
+      ]
+    },
+    {
+      "code": "LIFETIP_HOUSEHOLD",
+      "parent": "LIFETIP",
+      "name": "생활 관리",
+      "definition": "살림과 실용 생활 방법",
+      "include": [
+        "청소",
+        "정리",
+        "생활 꿀팁",
+        "집 수리"
+      ],
+      "exclude": [
+        "취미 공예 제작"
+      ]
+    },
+    {
+      "code": "LIFETIP_KITCHEN_GOODS",
+      "parent": "LIFETIP",
+      "name": "주방용품",
+      "definition": "주방 제품의 선택과 사용",
+      "include": [
+        "주방 도구",
+        "주방용품"
+      ],
+      "exclude": [
+        "음식 조리 자체"
+      ]
+    },
+    {
+      "code": "LIFETIP_HOME_GOODS",
+      "parent": "LIFETIP",
+      "name": "생활용품",
+      "definition": "생활 제품의 실용 사용",
+      "include": [
+        "생활용품",
+        "가정용 제품"
+      ],
+      "exclude": [
+        "기술 기능 중심 전자기기"
+      ]
+    },
+    {
+      "code": "LIFETIP_INTERIOR",
+      "parent": "LIFETIP",
+      "name": "인테리어",
+      "definition": "공간 꾸미기와 주거 환경",
+      "include": [
+        "인테리어",
+        "집 꾸미기"
+      ],
+      "exclude": [
+        "여행 숙소 소개"
+      ]
+    },
+    {
+      "code": "LIFETIP_SHOPPING",
+      "parent": "LIFETIP",
+      "name": "쇼핑 정보",
+      "definition": "실용 구매와 상품 정보",
+      "include": [
+        "구매 팁",
+        "쇼핑 정보"
+      ],
+      "exclude": [
+        "취미 수집",
+        "의류 패션만 다루는 콘텐츠"
+      ]
+    }
+  ],
+  "formats": [
+    {
+      "code": "FORMAT_REVIEW",
+      "name": "리뷰",
+      "definition": "대상에 대한 평가와 사용 경험",
+      "include": [
+        "제품 평가",
+        "작품 리뷰"
+      ],
+      "exclude": [
+        "대상 분야 자체"
+      ]
+    },
+    {
+      "code": "FORMAT_TUTORIAL",
+      "name": "교육·튜토리얼",
+      "definition": "방법을 단계별로 가르치는 형식",
+      "include": [
+        "강의",
+        "방법 설명"
+      ],
+      "exclude": [
+        "주제 분야 자체"
+      ]
+    },
+    {
+      "code": "FORMAT_ANALYSIS",
+      "name": "분석",
+      "definition": "근거를 해석하는 형식",
+      "include": [
+        "경기 분석",
+        "작품 분석"
+      ],
+      "exclude": [
+        "단순 장면 모음"
+      ]
+    },
+    {
+      "code": "FORMAT_HIGHLIGHT",
+      "name": "하이라이트",
+      "definition": "핵심 장면 요약",
+      "include": [
+        "경기 하이라이트",
+        "핵심 장면"
+      ],
+      "exclude": [
+        "전체 실시간 중계"
+      ]
+    },
+    {
+      "code": "FORMAT_VLOG",
+      "name": "브이로그",
+      "definition": "경험을 시간 흐름으로 기록",
+      "include": [
+        "여행 브이로그",
+        "생활 기록"
+      ],
+      "exclude": [
+        "일상이라는 주제와 동일시"
+      ]
+    },
+    {
+      "code": "FORMAT_LIVE",
+      "name": "라이브",
+      "definition": "실시간 방송 형식",
+      "include": [
+        "게임 방송",
+        "실시간 소통"
+      ],
+      "exclude": [
+        "녹화 콘텐츠만 근거"
+      ]
+    },
+    {
+      "code": "FORMAT_COVER",
+      "name": "커버",
+      "definition": "기존 작품을 재연",
+      "include": [
+        "노래 커버",
+        "댄스 커버"
+      ],
+      "exclude": [
+        "창작곡만 발표"
+      ]
+    },
+    {
+      "code": "FORMAT_HAUL",
+      "name": "하울",
+      "definition": "여러 구매품을 한 번에 소개",
+      "include": [
+        "의류 하울",
+        "구매품 소개"
+      ],
+      "exclude": [
+        "한 제품 리뷰"
+      ]
+    },
+    {
+      "code": "FORMAT_RECIPE",
+      "name": "레시피",
+      "definition": "재료와 조리 과정 안내",
+      "include": [
+        "요리 레시피",
+        "베이킹 레시피"
+      ],
+      "exclude": [
+        "먹방만 하는 콘텐츠"
+      ]
+    },
+    {
+      "code": "FORMAT_COMPILATION",
+      "name": "모음·편집",
+      "definition": "기존 장면과 소재를 모아 편집",
+      "include": [
+        "웃긴 영상 모음",
+        "예능 클립 모음"
+      ],
+      "exclude": [
+        "직접 활동 주제라고 추정"
+      ]
+    }
+  ]
+}
