@@ -85,3 +85,28 @@ def test_h4_recomputation_rejects_changed_prior_candidates():
     changed["H4_d0.5"][0]["score"] += 0.1
     with pytest.raises(ValueError):
         recompute_h4(*args, changed)
+
+
+def test_uniform_shift_requires_same_ids_and_all_candidate_scores():
+    from src.bonus_ablation import bonus_shift_diagnostic
+
+    candidates = {
+        "uniform": {
+            "A_M4": [{"id": "a", "score": 0.5}, {"id": "b", "score": 0.4}],
+            "B_M4_x1.5": [{"id": "a", "score": 0.6}, {"id": "b", "score": 0.5}],
+        },
+        "partial": {
+            "A_M4": [{"id": "a", "score": 0.5}, {"id": "b", "score": 0.4}],
+            "B_M4_x1.5": [{"id": "a", "score": 0.6}, {"id": "b", "score": 0.4}],
+        },
+        "changed": {
+            "A_M4": [{"id": "a", "score": 0.5}],
+            "B_M4_x1.5": [{"id": "c", "score": 0.6}],
+        },
+        "empty": {"A_M4": [], "B_M4_x1.5": []},
+    }
+    result = bonus_shift_diagnostic(candidates, 0.2)
+    assert result["inputs"] == 4
+    assert result["same_rankings"] == 3
+    assert result["uniform_top_k_shift_inputs"] == 1
+    assert result["expected_shift"] == 0.1

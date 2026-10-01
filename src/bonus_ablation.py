@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from src import flow_eval as flow
@@ -68,6 +69,36 @@ def recompute_h4(
         if result[method] != old[method]:
             raise ValueError("Prior H4 ranking differs from source recomputation")
     return result
+
+
+def bonus_shift_diagnostic(candidates, bonus, tolerance=1e-6):
+    """Count unchanged rankings and uniform score shifts with explicit tolerance."""
+    expected = bonus * 0.5
+    same = uniform = 0
+    for methods in candidates.values():
+        a, b = methods["A_M4"], methods["B_M4_x1.5"]
+        unchanged = [row["id"] for row in a] == [row["id"] for row in b]
+        same += int(unchanged)
+        uniform += int(
+            bool(a)
+            and unchanged
+            and all(
+                math.isclose(
+                    right["score"] - left["score"],
+                    expected,
+                    rel_tol=0,
+                    abs_tol=tolerance,
+                )
+                for left, right in zip(a, b)
+            )
+        )
+    return {
+        "inputs": len(candidates),
+        "same_rankings": same,
+        "uniform_top_k_shift_inputs": uniform,
+        "expected_shift": expected,
+        "absolute_tolerance": tolerance,
+    }
 
 
 def execute(args):
@@ -245,6 +276,10 @@ def execute(args):
         ("reused_judgments.json", reused),
         ("preparation_summary.json", summary),
         ("proxy_coverage.json", diagnostic),
+        (
+            "bonus_shift_diagnostic.json",
+            bonus_shift_diagnostic(candidates, params["bonus_m4"]),
+        ),
     ]:
         flow.write_json(args.output_dir / name, value)
     print(json.dumps(summary), flush=True)
