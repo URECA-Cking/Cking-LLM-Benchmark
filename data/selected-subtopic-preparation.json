@@ -1,0 +1,756 @@
+{
+  "taxonomy_diagnostic": {
+    "taxonomy_cases": 85,
+    "pairs": 632,
+    "new_api_calls": 0,
+    "changed_top5_order": 72,
+    "fewer_than_five_tagged_candidates": 5,
+    "coverage": {
+      "FITNESS_WEIGHTS": {
+        "candidate_tag_count": 54,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "FITNESS_HOME_WORKOUT": {
+        "candidate_tag_count": 92,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "FITNESS_YOGA": {
+        "candidate_tag_count": 55,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "FITNESS_PILATES": {
+        "candidate_tag_count": 75,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "FITNESS_RUNNING": {
+        "candidate_tag_count": 47,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 3
+        }
+      },
+      "FITNESS_HIKING": {
+        "candidate_tag_count": 37,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 0
+        }
+      },
+      "FITNESS_WEIGHT_MANAGEMENT": {
+        "candidate_tag_count": 180,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "FOOD_HOME_COOKING": {
+        "candidate_tag_count": 160,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "FOOD_BAKING": {
+        "candidate_tag_count": 86,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "FOOD_DESSERT": {
+        "candidate_tag_count": 36,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "FOOD_EATING": {
+        "candidate_tag_count": 87,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "FOOD_RESTAURANTS": {
+        "candidate_tag_count": 82,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "GAME_ACTION": {
+        "candidate_tag_count": 157,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "GAME_RPG": {
+        "candidate_tag_count": 100,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "GAME_STRATEGY": {
+        "candidate_tag_count": 102,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "GAME_SIMULATION": {
+        "candidate_tag_count": 56,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "GAME_SPORTS_RACING": {
+        "candidate_tag_count": 2,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 0
+        }
+      },
+      "GAME_PUZZLE_CASUAL": {
+        "candidate_tag_count": 120,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "BEAUTY_MAKEUP": {
+        "candidate_tag_count": 92,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "BEAUTY_SKINCARE": {
+        "candidate_tag_count": 109,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "BEAUTY_HAIR": {
+        "candidate_tag_count": 29,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "BEAUTY_NAILS": {
+        "candidate_tag_count": 44,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 4
+        }
+      },
+      "FASHION_CLOTHING": {
+        "candidate_tag_count": 235,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "FASHION_SHOES": {
+        "candidate_tag_count": 27,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "FASHION_BAGS": {
+        "candidate_tag_count": 38,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "FASHION_ACCESSORIES": {
+        "candidate_tag_count": 77,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 4
+        }
+      },
+      "TRAVEL_DOMESTIC": {
+        "candidate_tag_count": 206,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "TRAVEL_INTERNATIONAL": {
+        "candidate_tag_count": 163,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "TRAVEL_CAMPING": {
+        "candidate_tag_count": 78,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "TRAVEL_CAR_CAMPING": {
+        "candidate_tag_count": 89,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "MUSIC_VOCAL": {
+        "candidate_tag_count": 187,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "MUSIC_COMPOSITION": {
+        "candidate_tag_count": 114,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "MUSIC_INSTRUMENT": {
+        "candidate_tag_count": 93,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "MUSIC_DANCE": {
+        "candidate_tag_count": 47,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "PET_DOG": {
+        "candidate_tag_count": 160,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "PET_CAT": {
+        "candidate_tag_count": 160,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "PET_OTHER_ANIMALS": {
+        "candidate_tag_count": 76,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "PET_TRAINING": {
+        "candidate_tag_count": 72,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "PET_ADOPTION": {
+        "candidate_tag_count": 29,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "TECH_MOBILE": {
+        "candidate_tag_count": 138,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "TECH_PC": {
+        "candidate_tag_count": 206,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "TECH_DEVICES": {
+        "candidate_tag_count": 191,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "TECH_PROGRAMMING": {
+        "candidate_tag_count": 124,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 3
+        }
+      },
+      "TECH_AI": {
+        "candidate_tag_count": 65,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 4
+        }
+      },
+      "KNOWLEDGE_STUDY": {
+        "candidate_tag_count": 199,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "KNOWLEDGE_BOOKS": {
+        "candidate_tag_count": 147,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "KNOWLEDGE_HISTORY": {
+        "candidate_tag_count": 73,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 2
+        }
+      },
+      "KNOWLEDGE_SCIENCE": {
+        "candidate_tag_count": 72,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 2
+        }
+      },
+      "KNOWLEDGE_ECONOMICS": {
+        "candidate_tag_count": 92,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "KNOWLEDGE_FINANCE": {
+        "candidate_tag_count": 175,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "ENTERTAIN_FILM": {
+        "candidate_tag_count": 44,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "ENTERTAIN_DRAMA": {
+        "candidate_tag_count": 41,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "ENTERTAIN_VARIETY": {
+        "candidate_tag_count": 57,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "ENTERTAIN_ANIMATION": {
+        "candidate_tag_count": 6,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 2
+        }
+      },
+      "ENTERTAIN_WEBTOON": {
+        "candidate_tag_count": 4,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 1
+        }
+      },
+      "ENTERTAIN_FANDOM": {
+        "candidate_tag_count": 55,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 4
+        }
+      },
+      "HUMOR_COMEDY": {
+        "candidate_tag_count": 78,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "HUMOR_MEMES": {
+        "candidate_tag_count": 55,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 5,
+          "selected_subtopic": 5
+        }
+      },
+      "HUMOR_HEARTWARMING": {
+        "candidate_tag_count": 46,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "SPORTS_BASEBALL": {
+        "candidate_tag_count": 28,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "SPORTS_FOOTBALL": {
+        "candidate_tag_count": 25,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "SPORTS_GOLF": {
+        "candidate_tag_count": 61,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 5
+        }
+      },
+      "SPORTS_COMBAT": {
+        "candidate_tag_count": 5,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 0
+        }
+      },
+      "SPORTS_BASKETBALL": {
+        "candidate_tag_count": 0,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 0
+        }
+      },
+      "SPORTS_OTHER_SPORTS": {
+        "candidate_tag_count": 40,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "NEWS_POLITICS": {
+        "candidate_tag_count": 8,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "NEWS_SOCIETY": {
+        "candidate_tag_count": 29,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "NEWS_INTERNATIONAL": {
+        "candidate_tag_count": 8,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "NEWS_ECONOMIC_NEWS": {
+        "candidate_tag_count": 34,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 4
+        }
+      },
+      "NEWS_CELEBRITY_NEWS": {
+        "candidate_tag_count": 5,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 2
+        }
+      },
+      "LIFE_PERSONAL": {
+        "candidate_tag_count": 268,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "LIFE_PARENTING": {
+        "candidate_tag_count": 49,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "LIFE_FAMILY": {
+        "candidate_tag_count": 34,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 3
+        }
+      },
+      "LIFE_COUPLE": {
+        "candidate_tag_count": 8,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 0
+        }
+      },
+      "LIFE_STORIES": {
+        "candidate_tag_count": 70,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 3
+        }
+      },
+      "HOBBY_FISHING": {
+        "candidate_tag_count": 57,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "HOBBY_CRAFTS": {
+        "candidate_tag_count": 20,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 4
+        }
+      },
+      "HOBBY_DRAWING": {
+        "candidate_tag_count": 16,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "HOBBY_COLLECTING": {
+        "candidate_tag_count": 3,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 1
+        }
+      },
+      "HOBBY_GARDENING": {
+        "candidate_tag_count": 0,
+        "same_top5_order": true,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 0
+        }
+      },
+      "LIFETIP_HOUSEHOLD": {
+        "candidate_tag_count": 39,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      },
+      "LIFETIP_KITCHEN_GOODS": {
+        "candidate_tag_count": 6,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 4
+        }
+      },
+      "LIFETIP_HOME_GOODS": {
+        "candidate_tag_count": 17,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 2,
+          "selected_subtopic": 5
+        }
+      },
+      "LIFETIP_INTERIOR": {
+        "candidate_tag_count": 9,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 3
+        }
+      },
+      "LIFETIP_SHOPPING": {
+        "candidate_tag_count": 88,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 3,
+          "selected_subtopic": 5
+        }
+      }
+    }
+  },
+  "single_user_selections": {
+    "taxonomy_cases": 7,
+    "pairs": 53,
+    "new_api_calls": 0,
+    "changed_top5_order": 7,
+    "fewer_than_five_tagged_candidates": 0,
+    "coverage": {
+      "FITNESS_WEIGHTS": {
+        "candidate_tag_count": 54,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "FOOD_BAKING": {
+        "candidate_tag_count": 86,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 5
+        }
+      },
+      "BEAUTY_HAIR": {
+        "candidate_tag_count": 29,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "FASHION_SHOES": {
+        "candidate_tag_count": 27,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "FASHION_BAGS": {
+        "candidate_tag_count": 38,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 1,
+          "selected_subtopic": 4
+        }
+      },
+      "TRAVEL_DOMESTIC": {
+        "candidate_tag_count": 206,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 4,
+          "selected_subtopic": 5
+        }
+      },
+      "TECH_PROGRAMMING": {
+        "candidate_tag_count": 124,
+        "same_top5_order": false,
+        "top5_tag_matches": {
+          "parent_only": 0,
+          "selected_subtopic": 3
+        }
+      }
+    }
+  }
+}

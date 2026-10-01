@@ -296,3 +296,5 @@ U는 적절성이 확인되지 않은 후보로 계산하고 방법별 U 비율�
 공개 집계는 data/final-human-summary.json에 보관한다. 원문·개별 점검 답변은 Git에서 제외한 로컬 results에 있으므로 실제 재집계에는 해당 원본 파일이 필요하다.
 테스트는 합성 고정 입력에서 paired 차이·U 처리·변조 거부를 검증한다. 전체288 passed in 4.99s(Python3.12).
 Python3.11 런타임 실행은 미확인이다. 신규 API 호출0.
+
+별도 후속: [직접 선택 세부 태그7개 비교](selected-subtopic-eval.md). 기존 최종 결과와 분리하며 채점 대기다.
