@@ -465,6 +465,7 @@ python3 -m src.real_eval human-sheet   # 사람이 채운 뒤 human-agree, 마�
 - [동일 입력 M2·M3·M4 비교](docs/recommendation-m234-eval.md): 468개 입력, 2,801쌍 판정.
 - [세부 주제 정의](docs/creator-subtopics.md): 상위 17개·세부 85개·콘텐츠 형식 10개.
 - [계층 추천 결과](docs/hierarchical-subtopic-eval.md): 기존 입력 유지, 3,709쌍 판정 및 모든 민감도 조건.
+- [가산점 분리·사람 점검](docs/bonus-ablation-eval.md): 네 조건 비교와 터미널 점검 결과·최종 실험 초안.
 - [검증·일관성 보고서](docs/recommendation-validation.md): 테스트 출력, 고정 조건, 조건 변경, 재현 한계.
 
 일반 소개글의 LLM P@5는 기존 M4 0.641, 총 가산점 유지 H4 0.655, 가산점이 최대 1.5배인 주 조건 H4 0.664입니다. 주 조건의 상승을 세부 정보만의 효과로 단정하지 않습니다.
