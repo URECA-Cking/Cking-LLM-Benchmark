@@ -107,3 +107,5 @@ M4를 기본으로 유지하고 선택사항으로 세부 관심사를 받는 �
 data/selected-subtopic-selection-audit.json이다. 후보 생성·평가 입력·순위에는 영향이 없었다.
 
 수정 후 재생성한 후보·평가 입력·cases가 원본과 동일함을 확인했다. 전체294 passed in 5.03s.
+
+후속 [170개 입력 자동 평가](selected-subtopic-auto-eval.md)에서 개선 방향은 관찰됐으나 사람 판정과23/53 일치해 평가 기준 점검이 필요하다.
