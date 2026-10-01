@@ -458,6 +458,9 @@ python3 -m src.real_eval human-sheet   # 사람이 채운 뒤 human-agree, 마�
 ## 12. 가입·즐겨찾기 추천 흐름과 세부 주제 실험
 
 태그 선택·크리에이터 선택·즐겨찾기 기반 추천의 후속 탐색 실험을 완료했습니다.
+
+**처음 읽을 문서: [결론·방법·핵심 결과·다음 단계 요약](docs/recommendation-results.md)**
+
 - [입력 흐름·초기 탐색](docs/recommendation-flow-eval.md): 초기 방법 비교와 표본의 한계.
 - [동일 입력 M2·M3·M4 비교](docs/recommendation-m234-eval.md): 468개 입력, 2,801쌍 판정.
 - [세부 주제 정의](docs/creator-subtopics.md): 상위 17개·세부 85개·콘텐츠 형식 10개.
