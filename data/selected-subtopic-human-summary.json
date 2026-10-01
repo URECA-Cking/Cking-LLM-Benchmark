@@ -1,0 +1,96 @@
+{
+  "scope": "single_user_selected_preferences",
+  "contract_verified": true,
+  "plan_hash": "d5090eadf4ef027d3c4f3c25ed2f338cc518ce57caa342bca6a6ca23b3f57cc8",
+  "human_hash": "51e1210e3c4951c910afa52c8b914b6d9cb67f16d10f68ea471dc3ef9bda74ce",
+  "rated_pairs": 53,
+  "answers": {
+    "1": 40,
+    "0": 13
+  },
+  "per_topic": {
+    "FITNESS_WEIGHTS": {
+      "parent_only": {
+        "p_at_5": 0.8,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 0.8,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.0
+    },
+    "FOOD_BAKING": {
+      "parent_only": {
+        "p_at_5": 0.0,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 0.6,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.6
+    },
+    "BEAUTY_HAIR": {
+      "parent_only": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.0
+    },
+    "FASHION_SHOES": {
+      "parent_only": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.0
+    },
+    "FASHION_BAGS": {
+      "parent_only": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.0
+    },
+    "TRAVEL_DOMESTIC": {
+      "parent_only": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 1.0,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.0
+    },
+    "TECH_PROGRAMMING": {
+      "parent_only": {
+        "p_at_5": 0.2,
+        "unknown_at_5": 0.0
+      },
+      "selected_subtopic": {
+        "p_at_5": 0.2,
+        "unknown_at_5": 0.0
+      },
+      "difference": 0.0
+    }
+  },
+  "means": {
+    "parent_only": 0.7142857142857143,
+    "selected_subtopic": 0.7999999999999999
+  },
+  "difference": 0.08571428571428563,
+  "interpretation": "descriptive single-rater selected-topic diagnosis, not population superiority"
+}

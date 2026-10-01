@@ -105,8 +105,8 @@ def execute(args):
                 for m, selected in rows.items()
             },
         }
-        for selected in rows.values():
-            for row in selected:
+        for selected_rows in rows.values():
+            for row in selected_rows:
                 cid = row["id"]
                 pairs[case_id + "::" + cid] = {
                     "route": "tags",
