@@ -170,7 +170,7 @@
 | 6 | 후보 생성·블라인드 시트·1인 평가 | 누락·U·원래 답 보존 검증 |
 | 7 | 동결 코드로 집계·경로별 선택 | 선정 보고서·남은 위험·운영 조건 |
 
-선행 근거: [결과 요약](recommendation-results.md), [네 조건 비교·사람 진단](bonus-ablation-eval.md).
+선행 근거: [결과 요약](../../history/recommendation-exploration.md), [네 조건 비교·사람 진단](../bonus-ablation/report.md).
 
 ## 11. 개발 20개 준비 결과
 
@@ -293,8 +293,8 @@ python -m pytest -q
 
 집계기는 누락·추가 답변, 후보 변경, 채점 계약·답변 근거 변경을 거부한다.
 U는 적절성이 확인되지 않은 후보로 계산하고 방법별 U 비율을 따로 보고한다.
-공개 집계는 data/final-human-summary.json에 보관한다. 원문·개별 점검 답변은 Git에서 제외한 로컬 results에 있으므로 실제 재집계에는 해당 원본 파일이 필요하다.
+공개 집계는 data/summaries/final-eval/human.json에 보관한다. 원문·개별 점검 답변은 Git에서 제외한 로컬 results에 있으므로 실제 재집계에는 해당 원본 파일이 필요하다.
 테스트는 합성 고정 입력에서 paired 차이·U 처리·변조 거부를 검증한다. 전체288 passed in 4.99s(Python3.12).
 Python3.11 런타임 실행은 미확인이다. 신규 API 호출0.
 
-별도 후속: [직접 선택 세부 태그7개 비교](selected-subtopic-eval.md). 기존 최종 결과와 분리한다. 평균0.714→0.800이나 개선은 베이킹1개 입력에 집중됐다. [자동170개 비교](selected-subtopic-auto-eval.md)는 사람과23/53 일치해 단독 채택 근거로 쓰지 않는다.
+별도 후속: [직접 선택 세부 태그7개 비교](../selected-topics/human.md). 기존 최종 결과와 분리한다. 평균0.714→0.800이나 개선은 베이킹1개 입력에 집중됐다. [자동170개 비교](../selected-topics/automatic.md)는 사람과23/53 일치해 단독 채택 근거로 쓰지 않는다.

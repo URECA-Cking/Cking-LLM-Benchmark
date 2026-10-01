@@ -63,7 +63,7 @@ q로 중단하고 같은 명령으로 재개한다. 최종801쌍 채점 파일�
 1인의 작고 상관된 관심사 표본이므로 모집단 우월성 구간이나 확정 채택 기준을 적용하지 않는다.
 유망하면 실제 사용자 선택 데이터를 늘려 후속 평가한다.
 
-원문·개별 답은 로컬 results에 보관한다. 공개 준비 집계는 data/selected-subtopic-preparation.json이다.
+원문·개별 답은 로컬 results에 보관한다. 공개 준비 집계는 data/summaries/selected-topics/preparation.json이다.
 사람 평가 결과는 아래와 같다. 모든 분야나 실제 사용자 일반화를 입증한 것으로 표현하지 않는다.
 
 실행 검증: Python3.12 전체290 passed in 6.24s, CLI53개·완료0개 확인, 신규 API 호출0.
@@ -101,11 +101,11 @@ M4를 기본으로 유지하고 선택사항으로 세부 관심사를 받는 �
 
     .venv/bin/python -m src.selected_subtopic_score       --experiment-dir results/selected_subtopics_user_v1
 
-공개 집계: data/selected-subtopic-human-summary.json.
+공개 집계: data/summaries/selected-topics/human.json.
 준비 코드의 user_selections 메타데이터가 마지막 후보 목록으로 덮이는 오류를 수정했다.
 동결 계획과 답변은 바꾸지 않았다. 원본 선택 파일과 cases의7개 topic 일치를 대조한 별도 정정 기록은
-data/selected-subtopic-selection-audit.json이다. 후보 생성·평가 입력·순위에는 영향이 없었다.
+data/summaries/selected-topics/selection-audit.json이다. 후보 생성·평가 입력·순위에는 영향이 없었다.
 
 수정 후 재생성한 후보·평가 입력·cases가 원본과 동일함을 확인했다. 전체294 passed in 5.03s.
 
-후속 [170개 입력 자동 평가](selected-subtopic-auto-eval.md)에서 개선 방향은 관찰됐으나 사람 판정과23/53 일치해 평가 기준 점검이 필요하다.
+후속 [170개 입력 자동 평가](automatic.md)에서 개선 방향은 관찰됐으나 사람 판정과23/53 일치해 평가 기준 점검이 필요하다.

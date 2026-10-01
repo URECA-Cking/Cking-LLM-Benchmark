@@ -18,7 +18,7 @@ from src.paired_diff import (
     write_artifact,
 )
 
-DOC = ROOT_DIR / "docs" / "embedding-method-selection.md"
+DOC = ROOT_DIR / "docs" / "history" / "model-selection" / "quality.md"
 
 
 def test_paired_difference_counts_wins_and_reports_an_interval_around_the_mean() -> None:

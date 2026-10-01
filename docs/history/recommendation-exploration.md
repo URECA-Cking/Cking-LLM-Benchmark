@@ -1,6 +1,6 @@
 # 추천 흐름 실험 결과 요약
 
-> 최신 선정 결과는 [최종 사람 평가](final-recommendation-eval.md#14-최종-사람-평가-결과와-선택)를 참고하세요.
+> 최신 선정 결과는 [최종 사람 평가](../experiments/final-eval/report.md#14-최종-사람-평가-결과와-선택)를 참고하세요.
 > 일반 소개 M4·짧은 소개 M2를 잠정 선택했습니다. 아래는 그 이전 LLM 탐색 결과입니다.
 
 ## 당시 탐색 실험의 판단
@@ -105,8 +105,8 @@ P@5는 상위 5명 중 적합 판정을 받은 비율이다. **표의 H3·H4는 
 
 | 문서 | 읽을 때 |
 | --- | --- |
-| [M234 비교](recommendation-m234-eval.md) | 상위 분야 보정의 결과·표 검증 |
-| [계층 비교](hierarchical-subtopic-eval.md) | 모든 임계값·가중치 결과와 실행 명령 |
+| [M234 비교](../experiments/recommendation-flow/m234.md) | 상위 분야 보정의 결과·표 검증 |
+| [계층 비교](../experiments/subtopics/report.md) | 모든 임계값·가중치 결과와 실행 명령 |
 | [검증·일관성](recommendation-validation.md) | 테스트 출력·조건 변경·재현 한계 |
-| [세부 주제 정의](creator-subtopics.md) | 85개 태그의 정의와 경계 |
-| [초기 흐름 탐색](recommendation-flow-eval.md) | 평균 벡터·순위 합산 등 이전 탐색 |
+| [세부 주제 정의](../reference/creator-subtopics.md) | 85개 태그의 정의와 경계 |
+| [초기 흐름 탐색](../experiments/recommendation-flow/pilot.md) | 평균 벡터·순위 합산 등 이전 탐색 |

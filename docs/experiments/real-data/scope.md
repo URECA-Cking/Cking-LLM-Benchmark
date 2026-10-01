@@ -1,6 +1,6 @@
 # 실데이터 실험의 범위: 분야 목록, 방식별 의존, 평가 범위, 다음 실험
 
-[`real-data-eval.md`](real-data-eval.md)(도구·사전 기준·결과)를 보완한다. 결과 해석에 자주 나오는 사실을 한곳에 모았다.
+[`real-data-eval.md`](report.md)(도구·사전 기준·결과)를 보완한다. 결과 해석에 자주 나오는 사실을 한곳에 모았다.
 
 ## 분야 목록 (17개)
 정본은 데이터 폴더의 `labels/categories_v2.csv`(`code`, `name`, `description`)다. 처음 10개에서 채널을 수집한 뒤 17개로 늘렸다.

@@ -4,7 +4,7 @@ bge-m3, KURE-v1(bge-m3의 한국어 파인튜닝)은 query/passage 접두어가 
 된다. Qwen3-Embedding은 모델에 쿼리용 instruct 프롬프트가 등록돼 있고(`model.prompts`),
 공식 사용법은 검색 질의 쪽에 이를 적용하길 권장한다(리뷰로 발견) — `embed(..., prompt_name=...)`로
 호출부에서 선택적으로 적용한다. `LOCAL_EMBEDDING_MODELS[key]["query_prompt_name"]`에 등록된
-모델만 해당하며, 평가 쿼리 역할일 때만 쓴다(이슈 #8, `docs/embedding-method-selection.md`의
+모델만 해당하며, 평가 쿼리 역할일 때만 쓴다(이슈 #8, `docs/history/model-selection/index.md`의
 Qwen3 관련 한계 참고).
 """
 
