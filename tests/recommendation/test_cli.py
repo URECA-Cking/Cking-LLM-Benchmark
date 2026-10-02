@@ -99,29 +99,47 @@ def test_write_backend_payload_preserves_existing_file_when_temp_write_fails(tmp
 
 
 @pytest.mark.parametrize(
-    ("protected_option", "protected_name"),
+    ("writable_option", "protected_option", "protected_name"),
     [
-        ("--input", "request.json"),
-        ("--cache", "model-cache.json"),
-        ("--categories", "categories.csv"),
+        ("--output", "--input", "request.json"),
+        ("--output", "--cache", "model-cache.json"),
+        ("--output", "--categories", "categories.csv"),
+        ("--cache", "--input", "request.json"),
+        ("--cache", "--categories", "categories.csv"),
     ],
 )
-def test_main_rejects_output_collision_before_external_clients(
+def test_main_rejects_write_path_collision_before_external_clients(
     tmp_path,
     monkeypatch,
+    writable_option,
     protected_option,
     protected_name,
 ) -> None:
     protected_dir = tmp_path / "protected"
     protected_dir.mkdir()
     protected = protected_dir / protected_name
-    output_alias = protected_dir / "unused" / ".." / protected_name
+    original = {
+        "--input": json.dumps(
+            {
+                "creatorId": 10,
+                "introduction": "짧음",
+                "candidateCreators": [{"creatorId": 20, "introduction": "후보 소개"}],
+            },
+            ensure_ascii=False,
+        ),
+        "--cache": '{"schemaVersion":1,"embeddings":{},"tags":{}}',
+        "--categories": "code,name,description\nFITNESS,운동,홈트와 러닝\n",
+    }[protected_option]
+    protected.write_text(original, encoding="utf-8")
+    writable_alias = protected_dir / "unused" / ".." / protected_name
     paths = {
         "--input": tmp_path / "request.json",
+        "--output": tmp_path / "result.json",
         "--cache": tmp_path / "model-cache.json",
         "--categories": tmp_path / "categories.csv",
     }
     paths[protected_option] = protected
+    paths[writable_option] = writable_alias
     external_clients_called = False
 
     def create_external_clients(*_args, **_kwargs):
@@ -137,7 +155,7 @@ def test_main_rejects_output_collision_before_external_clients(
                 "--input",
                 str(paths["--input"]),
                 "--output",
-                str(output_alias),
+                str(paths["--output"]),
                 "--cache",
                 str(paths["--cache"]),
                 "--categories",
@@ -146,3 +164,4 @@ def test_main_rejects_output_collision_before_external_clients(
         )
 
     assert external_clients_called is False
+    assert protected.read_text(encoding="utf-8") == original

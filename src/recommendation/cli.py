@@ -24,19 +24,28 @@ from src.recommendation.service import RecommendationConfig, SimilarCreatorRecom
 DEFAULT_CACHE = RESULTS_DIR / "recommendation" / "model-cache.json"
 
 
-def validate_output_path(output: Path, protected_paths: dict[str, Path]) -> None:
-    """출력 파일이 입력·캐시·분류체계 파일을 덮어쓰지 않도록 경로 충돌을 막는다."""
-    resolved_output = output.resolve(strict=False)
-    for option, protected in protected_paths.items():
-        resolved_protected = protected.resolve(strict=False)
-        same_file = resolved_output == resolved_protected
-        if not same_file and output.exists() and protected.exists():
-            try:
-                same_file = os.path.samefile(output, protected)
-            except OSError:
-                same_file = False
-        if same_file:
-            raise ValueError(f"--output 경로는 {option} 경로와 달라야 합니다: {resolved_output}")
+def _same_path(first: Path, second: Path) -> bool:
+    """정규화된 경로와 기존 파일 식별자를 함께 비교한다."""
+    if first.resolve(strict=False) == second.resolve(strict=False):
+        return True
+    if first.exists() and second.exists():
+        try:
+            return os.path.samefile(first, second)
+        except OSError:
+            return False
+    return False
+
+
+def validate_write_paths(paths: dict[str, Path], writable_options: tuple[str, ...]) -> None:
+    """출력·캐시 쓰기가 입력 파일이나 서로의 파일을 덮어쓰지 않게 한다."""
+    for writable_option in writable_options:
+        writable_path = paths[writable_option]
+        for other_option, other_path in paths.items():
+            if other_option == writable_option:
+                continue
+            if _same_path(writable_path, other_path):
+                resolved = writable_path.resolve(strict=False)
+                raise ValueError(f"{writable_option} 경로는 {other_option} 경로와 달라야 합니다: {resolved}")
 
 
 def write_backend_payload(path: Path, payload: dict[str, object]) -> None:
@@ -97,13 +106,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    validate_output_path(
-        args.output,
+    validate_write_paths(
         {
             "--input": args.input,
+            "--output": args.output,
             "--cache": args.cache,
             "--categories": args.categories,
         },
+        ("--output", "--cache"),
     )
     seed, candidates, request_top_n = load_request(args.input)
     categories = load_service_categories(args.categories)
