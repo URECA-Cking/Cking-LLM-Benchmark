@@ -210,7 +210,7 @@ def test_cli_top_n_limit_is_rejected_before_external_clients(tmp_path, monkeypat
     assert external_clients_called is False
 
 
-def test_cli_empty_result_preserves_existing_output(tmp_path, monkeypatch) -> None:
+def test_cli_empty_result_replaces_existing_output_with_empty_generation(tmp_path, monkeypatch) -> None:
     request = tmp_path / "request.json"
     request.write_text(
         json.dumps(
@@ -230,18 +230,23 @@ def test_cli_empty_result_preserves_existing_output(tmp_path, monkeypatch) -> No
     output.write_text(previous, encoding="utf-8")
     monkeypatch.setattr("src.recommendation.cli.create_external_clients", lambda *_args: (object(), object()))
 
-    with pytest.raises(ValueError, match="BE 적재 후보는 1~100건"):
-        main(
-            [
-                "--input",
-                str(request),
-                "--output",
-                str(output),
-                "--cache",
-                str(tmp_path / "cache.json"),
-                "--categories",
-                str(categories),
-            ]
-        )
+    assert main(
+        [
+            "--input",
+            str(request),
+            "--output",
+            str(output),
+            "--cache",
+            str(tmp_path / "cache.json"),
+            "--categories",
+            str(categories),
+        ]
+    ) == 0
 
-    assert output.read_text(encoding="utf-8") == previous
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["creatorId"] == 10
+    assert payload["method"] == "M2"
+    assert payload["modelVersion"] == "BAAI/bge-m3@deepinfra-v1"
+    assert len(payload["inputHash"]) == 64
+    assert payload["candidates"] == []
+    assert output.read_text(encoding="utf-8") != previous

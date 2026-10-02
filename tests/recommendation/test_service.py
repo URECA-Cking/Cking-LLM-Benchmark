@@ -81,7 +81,11 @@ def test_regular_introduction_uses_m4_and_stable_creator_id_tie_break(tmp_path) 
     assert {item.method for item in result.candidates} == {"M4"}
     assert all(item.model_version == "embed-v1+tag-v1@prompt-v1" for item in result.candidates)
     assert len({item.input_hash for item in result.candidates}) == 1
-    assert result.to_backend_payload()["candidates"][0] == result.candidates[0].to_dict()
+    payload = result.to_backend_payload()
+    assert payload["method"] == "M4"
+    assert payload["modelVersion"] == result.candidates[0].model_version
+    assert payload["inputHash"] == result.candidates[0].input_hash
+    assert payload["candidates"][0] == result.candidates[0].to_dict()
 
 
 def test_same_score_is_sorted_by_creator_id(tmp_path) -> None:
@@ -141,12 +145,22 @@ def test_empty_seed_and_empty_candidates_do_not_call_models(tmp_path) -> None:
 
     assert empty_seed.candidates == ()
     assert no_valid_candidate.candidates == ()
-    with pytest.raises(ValueError, match="BE 적재 후보는 1~100건"):
-        empty_seed.to_backend_payload()
-    with pytest.raises(ValueError, match="BE 적재 후보는 1~100건"):
-        no_valid_candidate.to_backend_payload()
+    assert empty_seed.method == no_valid_candidate.method == "M2"
+    assert empty_seed.model_version == no_valid_candidate.model_version == "embed-v1"
+    assert empty_seed.input_hash != no_valid_candidate.input_hash
+    assert empty_seed.to_backend_payload() == {
+        "creatorId": 10,
+        "method": "M2",
+        "modelVersion": "embed-v1",
+        "inputHash": empty_seed.input_hash,
+        "candidates": [],
+    }
+    assert no_valid_candidate.to_backend_payload()["candidates"] == []
     assert embedder.calls == []
     assert tagger.calls == []
+
+    repeated = service.recommend(CreatorProfile(10, "  "), [CreatorProfile(20, "후보 소개")])
+    assert repeated.to_backend_payload() == empty_seed.to_backend_payload()
 
 
 def test_top_n_above_backend_limit_is_rejected_before_models(tmp_path) -> None:

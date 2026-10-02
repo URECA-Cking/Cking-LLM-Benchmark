@@ -57,13 +57,27 @@ class RecommendationResult:
     """한 seed 크리에이터에서 생성된 완결된 후보 묶음이다."""
 
     creator_id: int
+    method: str
+    model_version: str
+    input_hash: str
     candidates: tuple[RecommendationCandidate, ...]
 
     def to_backend_payload(self) -> dict[str, object]:
         """부분 상태 없이 한 번에 적재할 수 있는 BE 전달 payload를 만든다."""
-        if not 1 <= len(self.candidates) <= MAX_BACKEND_CANDIDATES:
-            raise ValueError("BE 적재 후보는 1~100건이어야 합니다.")
+        if len(self.candidates) > MAX_BACKEND_CANDIDATES:
+            raise ValueError("BE 적재 후보는 0~100건이어야 합니다.")
+        if any(
+            candidate.creator_id != self.creator_id
+            or candidate.method != self.method
+            or candidate.model_version != self.model_version
+            or candidate.input_hash != self.input_hash
+            for candidate in self.candidates
+        ):
+            raise ValueError("후보 메타데이터는 생성 세대의 최상위 메타데이터와 같아야 합니다.")
         return {
             "creatorId": self.creator_id,
+            "method": self.method,
+            "modelVersion": self.model_version,
+            "inputHash": self.input_hash,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }

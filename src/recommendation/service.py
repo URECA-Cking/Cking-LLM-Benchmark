@@ -116,10 +116,18 @@ class SimilarCreatorRecommender:
             raise ValueError("top_n은 1~100의 정수여야 합니다.")
 
         pool = self._deduplicate(seed, candidates)
-        request_profiles = [seed, *pool]
         if not seed.text or not pool:
-            return RecommendationResult(seed.creator_id, ())
+            method = "M2"
+            model_version = self.config.model_version(method)
+            return RecommendationResult(
+                creator_id=seed.creator_id,
+                method=method,
+                model_version=model_version,
+                input_hash=self._generation_input_hash(seed, pool, limit, method, model_version),
+                candidates=(),
+            )
 
+        request_profiles = [seed, *pool]
         method = "M2"
         tags_by_id: dict[int, frozenset[str]] = {}
         if len(seed.text) >= self.config.short_introduction_chars:
@@ -156,7 +164,13 @@ class SimilarCreatorRecommender:
             )
             for rank, (candidate_id, score) in enumerate(selected, start=1)
         )
-        return RecommendationResult(seed.creator_id, result)
+        return RecommendationResult(
+            creator_id=seed.creator_id,
+            method=method,
+            model_version=model_version,
+            input_hash=input_hash,
+            candidates=result,
+        )
 
     def _deduplicate(self, seed: CreatorProfile, candidates: Iterable[CreatorProfile]) -> list[CreatorProfile]:
         by_id: dict[int, CreatorProfile] = {}
