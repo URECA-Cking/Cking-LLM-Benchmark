@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from src.clients.openai_tagger import TagResult
-from src.recommendation.cache import JsonModelCache
+from src.recommendation.cache import JsonModelCache, text_hash
 from src.recommendation.models import CreatorProfile
 from src.recommendation.service import RecommendationConfig, SimilarCreatorRecommender
 
@@ -196,6 +196,59 @@ def test_embeddings_are_requested_in_configured_batches(tmp_path) -> None:
     ).recommend(seed, candidates)
 
     assert [len(batch) for batch in embedder.calls] == [2, 2, 2]
+
+
+def test_dimension_error_does_not_poison_retry_with_valid_embedder(tmp_path) -> None:
+    seed = CreatorProfile(10, "짧음")
+    candidates = [
+        CreatorProfile(20, "후보 이십"),
+        CreatorProfile(30, "후보 삼십"),
+        CreatorProfile(40, "후보 사십"),
+    ]
+    invalid_vectors = {
+        seed.text: [1, 0],
+        candidates[0].text: [1, 0],
+        candidates[1].text: [1, 0, 0],
+        candidates[2].text: [1, 0, 0],
+    }
+    invalid_embedder = FakeEmbeddingClient(invalid_vectors)
+    settings = config(embedding_batch_size=2)
+
+    with pytest.raises(ValueError, match="임베딩 차원"):
+        build_service(tmp_path, invalid_embedder, FakeTaggingClient({}), settings).recommend(seed, candidates)
+
+    valid_vectors = {profile.text: [1, 0] for profile in [seed, *candidates]}
+    valid_embedder = FakeEmbeddingClient(valid_vectors)
+    result = build_service(tmp_path, valid_embedder, FakeTaggingClient({}), settings).recommend(seed, candidates)
+
+    assert [item.similar_creator_id for item in result.candidates] == [20, 30, 40]
+    assert valid_embedder.calls == [[candidates[1].text, candidates[2].text]]
+
+
+def test_zero_vector_is_rejected_before_cache_write(tmp_path) -> None:
+    seed = CreatorProfile(10, "짧음")
+    candidate = CreatorProfile(20, "후보 소개")
+    invalid_embedder = FakeEmbeddingClient({seed.text: [0, 0], candidate.text: [1, 0]})
+
+    with pytest.raises(ValueError, match="norm"):
+        build_service(tmp_path, invalid_embedder, FakeTaggingClient({})).recommend(seed, [candidate])
+
+    valid_embedder = FakeEmbeddingClient({seed.text: [1, 0], candidate.text: [1, 0]})
+    build_service(tmp_path, valid_embedder, FakeTaggingClient({})).recommend(seed, [candidate])
+
+    assert valid_embedder.calls == [[seed.text, candidate.text]]
+
+
+def test_invalid_cached_embedding_is_regenerated(tmp_path) -> None:
+    seed = CreatorProfile(10, "짧음")
+    candidate = CreatorProfile(20, "후보 소개")
+    cache = JsonModelCache(tmp_path / "model-cache.json")
+    cache.put_embedding(text_hash(seed.text), "embed-v1", [0, 0])
+    embedder = FakeEmbeddingClient({seed.text: [1, 0], candidate.text: [1, 0]})
+
+    build_service(tmp_path, embedder, FakeTaggingClient({})).recommend(seed, [candidate])
+
+    assert embedder.calls == [[seed.text, candidate.text]]
 
 
 def test_tagger_failure_aborts_without_partial_result(tmp_path) -> None:
