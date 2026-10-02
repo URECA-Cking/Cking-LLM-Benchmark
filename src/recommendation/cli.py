@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from src.config import CATEGORIES_CSV, RESULTS_DIR
@@ -21,6 +22,21 @@ from src.recommendation.service import RecommendationConfig, SimilarCreatorRecom
 
 
 DEFAULT_CACHE = RESULTS_DIR / "recommendation" / "model-cache.json"
+
+
+def write_backend_payload(path: Path, payload: dict[str, object]) -> None:
+    """완성된 JSON만 기존 BE 전달 파일과 원자적으로 교체한다."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temp.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temp, path)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
 
 
 def load_request(path: Path) -> tuple[CreatorProfile, list[CreatorProfile], int | None]:
@@ -91,11 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         config,
     )
     result = recommender.recommend(seed, candidates, request_top_n)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(result.to_backend_payload(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_backend_payload(args.output, result.to_backend_payload())
     print(f"[recommendation] creatorId={seed.creator_id}, candidates={len(result.candidates)}, output={args.output}")
     return 0
 

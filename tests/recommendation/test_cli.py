@@ -1,8 +1,9 @@
 import json
+from pathlib import Path
 
 import pytest
 
-from src.recommendation.cli import load_request
+from src.recommendation.cli import load_request, write_backend_payload
 from src.recommendation.runtime import ServiceCategory, build_service_tag_prompt, load_service_categories
 
 
@@ -76,3 +77,22 @@ def test_load_categories_rejects_duplicate_code(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="중복"):
         load_service_categories(path)
+
+
+def test_write_backend_payload_preserves_existing_file_when_temp_write_fails(tmp_path, monkeypatch) -> None:
+    output = tmp_path / "result.json"
+    previous = '{"creatorId":10,"candidates":[]}\n'
+    output.write_text(previous, encoding="utf-8")
+    original_write_text = Path.write_text
+
+    def fail_after_partial_write(path: Path, data: str, *args, **kwargs) -> int:
+        original_write_text(path, data[:8], *args, **kwargs)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", fail_after_partial_write)
+
+    with pytest.raises(OSError, match="disk full"):
+        write_backend_payload(output, {"creatorId": 10, "candidates": [{"rank": 1}]})
+
+    assert output.read_text(encoding="utf-8") == previous
+    assert list(tmp_path.glob(".result.json.*.tmp")) == []
