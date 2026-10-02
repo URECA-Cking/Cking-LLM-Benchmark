@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.recommendation.cli import load_request, write_backend_payload
+from src.recommendation.cli import load_request, main, write_backend_payload
 from src.recommendation.runtime import ServiceCategory, build_service_tag_prompt, load_service_categories
 
 
@@ -96,3 +96,53 @@ def test_write_backend_payload_preserves_existing_file_when_temp_write_fails(tmp
 
     assert output.read_text(encoding="utf-8") == previous
     assert list(tmp_path.glob(".result.json.*.tmp")) == []
+
+
+@pytest.mark.parametrize(
+    ("protected_option", "protected_name"),
+    [
+        ("--input", "request.json"),
+        ("--cache", "model-cache.json"),
+        ("--categories", "categories.csv"),
+    ],
+)
+def test_main_rejects_output_collision_before_external_clients(
+    tmp_path,
+    monkeypatch,
+    protected_option,
+    protected_name,
+) -> None:
+    protected_dir = tmp_path / "protected"
+    protected_dir.mkdir()
+    protected = protected_dir / protected_name
+    output_alias = protected_dir / "unused" / ".." / protected_name
+    paths = {
+        "--input": tmp_path / "request.json",
+        "--cache": tmp_path / "model-cache.json",
+        "--categories": tmp_path / "categories.csv",
+    }
+    paths[protected_option] = protected
+    external_clients_called = False
+
+    def create_external_clients(*_args, **_kwargs):
+        nonlocal external_clients_called
+        external_clients_called = True
+        raise AssertionError("경로 검증 전에 외부 클라이언트를 생성했습니다.")
+
+    monkeypatch.setattr("src.recommendation.cli.create_external_clients", create_external_clients)
+
+    with pytest.raises(ValueError, match=protected_option):
+        main(
+            [
+                "--input",
+                str(paths["--input"]),
+                "--output",
+                str(output_alias),
+                "--cache",
+                str(paths["--cache"]),
+                "--categories",
+                str(paths["--categories"]),
+            ]
+        )
+
+    assert external_clients_called is False

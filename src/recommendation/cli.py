@@ -24,6 +24,21 @@ from src.recommendation.service import RecommendationConfig, SimilarCreatorRecom
 DEFAULT_CACHE = RESULTS_DIR / "recommendation" / "model-cache.json"
 
 
+def validate_output_path(output: Path, protected_paths: dict[str, Path]) -> None:
+    """출력 파일이 입력·캐시·분류체계 파일을 덮어쓰지 않도록 경로 충돌을 막는다."""
+    resolved_output = output.resolve(strict=False)
+    for option, protected in protected_paths.items():
+        resolved_protected = protected.resolve(strict=False)
+        same_file = resolved_output == resolved_protected
+        if not same_file and output.exists() and protected.exists():
+            try:
+                same_file = os.path.samefile(output, protected)
+            except OSError:
+                same_file = False
+        if same_file:
+            raise ValueError(f"--output 경로는 {option} 경로와 달라야 합니다: {resolved_output}")
+
+
 def write_backend_payload(path: Path, payload: dict[str, object]) -> None:
     """완성된 JSON만 기존 BE 전달 파일과 원자적으로 교체한다."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +97,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    validate_output_path(
+        args.output,
+        {
+            "--input": args.input,
+            "--cache": args.cache,
+            "--categories": args.categories,
+        },
+    )
     seed, candidates, request_top_n = load_request(args.input)
     categories = load_service_categories(args.categories)
     tag_prompt = build_service_tag_prompt(categories)
