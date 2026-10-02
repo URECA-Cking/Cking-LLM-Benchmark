@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+MAX_BACKEND_CANDIDATES = 100
+
+
 @dataclass(frozen=True)
 class CreatorProfile:
     """추천 생성에 필요한 Cking 크리에이터 최소 입력이다."""
@@ -58,6 +61,8 @@ class RecommendationResult:
 
     def to_backend_payload(self) -> dict[str, object]:
         """부분 상태 없이 한 번에 적재할 수 있는 BE 전달 payload를 만든다."""
+        if not 1 <= len(self.candidates) <= MAX_BACKEND_CANDIDATES:
+            raise ValueError("BE 적재 후보는 1~100건이어야 합니다.")
         return {
             "creatorId": self.creator_id,
             "candidates": [candidate.to_dict() for candidate in self.candidates],

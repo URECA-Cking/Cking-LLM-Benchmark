@@ -31,7 +31,7 @@ def test_load_request_reads_service_contract(tmp_path) -> None:
     assert top_n == 3
 
 
-@pytest.mark.parametrize("top_n", [True, 0, -1, 1.5, "5"])
+@pytest.mark.parametrize("top_n", [True, 0, -1, 101, 1.5, "5"])
 def test_load_request_rejects_invalid_top_n(tmp_path, top_n) -> None:
     path = tmp_path / "input.json"
     path.write_text(
@@ -165,3 +165,83 @@ def test_main_rejects_write_path_collision_before_external_clients(
 
     assert external_clients_called is False
     assert protected.read_text(encoding="utf-8") == original
+
+
+def test_cli_top_n_limit_is_rejected_before_external_clients(tmp_path, monkeypatch) -> None:
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "creatorId": 10,
+                "introduction": "짧음",
+                "candidateCreators": [{"creatorId": 20, "introduction": "후보 소개"}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    categories = tmp_path / "categories.csv"
+    categories.write_text("code,name,description\nFITNESS,운동,홈트와 러닝\n", encoding="utf-8")
+    external_clients_called = False
+
+    def create_external_clients(*_args, **_kwargs):
+        nonlocal external_clients_called
+        external_clients_called = True
+        raise AssertionError("top-n 검증 전에 외부 클라이언트를 생성했습니다.")
+
+    monkeypatch.setattr("src.recommendation.cli.create_external_clients", create_external_clients)
+
+    with pytest.raises(ValueError, match="top_n은 1~100"):
+        main(
+            [
+                "--input",
+                str(request),
+                "--output",
+                str(tmp_path / "result.json"),
+                "--cache",
+                str(tmp_path / "cache.json"),
+                "--categories",
+                str(categories),
+                "--top-n",
+                "101",
+            ]
+        )
+
+    assert external_clients_called is False
+
+
+def test_cli_empty_result_preserves_existing_output(tmp_path, monkeypatch) -> None:
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "creatorId": 10,
+                "introduction": "  ",
+                "candidateCreators": [{"creatorId": 20, "introduction": "후보 소개"}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    categories = tmp_path / "categories.csv"
+    categories.write_text("code,name,description\nFITNESS,운동,홈트와 러닝\n", encoding="utf-8")
+    output = tmp_path / "result.json"
+    previous = '{"creatorId":10,"candidates":[{"rank":1}]}\n'
+    output.write_text(previous, encoding="utf-8")
+    monkeypatch.setattr("src.recommendation.cli.create_external_clients", lambda *_args: (object(), object()))
+
+    with pytest.raises(ValueError, match="BE 적재 후보는 1~100건"):
+        main(
+            [
+                "--input",
+                str(request),
+                "--output",
+                str(output),
+                "--cache",
+                str(tmp_path / "cache.json"),
+                "--categories",
+                str(categories),
+            ]
+        )
+
+    assert output.read_text(encoding="utf-8") == previous

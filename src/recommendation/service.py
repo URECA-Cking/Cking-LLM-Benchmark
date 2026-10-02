@@ -12,7 +12,12 @@ import numpy as np
 from src.clients.base import EmbeddingClient
 from src.clients.openai_tagger import TagResult
 from src.recommendation.cache import ModelCache, text_hash
-from src.recommendation.models import CreatorProfile, RecommendationCandidate, RecommendationResult
+from src.recommendation.models import (
+    MAX_BACKEND_CANDIDATES,
+    CreatorProfile,
+    RecommendationCandidate,
+    RecommendationResult,
+)
 
 
 class TaggingClient(Protocol):
@@ -42,10 +47,10 @@ class RecommendationConfig:
     def __post_init__(self) -> None:
         if self.short_introduction_chars <= 0:
             raise ValueError("short_introduction_chars는 양수여야 합니다.")
-        if self.top_n <= 0:
-            raise ValueError("top_n은 양수여야 합니다.")
-        if not np.isfinite(self.m4_bonus) or self.m4_bonus < 0:
-            raise ValueError("m4_bonus는 0 이상의 유한한 수여야 합니다.")
+        if isinstance(self.top_n, bool) or not isinstance(self.top_n, int) or not 1 <= self.top_n <= MAX_BACKEND_CANDIDATES:
+            raise ValueError("top_n은 1~100의 정수여야 합니다.")
+        if not np.isfinite(self.m4_bonus) or not 0 <= self.m4_bonus <= 1:
+            raise ValueError("m4_bonus는 0~1의 유한한 수여야 합니다.")
         if self.score_decimals < 0:
             raise ValueError("score_decimals는 0 이상이어야 합니다.")
         if self.embedding_batch_size <= 0:
@@ -61,6 +66,9 @@ class RecommendationConfig:
         ):
             if not value.strip():
                 raise ValueError(f"{name}은 비어 있을 수 없습니다.")
+        for method in ("M2", "M4"):
+            if len(self.model_version(method)) > 255:
+                raise ValueError(f"{method} modelVersion은 255자를 초과할 수 없습니다.")
 
     @property
     def tag_cache_version(self) -> str:
@@ -104,8 +112,8 @@ class SimilarCreatorRecommender:
         않게 하며, 호출 전까지 성공한 개별 캐시는 다음 배치 재시도에서 재사용한다.
         """
         limit = self.config.top_n if top_n is None else top_n
-        if limit <= 0:
-            raise ValueError("top_n은 양수여야 합니다.")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_BACKEND_CANDIDATES:
+            raise ValueError("top_n은 1~100의 정수여야 합니다.")
 
         pool = self._deduplicate(seed, candidates)
         request_profiles = [seed, *pool]
@@ -127,7 +135,7 @@ class SimilarCreatorRecommender:
         seed_vector = vectors[seed.creator_id]
         scored: list[tuple[int, float]] = []
         for candidate in pool:
-            score = float(seed_vector @ vectors[candidate.creator_id])
+            score = float(np.clip(seed_vector @ vectors[candidate.creator_id], -1.0, 1.0))
             if method == "M4" and tags_by_id[seed.creator_id] & tags_by_id[candidate.creator_id]:
                 score += self.config.m4_bonus
             scored.append((candidate.creator_id, round(score, self.config.score_decimals)))

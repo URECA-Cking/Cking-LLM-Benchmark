@@ -95,6 +95,17 @@ def test_same_score_is_sorted_by_creator_id(tmp_path) -> None:
     assert [item.similar_creator_id for item in result.candidates] == [20, 30]
 
 
+def test_m4_max_bonus_does_not_exceed_backend_score_limit(tmp_path) -> None:
+    seed = CreatorProfile(10, "홈트 운동 소개")
+    candidate = CreatorProfile(20, "근력 운동 소개")
+    embedder = FakeEmbeddingClient({seed.text: [1, 0], candidate.text: [1, 0]})
+    tagger = FakeTaggingClient({seed.text: ("FITNESS",), candidate.text: ("FITNESS",)})
+
+    result = build_service(tmp_path, embedder, tagger, config(m4_bonus=1.0)).recommend(seed, [candidate])
+
+    assert result.candidates[0].score == 2.0
+
+
 def test_short_introduction_uses_m2_without_tagger(tmp_path) -> None:
     seed = CreatorProfile(10, "짧음")
     candidate = CreatorProfile(20, "충분히 긴 후보 소개")
@@ -130,8 +141,37 @@ def test_empty_seed_and_empty_candidates_do_not_call_models(tmp_path) -> None:
 
     assert empty_seed.candidates == ()
     assert no_valid_candidate.candidates == ()
+    with pytest.raises(ValueError, match="BE 적재 후보는 1~100건"):
+        empty_seed.to_backend_payload()
+    with pytest.raises(ValueError, match="BE 적재 후보는 1~100건"):
+        no_valid_candidate.to_backend_payload()
     assert embedder.calls == []
     assert tagger.calls == []
+
+
+def test_top_n_above_backend_limit_is_rejected_before_models(tmp_path) -> None:
+    seed = CreatorProfile(10, "짧음")
+    candidate = CreatorProfile(20, "후보 소개")
+    embedder = FakeEmbeddingClient({seed.text: [1, 0], candidate.text: [1, 0]})
+    tagger = FakeTaggingClient({})
+
+    with pytest.raises(ValueError, match="top_n은 1~100"):
+        build_service(tmp_path, embedder, tagger).recommend(seed, [candidate], top_n=101)
+
+    assert embedder.calls == []
+    assert tagger.calls == []
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"m4_bonus": 1.00000001},
+        {"embedding_model_version": "m" * 256},
+    ],
+)
+def test_config_rejects_values_outside_backend_contract(changes) -> None:
+    with pytest.raises(ValueError):
+        config(**changes)
 
 
 def test_cache_reuses_calls_and_invalidates_model_and_prompt(tmp_path) -> None:
