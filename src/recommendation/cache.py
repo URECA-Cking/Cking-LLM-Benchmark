@@ -34,10 +34,16 @@ class ModelCache(Protocol):
     def put_embedding(self, input_hash: str, model_version: str, vector: list[float]) -> None:
         ...
 
+    def put_embeddings(self, records: list[tuple[str, str, list[float]]]) -> None:
+        ...
+
     def get_tags(self, input_hash: str, model_version: str, prompt_version: str) -> tuple[str, ...] | None:
         ...
 
     def put_tags(self, input_hash: str, model_version: str, prompt_version: str, tags: tuple[str, ...]) -> None:
+        ...
+
+    def put_tag_records(self, records: list[tuple[str, str, str, tuple[str, ...]]]) -> None:
         ...
 
 
@@ -80,13 +86,18 @@ class JsonModelCache:
         return [float(value) for value in record["vector"]]
 
     def put_embedding(self, input_hash: str, model_version: str, vector: list[float]) -> None:
-        key = _record_key("embedding", input_hash, model_version, None)
-        self._data["embeddings"][key] = {  # type: ignore[index]
-            "inputHash": input_hash,
-            "modelVersion": model_version,
-            "vector": vector,
-        }
-        self._save()
+        self.put_embeddings([(input_hash, model_version, vector)])
+
+    def put_embeddings(self, records: list[tuple[str, str, list[float]]]) -> None:
+        for input_hash, model_version, vector in records:
+            key = _record_key("embedding", input_hash, model_version, None)
+            self._data["embeddings"][key] = {  # type: ignore[index]
+                "inputHash": input_hash,
+                "modelVersion": model_version,
+                "vector": vector,
+            }
+        if records:
+            self._save()
 
     def get_tags(self, input_hash: str, model_version: str, prompt_version: str) -> tuple[str, ...] | None:
         key = _record_key("tags", input_hash, model_version, prompt_version)
@@ -96,11 +107,16 @@ class JsonModelCache:
         return tuple(str(tag) for tag in record["tags"])
 
     def put_tags(self, input_hash: str, model_version: str, prompt_version: str, tags: tuple[str, ...]) -> None:
-        key = _record_key("tags", input_hash, model_version, prompt_version)
-        self._data["tags"][key] = {  # type: ignore[index]
-            "inputHash": input_hash,
-            "modelVersion": model_version,
-            "promptVersion": prompt_version,
-            "tags": list(tags),
-        }
-        self._save()
+        self.put_tag_records([(input_hash, model_version, prompt_version, tags)])
+
+    def put_tag_records(self, records: list[tuple[str, str, str, tuple[str, ...]]]) -> None:
+        for input_hash, model_version, prompt_version, tags in records:
+            key = _record_key("tags", input_hash, model_version, prompt_version)
+            self._data["tags"][key] = {  # type: ignore[index]
+                "inputHash": input_hash,
+                "modelVersion": model_version,
+                "promptVersion": prompt_version,
+                "tags": list(tags),
+            }
+        if records:
+            self._save()

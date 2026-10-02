@@ -17,8 +17,8 @@ Issue #36의 서비스 생성기에 실제 크기의 프로필 입력을 넣었�
 
 | 사례 | seed 채널 ID | 소개 길이 | 결과 | 첫 실행 모델 캐시 조회 결과 | 같은 입력 재실행 |
 | --- | --- | ---: | --- | --- | --- |
-| 정상 소개 | `UC2ntik7Q6x8DxAOIooJeITQ` | 34 | M4, 5명 | 임베딩 1배치, 태그 4,195건 | 추가 호출 0, payload 동일 |
-| 짧은 소개 | `UCh5w1Kziu9ZbZBeejZiNojg` | 4 | M2, 5명 | 임베딩 1배치, 태그 0건 | 추가 호출 0, payload 동일 |
+| 정상 소개 | `UC2ntik7Q6x8DxAOIooJeITQ` | 34 | M4, 5명 | 임베딩 44배치, 태그 4,195건 | 추가 호출 0, payload 동일 |
+| 짧은 소개 | `UCh5w1Kziu9ZbZBeejZiNojg` | 4 | M2, 5명 | 임베딩 44배치, 태그 0건 | 추가 호출 0, payload 동일 |
 | 빈 소개 | `UCYrCnlnTXQoDj0o52qJbdZg` | 0 | 빈 후보 | 임베딩 0, 태그 0 | 추가 호출 0, payload 동일 |
 | 후보 부족 | `UC2ntik7Q6x8DxAOIooJeITQ` | 34 | M4, 요청 5명 중 2명 | 임베딩 1배치, 태그 3건 | 추가 호출 0, payload 동일 |
 

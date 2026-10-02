@@ -30,6 +30,8 @@ class RecommendationConfig:
     top_n: int = 5
     m4_bonus: float = 0.2
     score_decimals: int = 8
+    embedding_batch_size: int = 96
+    tag_cache_flush_size: int = 100
     embedding_model_version: str = "BAAI/bge-m3@deepinfra-v1"
     tag_model_version: str = "gpt-5.4-nano-2026-03-17"
     tag_prompt_version: str = "creator-category-v1"
@@ -46,6 +48,10 @@ class RecommendationConfig:
             raise ValueError("m4_bonus는 0 이상의 유한한 수여야 합니다.")
         if self.score_decimals < 0:
             raise ValueError("score_decimals는 0 이상이어야 합니다.")
+        if self.embedding_batch_size <= 0:
+            raise ValueError("embedding_batch_size는 양수여야 합니다.")
+        if self.tag_cache_flush_size <= 0:
+            raise ValueError("tag_cache_flush_size는 양수여야 합니다.")
         for name, value in (
             ("embedding_model_version", self.embedding_model_version),
             ("tag_model_version", self.tag_model_version),
@@ -109,12 +115,13 @@ class SimilarCreatorRecommender:
         method = "M2"
         tags_by_id: dict[int, frozenset[str]] = {}
         if len(seed.text) >= self.config.short_introduction_chars:
-            seed_tags = self._tags(seed.text)
+            seed_tags = self._tags_many([seed.text])[seed.text]
             if seed_tags:
                 method = "M4"
                 tags_by_id[seed.creator_id] = seed_tags
+                candidate_tags = self._tags_many([candidate.text for candidate in pool])
                 for candidate in pool:
-                    tags_by_id[candidate.creator_id] = self._tags(candidate.text)
+                    tags_by_id[candidate.creator_id] = candidate_tags[candidate.text]
 
         vectors = self._embeddings(request_profiles)
         seed_vector = vectors[seed.creator_id]
@@ -169,15 +176,19 @@ class SimilarCreatorRecommender:
                 vector_by_text[text] = np.asarray(cached, dtype=np.float32)
 
         if missing:
-            generated = np.asarray(self.embedding_client.embed(missing), dtype=np.float32)
-            if generated.ndim != 2 or generated.shape[0] != len(missing):
-                raise ValueError("임베딩 응답의 행 수가 요청 텍스트 수와 다릅니다.")
-            if generated.shape[1] == 0 or not np.isfinite(generated).all():
-                raise ValueError("임베딩 응답에 유효하지 않은 벡터가 있습니다.")
-            generated = normalize_rows(generated)
-            for text, vector in zip(missing, generated):
-                vector_by_text[text] = vector
-                self.cache.put_embedding(text_hash(text), self.config.embedding_model_version, vector.tolist())
+            for start in range(0, len(missing), self.config.embedding_batch_size):
+                texts = missing[start : start + self.config.embedding_batch_size]
+                generated = np.asarray(self.embedding_client.embed(texts), dtype=np.float32)
+                if generated.ndim != 2 or generated.shape[0] != len(texts):
+                    raise ValueError("임베딩 응답의 행 수가 요청 텍스트 수와 다릅니다.")
+                if generated.shape[1] == 0 or not np.isfinite(generated).all():
+                    raise ValueError("임베딩 응답에 유효하지 않은 벡터가 있습니다.")
+                generated = normalize_rows(generated)
+                records = []
+                for text, vector in zip(texts, generated):
+                    vector_by_text[text] = vector
+                    records.append((text_hash(text), self.config.embedding_model_version, vector.tolist()))
+                self.cache.put_embeddings(records)
 
         dimensions = {vector.shape for vector in vector_by_text.values()}
         if len(dimensions) != 1 or any(len(shape) != 1 or shape[0] == 0 for shape in dimensions):
@@ -188,27 +199,45 @@ class SimilarCreatorRecommender:
             for profile in profiles_with_text
         }
 
-    def _tags(self, text: str) -> frozenset[str]:
-        input_hash = text_hash(text)
-        cached = self.cache.get_tags(
-            input_hash,
-            self.config.tag_model_version,
-            self.config.tag_cache_version,
-        )
-        if cached is None:
-            result = self.tagging_client.tag(text)
-            tags = tuple(sorted(set(result.tags)))
-            if self.config.allowed_tags and not set(tags) <= self.config.allowed_tags:
-                unknown = sorted(set(tags) - self.config.allowed_tags)
-                raise ValueError(f"분류체계에 없는 태그가 반환됐습니다: {unknown}")
-            self.cache.put_tags(
-                input_hash,
+    def _tags_many(self, texts: list[str]) -> dict[str, frozenset[str]]:
+        by_text: dict[str, frozenset[str]] = {}
+        missing: list[str] = []
+        for text in dict.fromkeys(texts):
+            cached = self.cache.get_tags(
+                text_hash(text),
                 self.config.tag_model_version,
                 self.config.tag_cache_version,
-                tags,
             )
-            cached = tags
-        return frozenset(cached)
+            if cached is None:
+                missing.append(text)
+            else:
+                by_text[text] = frozenset(cached)
+
+        pending_records: list[tuple[str, str, str, tuple[str, ...]]] = []
+        try:
+            for text in missing:
+                result = self.tagging_client.tag(text)
+                tags = tuple(sorted(set(result.tags)))
+                if self.config.allowed_tags and not set(tags) <= self.config.allowed_tags:
+                    unknown = sorted(set(tags) - self.config.allowed_tags)
+                    raise ValueError(f"분류체계에 없는 태그가 반환됐습니다: {unknown}")
+                by_text[text] = frozenset(tags)
+                pending_records.append(
+                    (
+                        text_hash(text),
+                        self.config.tag_model_version,
+                        self.config.tag_cache_version,
+                        tags,
+                    )
+                )
+                if len(pending_records) == self.config.tag_cache_flush_size:
+                    self.cache.put_tag_records(pending_records)
+                    pending_records = []
+        except Exception:
+            self.cache.put_tag_records(pending_records)
+            raise
+        self.cache.put_tag_records(pending_records)
+        return by_text
 
     def _generation_input_hash(
         self,

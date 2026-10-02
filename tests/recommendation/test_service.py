@@ -182,6 +182,22 @@ def test_input_change_invalidates_only_changed_model_results(tmp_path) -> None:
     assert tagger.calls == [new_candidate.text]
 
 
+def test_embeddings_are_requested_in_configured_batches(tmp_path) -> None:
+    seed = CreatorProfile(10, "짧음")
+    candidates = [CreatorProfile(creator_id, f"후보 {creator_id}") for creator_id in range(20, 25)]
+    vectors = {profile.text: [1, 0] for profile in [seed, *candidates]}
+    embedder = FakeEmbeddingClient(vectors)
+
+    build_service(
+        tmp_path,
+        embedder,
+        FakeTaggingClient({}),
+        config(embedding_batch_size=2),
+    ).recommend(seed, candidates)
+
+    assert [len(batch) for batch in embedder.calls] == [2, 2, 2]
+
+
 def test_tagger_failure_aborts_without_partial_result(tmp_path) -> None:
     seed = CreatorProfile(10, "홈트 운동 소개")
     candidate = CreatorProfile(20, "근력 운동 소개")
