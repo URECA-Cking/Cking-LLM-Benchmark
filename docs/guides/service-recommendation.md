@@ -40,7 +40,10 @@ seed 자신과 빈 소개 후보는 후보 풀에서 제외한다. `topN`은 1~1
 
 ## 실행
 
-`.env`에 본인의 `DEEPINFRA_API_KEY`와 `OPENAI_API_KEY`를 설정한다. 캐시에 없는 입력은 실제 외부 API 호출과 비용이 발생한다.
+외부 클라이언트와 API 키는 실제 모델 호출 시점에만 준비한다. 빈 세대는 두 키 없이 생성할 수 있고,
+M2는 임베딩 캐시가 없을 때 `DEEPINFRA_API_KEY`만 필요하다. M4는 태그 캐시가 없을 때
+`OPENAI_API_KEY`, 임베딩 캐시가 없을 때 `DEEPINFRA_API_KEY`가 필요하다. 캐시에 없는 입력은 실제
+외부 API 호출과 비용이 발생하므로 필요한 키만 `.env`에 설정한다.
 
 ```bash
 python3 -m src.recommendation.cli \
