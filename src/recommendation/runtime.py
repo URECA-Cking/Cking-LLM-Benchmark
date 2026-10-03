@@ -7,10 +7,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from openai import OpenAI
 
 from src.clients.openai_embedding import OpenAIEmbeddingClient
-from src.clients.openai_tagger import OpenAITagger
+from src.clients.openai_tagger import OpenAITagger, TagResult
 from src.config import API_BGE_M3_BASE_URL, API_BGE_M3_MODEL, LLM_TAG_MAX
 
 
@@ -18,6 +19,51 @@ DEFAULT_TAG_MODEL = "gpt-5.4-nano-2026-03-17"
 DEFAULT_TAG_PROMPT_VERSION = "creator-category-v1"
 DEFAULT_TAXONOMY_VERSION = "v0.1"
 DEEPINFRA_EMBEDDING_DIM = 1024
+
+
+class LazyDeepInfraEmbeddingClient:
+    """실제로 임베딩이 필요할 때만 DeepInfra 키를 확인하고 클라이언트를 만든다."""
+
+    name = API_BGE_M3_MODEL
+    dim = DEEPINFRA_EMBEDDING_DIM
+
+    def __init__(self) -> None:
+        self._delegate: OpenAIEmbeddingClient | None = None
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        if self._delegate is None:
+            api_key = os.environ.get("DEEPINFRA_API_KEY")
+            if not api_key:
+                raise RuntimeError("DEEPINFRA_API_KEY가 필요합니다.")
+            self._delegate = OpenAIEmbeddingClient(
+                client=OpenAI(api_key=api_key, base_url=API_BGE_M3_BASE_URL),
+                model=self.name,
+                dim=self.dim,
+            )
+        return self._delegate.embed(texts)
+
+
+class LazyOpenAITagger:
+    """M4 분류가 실행될 때만 OpenAI 키를 확인하고 태거를 만든다."""
+
+    def __init__(self, category_codes: list[str], tag_prompt: str, tag_model: str) -> None:
+        self._category_codes = category_codes
+        self._tag_prompt = tag_prompt
+        self._tag_model = tag_model
+        self._delegate: OpenAITagger | None = None
+
+    def tag(self, input_text: str) -> TagResult:
+        if self._delegate is None:
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError("OPENAI_API_KEY가 필요합니다.")
+            self._delegate = OpenAITagger(
+                model=self._tag_model,
+                category_codes=self._category_codes,
+                client=OpenAI(api_key=api_key),
+                system_prompt=self._tag_prompt,
+            )
+        return self._delegate.tag(input_text)
 
 
 @dataclass(frozen=True)
@@ -62,24 +108,9 @@ def create_external_clients(
     category_codes: list[str],
     tag_prompt: str,
     tag_model: str = DEFAULT_TAG_MODEL,
-) -> tuple[OpenAIEmbeddingClient, OpenAITagger]:
-    """환경변수의 키로 실제 모델 클라이언트를 만들되 모델 호출은 아직 수행하지 않는다."""
-    deepinfra_key = os.environ.get("DEEPINFRA_API_KEY")
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    if not deepinfra_key:
-        raise RuntimeError("DEEPINFRA_API_KEY가 필요합니다.")
-    if not openai_key:
-        raise RuntimeError("OPENAI_API_KEY가 필요합니다.")
-
-    embedding_client = OpenAIEmbeddingClient(
-        client=OpenAI(api_key=deepinfra_key, base_url=API_BGE_M3_BASE_URL),
-        model=API_BGE_M3_MODEL,
-        dim=DEEPINFRA_EMBEDDING_DIM,
+) -> tuple[LazyDeepInfraEmbeddingClient, LazyOpenAITagger]:
+    """각 모델을 처음 사용할 때만 해당 API 키와 실제 클라이언트를 준비한다."""
+    return (
+        LazyDeepInfraEmbeddingClient(),
+        LazyOpenAITagger(category_codes, tag_prompt, tag_model),
     )
-    tagging_client = OpenAITagger(
-        model=tag_model,
-        category_codes=category_codes,
-        client=OpenAI(api_key=openai_key),
-        system_prompt=tag_prompt,
-    )
-    return embedding_client, tagging_client

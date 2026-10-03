@@ -228,7 +228,8 @@ def test_cli_empty_result_replaces_existing_output_with_empty_generation(tmp_pat
     output = tmp_path / "result.json"
     previous = '{"creatorId":10,"candidates":[{"rank":1}]}\n'
     output.write_text(previous, encoding="utf-8")
-    monkeypatch.setattr("src.recommendation.cli.create_external_clients", lambda *_args: (object(), object()))
+    monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     assert main(
         [
@@ -250,3 +251,58 @@ def test_cli_empty_result_replaces_existing_output_with_empty_generation(tmp_pat
     assert len(payload["inputHash"]) == 64
     assert payload["candidates"] == []
     assert output.read_text(encoding="utf-8") != previous
+
+
+def test_cli_m2_does_not_require_unused_openai_api_key(tmp_path, monkeypatch) -> None:
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "creatorId": 10,
+                "introduction": "짧음",
+                "candidateCreators": [{"creatorId": 20, "introduction": "후보 소개"}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    categories = tmp_path / "categories.csv"
+    categories.write_text("code,name,description\nFITNESS,운동,홈트와 러닝\n", encoding="utf-8")
+    monkeypatch.setenv("DEEPINFRA_API_KEY", "test-deepinfra-key")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    sdk_clients: list[dict[str, str]] = []
+
+    def fake_openai(**kwargs):
+        sdk_clients.append(kwargs)
+        return object()
+
+    class FakeEmbeddingClient:
+        def __init__(self, client, model, dim) -> None:
+            self.dim = dim
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, *([0.0] * 1023)] for _text in texts]
+
+    monkeypatch.setattr("src.recommendation.runtime.OpenAI", fake_openai)
+    monkeypatch.setattr("src.recommendation.runtime.OpenAIEmbeddingClient", FakeEmbeddingClient)
+
+    output = tmp_path / "result.json"
+    assert main(
+        [
+            "--input",
+            str(request),
+            "--output",
+            str(output),
+            "--cache",
+            str(tmp_path / "cache.json"),
+            "--categories",
+            str(categories),
+        ]
+    ) == 0
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["method"] == "M2"
+    assert len(payload["candidates"]) == 1
+    assert len(sdk_clients) == 1
+    assert sdk_clients[0]["api_key"] == "test-deepinfra-key"
+    assert "base_url" in sdk_clients[0]
