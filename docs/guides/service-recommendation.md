@@ -1,6 +1,6 @@
 # 단일 크리에이터 서비스 추천 후보 생성
 
-[문서 안내](../README.md) · [현재 방식 결정](../results/recommendation-decision.md) · [예시 데이터 점검](../results/service-recommendation-check.md)
+[문서 안내](../README.md) · [현재 방식 결정](../results/recommendation-decision.md) · [예시 데이터 점검](../results/service-recommendation-check.md) · [전체 배치 실행](batch-recommendation.md)
 
 ## 적용 범위
 
