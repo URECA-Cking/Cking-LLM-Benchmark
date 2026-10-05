@@ -54,7 +54,7 @@ python3 -m src.recommendation.batch_cli dry-run \
 | 경로 | 내용 |
 | --- | --- |
 | `payloads/creator-{id}.json` | 기존 BE 적재 계약과 같은 seed별 완결 payload |
-| `checkpoint.json` | manifest·생성 설정 해시, payload 해시, 생성·적재 상태 |
+| `checkpoint.json` | manifest·생성 설정 해시, payload 해시, 정규화된 BE 적용 대상, 생성·적재 상태 |
 | `summary.json` | 비어 있지 않은 세대, 빈 세대, 신규·재사용 생성, 적재·멱등·실패 건수와 seed별 오류 |
 
 체크포인트와 각 payload는 임시 파일을 완전히 쓴 뒤 원자 교체한다. 중간에 실패하면 이미 성공한 payload와 공용 모델 캐시는
@@ -91,9 +91,14 @@ Windows PowerShell에서는 `$env:CKING_ADMIN_ACCESS_TOKEN='...'` 형식으로 �
 BE 응답의 `creatorId`, `inputHash`, `candidateCount`, `applied`를 요청과 대조한다. `applied=false`는 정상 멱등 결과로 기록한다.
 신규 적용과 멱등 완료 seed는 체크포인트에서 건너뛰고, 적용 실패 seed만 재호출한다. 빈 세대도 정상 payload로 보내 이전 활성 추천을 비운다.
 
+체크포인트의 `applyTarget`에는 scheme과 host의 대소문자, HTTP(S) 기본 port, 끝 슬래시를 정규화한 BE base URL을 기록한다.
+같은 대상으로 재실행하면 적용 완료 또는 멱등 seed를 건너뛴다. 다른 대상으로 변경하면 생성 payload와 모델 캐시는 재사용하되
+기존 적용 상태만 `pending`으로 초기화하고 모든 payload를 새 대상에 다시 적재한다. `applyTarget`이 없는 구형 체크포인트는 기존 적용
+대상을 확인할 수 없으므로 같은 안전 정책을 적용해 생성 결과는 재사용하고 모든 payload를 다시 적재한다.
+
 ## 재시도와 오류 정책
 
-BE base URL, Top-N, timeout, 재시도 횟수와 첫 backoff는 CLI 설정으로 관리한다. 네트워크·timeout과 HTTP
+BE base URL, Top-N, timeout, 재시도 횟수와 첫 backoff는 CLI 설정으로 관리한다. 네트워크·timeout·불완전한 응답 본문과 HTTP
 `408`, `425`, `429`, `500`, `502`, `503`, `504`만 지수 backoff로 제한 재시도한다. 인증·검증 등 다른 4xx는 즉시 실패한다.
 seed별 오류에는 단계, 예외 종류, 메시지만 남기며 알려진 Access Token과 모델 API Key 값은 치환한다.
 
