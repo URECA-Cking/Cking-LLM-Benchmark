@@ -20,7 +20,8 @@ M4는 소개글 유사도에 LLM이 분류한 상위 분야 일치 보정을 더
 4. [실행 안내](docs/guides/experiments.md): 실데이터·후속 실험
 5. [폴더와 결과 파일 안내](docs/reference/repository-layout.md): 코드·공개 집계·로컬 원본 위치
 
-서비스 적용 코드는 [단일 크리에이터 추천 후보 생성](docs/guides/service-recommendation.md)에서 입력·출력 계약과 실행 방법을 확인합니다.
+서비스 적용 코드는 [단일 크리에이터 추천 후보 생성](docs/guides/service-recommendation.md)과
+[전체 크리에이터 배치 생성·적재](docs/guides/batch-recommendation.md)에서 입력·출력 계약과 실행 방법을 확인합니다.
 
 ## 모델별 역할
 

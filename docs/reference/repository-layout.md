@@ -7,7 +7,7 @@
 | 개발 표본·최종 평가 | src/experiments/final_eval/ | src.final_dev_prepare, src.final_eval_prepare, src.final_eval_score |
 | 직접 선택 태그·자동 조합 | src/experiments/selected_topics/ | src.selected_subtopic_eval, src.selected_subtopic_score, src.selected_subtopic_auto, src.selected_subtopic_auto_score |
 | 모델 호출 | src/clients/ | 공통 파이프라인에서 사용 |
-| 서비스 후보 생성 | src/recommendation/ | src.recommendation.cli |
+| 서비스 후보 생성 | src/recommendation/ | 단일: src.recommendation.cli, 전체 배치: src.recommendation.batch_cli |
 | 선행 실험·공통 계산 | src/의 기존 모듈 | 기존 명령 유지 |
 
 최근 실험 테스트는 tests/experiments/final_eval/과 tests/experiments/selected_topics/에 있다.
@@ -42,7 +42,7 @@ results/는 Git 제외 폴더다. 실행 계약과 기본 인자를 유지하기
 | selected_subtopics_auto_v1 | 170개 입력·1,262쌍 자동 평가 원본 |
 | selected_subtopics_v1 | 전체 85개 태그의 준비 진단 |
 | selected_subtopics_metadata_verify_v1 | 메타데이터 수정 전후 동일성 확인 |
-| recommendation | 서비스 생성기의 임베딩·태그 캐시와 BE 전달 결과 |
+| recommendation | 서비스 생성기의 임베딩·태그 캐시, BE 전달 결과, 전체 배치 manifest·체크포인트·요약 |
 
 v1/v2나 review 이름의 다른 폴더는 이전 준비·검증 버전일 수 있다. 최신 결과를 임의로 판단하지 말고
 각 보고서의 실행 경로를 따른다. 정리 과정에서 원문·답변·캐시를 삭제하거나 계약을 바꾸지 않았다.
