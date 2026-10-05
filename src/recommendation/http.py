@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -115,7 +116,7 @@ class CkingBackendClient:
                     status=error.code,
                     transient=transient,
                 ) from error
-            except (urllib.error.URLError, TimeoutError, OSError) as error:
+            except (http.client.IncompleteRead, urllib.error.URLError, TimeoutError, OSError) as error:
                 if attempt < self.config.max_retries:
                     self._wait_before_retry(attempt)
                     continue

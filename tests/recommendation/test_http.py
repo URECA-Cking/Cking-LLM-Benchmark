@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import urllib.error
@@ -22,6 +23,11 @@ class Response:
 
     def read(self) -> bytes:
         return self.body
+
+
+class IncompleteResponse(Response):
+    def read(self) -> bytes:
+        raise http.client.IncompleteRead(self.body[:5], len(self.body) - 5)
 
 
 def test_get_unwraps_api_response_and_retries_transient_status() -> None:
@@ -48,6 +54,29 @@ def test_get_unwraps_api_response_and_retries_transient_status() -> None:
     assert client.get("/api/creators") == {"items": []}
     assert len(calls) == 2
     assert calls[0][1] == 3
+    assert sleeps == [0.25]
+
+
+def test_incomplete_response_body_is_retried_then_succeeds() -> None:
+    calls = []
+    sleeps = []
+    outcomes = [
+        IncompleteResponse({"data": {"items": []}}),
+        Response({"data": {"items": []}}),
+    ]
+
+    def opener(request: object, timeout: float) -> object:
+        calls.append((request, timeout))
+        return outcomes.pop(0)
+
+    client = CkingBackendClient(
+        BackendClientConfig("https://be", max_retries=2, retry_backoff_seconds=0.25),
+        opener=opener,
+        sleep=sleeps.append,
+    )
+
+    assert client.get("/api/creators") == {"items": []}
+    assert len(calls) == 2
     assert sleeps == [0.25]
 
 
