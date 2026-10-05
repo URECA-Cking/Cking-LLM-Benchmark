@@ -98,6 +98,8 @@ class RecommendationBatch:
             raise ValueError("apply에는 Cking-BE 클라이언트가 필요합니다.")
 
         checkpoint = self._load_checkpoint()
+        if mode == "apply":
+            self._bind_apply_target(checkpoint)
         generated_now = 0
         reused_generation = 0
         applied_now = 0
@@ -170,6 +172,7 @@ class RecommendationBatch:
             "manifestHash": self.manifest.manifest_hash,
             "generationConfigHash": self._config_hash,
             "creatorCount": len(self.manifest.creators),
+            "applyTarget": None,
             "creators": {},
         }
 
@@ -189,6 +192,22 @@ class RecommendationBatch:
 
     def _save_checkpoint(self, checkpoint: dict[str, object]) -> None:
         _write_json_atomic(self.paths.checkpoint, checkpoint)
+
+    def _bind_apply_target(self, checkpoint: dict[str, object]) -> None:
+        target = self.backend.target_identity  # type: ignore[union-attr]
+        if checkpoint.get("applyTarget") == target:
+            return
+
+        records: dict[str, object] = checkpoint["creators"]  # type: ignore[assignment]
+        for record in records.values():
+            if not isinstance(record, dict):
+                continue
+            record["applyStatus"] = "pending"
+            error = record.get("error")
+            if isinstance(error, dict) and error.get("stage") == "apply":
+                record.pop("error")
+        checkpoint["applyTarget"] = target
+        self._save_checkpoint(checkpoint)
 
     def _reusable_payload(self, seed: CreatorProfile, record: object) -> dict[str, object] | None:
         if not isinstance(record, dict) or record.get("generationStatus") not in {"success", "empty"}:
@@ -260,6 +279,7 @@ class RecommendationBatch:
             "mode": mode,
             "manifestHash": self.manifest.manifest_hash,
             "generationConfigHash": self._config_hash,
+            "applyTarget": checkpoint.get("applyTarget"),
             "creatorCount": len(self.manifest.creators),
             "generatedNowCount": generated_now,
             "reusedGenerationCount": reused_generation,

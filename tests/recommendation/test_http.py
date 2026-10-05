@@ -51,6 +51,13 @@ def test_get_unwraps_api_response_and_retries_transient_status() -> None:
     assert sleeps == [0.25]
 
 
+def test_backend_target_identity_normalizes_equivalent_base_urls() -> None:
+    first = CkingBackendClient(BackendClientConfig(" HTTPS://BE.Example:443/api/ "))
+    second = CkingBackendClient(BackendClientConfig("https://be.example/api"))
+
+    assert first.target_identity == second.target_identity == "https://be.example/api"
+
+
 def test_non_transient_http_error_is_not_retried_or_leaked() -> None:
     calls = 0
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Protocol
@@ -15,6 +16,10 @@ TRANSIENT_HTTP_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 class JsonBackend(Protocol):
     """manifest 조회와 추천 적재가 의존하는 BE 인터페이스다."""
+
+    @property
+    def target_identity(self) -> str:
+        ...
 
     def get(self, path: str) -> dict[str, object]:
         ...
@@ -40,8 +45,7 @@ class BackendClientConfig:
     retry_backoff_seconds: float = 0.5
 
     def __post_init__(self) -> None:
-        if not self.base_url.strip():
-            raise ValueError("BE base URL은 비어 있을 수 없습니다.")
+        object.__setattr__(self, "base_url", normalize_base_url(self.base_url))
         if self.timeout_seconds <= 0:
             raise ValueError("요청 timeout은 양수여야 합니다.")
         if isinstance(self.max_retries, bool) or not isinstance(self.max_retries, int) or self.max_retries < 0:
@@ -65,6 +69,11 @@ class CkingBackendClient:
         self._access_token = access_token
         self._opener = opener
         self._sleep = sleep
+
+    @property
+    def target_identity(self) -> str:
+        """체크포인트의 적용 상태를 구분하는 정규화된 BE 대상 주소다."""
+        return self.config.base_url
 
     def get(self, path: str) -> dict[str, object]:
         return self._request("GET", path, None, authenticated=False)
@@ -142,3 +151,28 @@ class CkingBackendClient:
         if not isinstance(data, dict):
             raise BackendRequestError("BE 응답의 data는 객체여야 합니다.")
         return data
+
+
+def normalize_base_url(base_url: str) -> str:
+    """동일한 HTTP(S) BE 주소 표기를 체크포인트 식별자 하나로 정규화한다."""
+    raw = base_url.strip()
+    if not raw:
+        raise ValueError("BE base URL은 비어 있을 수 없습니다.")
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("BE base URL 형식이 올바르지 않습니다.") from error
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("BE base URL은 http 또는 https 절대 URL이어야 합니다.")
+    if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+        raise ValueError("BE base URL에는 인증 정보, query, fragment를 포함할 수 없습니다.")
+
+    hostname = parsed.hostname.lower()
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+    authority = hostname if port is None or default_port else f"{hostname}:{port}"
+    path = parsed.path.rstrip("/")
+    return urllib.parse.urlunsplit((scheme, authority, path, "", ""))

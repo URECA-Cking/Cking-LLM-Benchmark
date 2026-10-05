@@ -41,8 +41,9 @@ class FakeRecommender:
 
 
 class FakeBackend:
-    def __init__(self, responses: dict[int, object]) -> None:
+    def __init__(self, responses: dict[int, object], target_identity: str = "https://be.example") -> None:
         self.responses = responses
+        self.target_identity = target_identity
         self.puts: list[tuple[str, dict[str, object]]] = []
 
     def get(self, path: str) -> dict[str, object]:
@@ -159,6 +160,41 @@ def test_apply_resume_skips_already_applied_and_retries_failed_apply_without_reg
     assert summary["reusedApplyCount"] == 2
     assert summary["appliedSuccessCount"] == 3
     assert summary["failureCount"] == 0
+
+
+def test_apply_target_change_reuses_generation_and_reapplies_every_payload(tmp_path) -> None:
+    responses = {
+        1: {"creatorId": 1, "inputHash": INPUT_HASH, "candidateCount": 1, "applied": True},
+        2: {"creatorId": 2, "inputHash": INPUT_HASH, "candidateCount": 1, "applied": True},
+        3: {"creatorId": 3, "inputHash": INPUT_HASH, "candidateCount": 0, "applied": True},
+    }
+    paths = BatchPaths(tmp_path)
+    RecommendationBatch(
+        manifest(),
+        FakeRecommender(),
+        paths,
+        config(),
+        top_n=1,
+        backend=FakeBackend(responses, "https://dev.example"),
+    ).run("apply")
+
+    recommender = FakeRecommender()
+    production = FakeBackend(responses, "https://prod.example")
+    summary = RecommendationBatch(
+        manifest(), recommender, paths, config(), top_n=1, backend=production
+    ).run("apply")
+
+    assert recommender.calls == []
+    assert [path for path, _ in production.puts] == [
+        "/api/admin/creators/1/similar",
+        "/api/admin/creators/2/similar",
+        "/api/admin/creators/3/similar",
+    ]
+    assert summary["reusedGenerationCount"] == 3
+    assert summary["reusedApplyCount"] == 0
+    assert summary["appliedSuccessCount"] == 3
+    assert summary["applyTarget"] == "https://prod.example"
+    assert json.loads(paths.checkpoint.read_text(encoding="utf-8"))["applyTarget"] == "https://prod.example"
 
 
 def test_error_summary_redacts_environment_secrets(tmp_path) -> None:
