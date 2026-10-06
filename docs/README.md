@@ -26,6 +26,7 @@
 - [설치와 준비](guides/installation.md)
 - [단일 크리에이터 서비스 후보 생성](guides/service-recommendation.md)
 - [전체 크리에이터 배치 생성·BE 적재](guides/batch-recommendation.md)
+- [17개 관심 분야와 taxonomyHash 계약](reference/taxonomy-contract.md)
 - [서비스 예시 데이터 점검](results/service-recommendation-check.md)
 - [기본 합성 벤치마크 실행](guides/pipeline.md)
 - [실데이터·후속 실험 실행](guides/experiments.md)
