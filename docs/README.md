@@ -27,6 +27,7 @@
 - [단일 크리에이터 서비스 후보 생성](guides/service-recommendation.md)
 - [전체 크리에이터 배치 생성·BE 적재](guides/batch-recommendation.md)
 - [관심 분야별 M3 Top-20 생성·BE 적재와 M2 비교 자료](guides/interest-recommendation.md)
+- [관심 분야 M2·M3 블라인드 Judge·사람 비교 평가](guides/interest-judge-evaluation.md)
 - [17개 관심 분야와 taxonomyHash 계약](reference/taxonomy-contract.md)
 - [HYBRID_PERSONALIZED_V1 참조 구현과 Python·Java 공용 fixture](reference/hybrid-personalized-contract.md)
 - [서비스 예시 데이터 점검](results/service-recommendation-check.md)
