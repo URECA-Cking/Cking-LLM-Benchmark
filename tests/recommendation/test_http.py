@@ -30,6 +30,32 @@ class IncompleteResponse(Response):
         raise http.client.IncompleteRead(self.body[:5], len(self.body) - 5)
 
 
+def test_recommendation_api_key_authenticates_put_without_jwt_and_is_not_sent_for_get():
+    requests = []
+
+    def opener(request, timeout):
+        requests.append(request)
+        return Response({"data": {"applied": True}})
+
+    client = CkingBackendClient(
+        BackendClientConfig("https://be"), access_token="jwt-secret",
+        recommendation_api_key="key-secret", opener=opener,
+    )
+    client.put("/api/admin/interests/EDU/recommendations", {"interestCode": "EDU", "candidates": []})
+    client.get("/api/creators")
+    headers = dict((key.lower(), value) for key, value in requests[0].header_items())
+    assert headers["x-cking-recommendation-key"] == "key-secret"
+    assert "authorization" not in headers
+    public_headers = dict((key.lower(), value) for key, value in requests[1].header_items())
+    assert "x-cking-recommendation-key" not in public_headers and "authorization" not in public_headers
+
+
+@pytest.mark.parametrize("api_key", ["", " ", "secret\nvalue", "secret\rvalue"])
+def test_invalid_recommendation_api_key_rejected(api_key):
+    with pytest.raises(ValueError, match="API Key"):
+        CkingBackendClient(BackendClientConfig("https://be"), recommendation_api_key=api_key)
+
+
 def test_get_unwraps_api_response_and_retries_transient_status() -> None:
     calls = []
     sleeps = []

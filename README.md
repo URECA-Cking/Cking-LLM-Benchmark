@@ -22,6 +22,7 @@ M4는 소개글 유사도에 LLM이 분류한 상위 분야 일치 보정을 더
 
 서비스 적용 코드는 [단일 크리에이터 추천 후보 생성](docs/guides/service-recommendation.md)과
 [전체 크리에이터 배치 생성·적재](docs/guides/batch-recommendation.md)에서 입력·출력 계약과 실행 방법을 확인합니다.
+관심 분야 기반 추천의 오프라인 입력은 [17개 분야별 M3 Top-20 생성·적재](docs/guides/interest-recommendation.md)를 참고합니다.
 
 ## 모델별 역할
 
