@@ -23,7 +23,7 @@ def test_shared_fixture_policy_and_decimal_wire_format():
     assert FIXTURE["policy"]["followWeight"] == "0.5"
     assert len({case["id"] for case in CASES}) == len(CASES) == 18
     assert {case["expected"]["policyVersion"] for case in CASES} == {
-        "HYBRID_PERSONALIZED_V1", "INTEREST_PERSONALIZED_V1", "FOLLOW_PERSONALIZED_V1",
+        "HYBRID_PERSONALIZED_V1", "INTEREST_PERSONALIZED_V1", "FOLLOW_PERSONALIZED_V2",
     }
     for case in CASES:
         for item in case["expected"]["items"]:

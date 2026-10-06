@@ -93,13 +93,15 @@ rank 2의 기여도 `0.01612903`을 유효 source 둘로 나누거나 가중치 
 | --- | --- | --- |
 | 1개 이상 | 1개 이상 | `HYBRID_PERSONALIZED_V1` |
 | 1개 이상 | 0개 | `INTEREST_PERSONALIZED_V1` |
-| 0개 | 1개 이상 | `FOLLOW_PERSONALIZED_V1` |
-| 0개 | 0개 | `FOLLOW_PERSONALIZED_V1`, `items: []` |
+| 0개 | 1개 이상 | `FOLLOW_PERSONALIZED_V2` |
+| 0개 | 0개 | `FOLLOW_PERSONALIZED_V2`, `items: []` |
 
 `aggregateScore`는 확률이 아니라 이 정책 내부의 정렬 점수다. 서로 다른 정책 버전의 절대값을 비교하지 않는다.
 이슈 #42의 팔로우 단독 분기는 **유효 seed 평균**을 쓴다. 기존
 [BE Issue #410](https://github.com/URECA-Cking/Cking-BE/issues/410)의 합산 방식과 차이가 있으므로
-Java 하이브리드 구현은 이름만 재사용해서 기존 합산 함수를 호출하지 말고 이 fixture의 평균 계약을 따른다.
+기존 합산 정책은 `FOLLOW_PERSONALIZED_V1`을 유지하고, 평균 정책은 `FOLLOW_PERSONALIZED_V2`로 구분한다.
+두 그룹이 모두 무효인 빈 결과도 `FOLLOW_PERSONALIZED_V2`를 반환한다.
+Java 하이브리드 구현은 V2 분기에서 이 fixture의 평균 계약을 따른다.
 이번 작업은 BE 코드를 변경하지 않는다.
 
 ## Python 실행과 Java 적용

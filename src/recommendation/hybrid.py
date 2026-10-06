@@ -10,7 +10,7 @@ from typing import Any
 
 HYBRID_POLICY_VERSION = "HYBRID_PERSONALIZED_V1"
 INTEREST_POLICY_VERSION = "INTEREST_PERSONALIZED_V1"
-FOLLOW_POLICY_VERSION = "FOLLOW_PERSONALIZED_V1"
+FOLLOW_POLICY_VERSION = "FOLLOW_PERSONALIZED_V2"
 RRF_K = 60
 SCORE_SCALE = 8
 INTEREST_WEIGHT = Decimal("0.5")
@@ -160,7 +160,7 @@ def recommend_personalized(request: Mapping[str, Any]) -> dict[str, object]:
         elif interest_count:
             version = INTEREST_POLICY_VERSION
         else:
-            # 둘 다 무효일 때도 기존 팔로우 정책 이름과 빈 목록을 반환한다.
+            # 둘 다 무효일 때도 평균 방식의 팔로우 V2 정책 이름과 빈 목록을 반환한다.
             version = FOLLOW_POLICY_VERSION
         scores = {}
         for creator_id in interest_scores.keys() | follow_scores.keys():
