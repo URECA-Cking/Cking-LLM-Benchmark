@@ -8,3 +8,5 @@ data/*.json text eol=lf
 tests/fixtures/taxonomy/* -text
 # 원본 CSV의 의도적인 CR·탭·양끝 공백은 텍스트 공백 오류 검사에서 제외한다.
 tests/fixtures/taxonomy/input.csv -diff
+# Python·Java 공용 개인화 fixture는 플랫폼에 상관없이 UTF-8/LF로 유지한다.
+fixtures/*.json text eol=lf

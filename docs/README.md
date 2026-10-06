@@ -28,6 +28,7 @@
 - [전체 크리에이터 배치 생성·BE 적재](guides/batch-recommendation.md)
 - [관심 분야별 M3 Top-20 생성·BE 적재와 M2 비교 자료](guides/interest-recommendation.md)
 - [17개 관심 분야와 taxonomyHash 계약](reference/taxonomy-contract.md)
+- [HYBRID_PERSONALIZED_V1 참조 구현과 Python·Java 공용 fixture](reference/hybrid-personalized-contract.md)
 - [서비스 예시 데이터 점검](results/service-recommendation-check.md)
 - [기본 합성 벤치마크 실행](guides/pipeline.md)
 - [실데이터·후속 실험 실행](guides/experiments.md)
