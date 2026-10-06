@@ -141,10 +141,9 @@ URL 코드와 body 코드는 동일한 v0.2 정본에서 가져온다. body의 �
 공통 `ApiResponse.data` 봉투를 해제하며, 일시적 HTTP 상태/timeout/끊긴 응답은 제한 재시도한다.
 BE의 멱등 키는 `(taxonomyVersion, interestCode, inputHash)`, 포인터는 `(taxonomyVersion, interestCode)`를 전제로 한다.
 
-2026-10-06 확인한 BE `develop`의 Interest 문서에는 분류 목록 조회만 있고,
-관심 분야 후보 적재 Controller/DTO와 최종 응답 명세는 아직 없다.
-위 요청은 #41의 계약, 응답은 기존 Creator 적재 구조를 따른 생산자 기대 계약이다.
-BE 적재 구현이 병합되면 요청 DTO·응답·키 인증·빈 세대 활성화·멱등 동작을 함께 대조해야 한다.
+BE 적재 API는 Cking-BE #439로 구현·병합됐다. 요청·응답·키 인증·빈 세대 활성화·멱등 동작의 최종 계약은
+[BE Interest API](https://github.com/URECA-Cking/Cking-BE/blob/develop/docs/domains/interest/api.md#put-apiadmininterestsinterestcoderecommendations)가 정본이다.
+2026-10-06에 이 구현의 요청·응답 검증 조건과 BE DTO·검증 코드를 코드 기준으로 대조했고 서로 맞는다.
 이 구현의 fake BE 테스트를 실제 BE 통합 검증으로 해석하지 않는다.
 
 ## 출력과 재개
