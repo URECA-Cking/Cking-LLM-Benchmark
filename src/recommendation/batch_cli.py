@@ -106,6 +106,12 @@ def _recommendation_config(args: argparse.Namespace) -> tuple[RecommendationConf
 
 
 def _run_batch(args: argparse.Namespace) -> int:
+    backend = None
+    api_key = os.environ.get("CKING_RECOMMENDATION_API_KEY")
+    if args.command == "apply":
+        if not api_key:
+            raise RuntimeError("apply에는 CKING_RECOMMENDATION_API_KEY 환경 변수가 필요합니다.")
+        backend = CkingBackendClient(_backend_config(args), recommendation_api_key=api_key)
     manifest = load_manifest(args.manifest)
     config, category_codes, prompt = _recommendation_config(args)
     embedding_client, tagging_client = create_external_clients(category_codes, prompt, args.tag_model)
@@ -115,17 +121,11 @@ def _run_batch(args: argparse.Namespace) -> int:
         JsonModelCache(args.cache),
         config,
     )
-    backend = None
-    access_token = None
-    if args.command == "apply":
-        access_token = os.environ.get("CKING_ADMIN_ACCESS_TOKEN")
-        if not access_token:
-            raise RuntimeError("apply에는 CKING_ADMIN_ACCESS_TOKEN 환경 변수가 필요합니다.")
-        backend = CkingBackendClient(_backend_config(args), access_token=access_token)
     secrets = tuple(
         value
         for value in (
-            access_token,
+            api_key,
+            os.environ.get("CKING_ADMIN_ACCESS_TOKEN"),
             os.environ.get("OPENAI_API_KEY"),
             os.environ.get("DEEPINFRA_API_KEY"),
         )

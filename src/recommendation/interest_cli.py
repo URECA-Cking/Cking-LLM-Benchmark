@@ -90,9 +90,9 @@ def main(argv: list[str] | None = None) -> int:
     api_key = os.environ.get("CKING_RECOMMENDATION_API_KEY")
     token = os.environ.get("CKING_ADMIN_ACCESS_TOKEN")
     if args.command == "apply":
-        if not api_key and not token:
-            raise RuntimeError("apply에는 CKING_RECOMMENDATION_API_KEY 또는 CKING_ADMIN_ACCESS_TOKEN이 필요합니다.")
-        backend = CkingBackendClient(_backend_config(args), access_token=token, recommendation_api_key=api_key)
+        if not api_key:
+            raise RuntimeError("apply에는 CKING_RECOMMENDATION_API_KEY 환경 변수가 필요합니다.")
+        backend = CkingBackendClient(_backend_config(args), access_token=None, recommendation_api_key=api_key)
     recommender = InterestRecommender(
         manifest, categories, create_interest_embedding_client(args.embedding_provider),
         JsonModelCache(args.cache), config,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -13,6 +14,17 @@ from typing import Callable, Protocol
 
 
 TRANSIENT_HTTP_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """리다이렉트 대상에 추천 적재 키가 전달되는 것을 막는다."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _open_without_redirect(request, *, timeout):
+    return urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout)
 
 
 class JsonBackend(Protocol):
@@ -64,7 +76,7 @@ class CkingBackendClient:
         access_token: str | None = None,
         *,
         recommendation_api_key: str | None = None,
-        opener: Callable[..., object] = urllib.request.urlopen,
+        opener: Callable[..., object] = _open_without_redirect,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.config = config
@@ -88,6 +100,10 @@ class CkingBackendClient:
     def put(self, path: str, payload: dict[str, object]) -> dict[str, object]:
         if not self._access_token and not self._recommendation_api_key:
             raise RuntimeError("apply에는 CKING_RECOMMENDATION_API_KEY 또는 CKING_ADMIN_ACCESS_TOKEN이 필요합니다.")
+        if self._recommendation_api_key and not re.fullmatch(
+            r"/api/admin/(creators/[1-9][0-9]*/similar|interests/[A-Z][A-Z0-9_]*/recommendations)", path
+        ):
+            raise ValueError("추천 적재 API Key는 유사 추천·관심 분야 적재 경로에서만 사용할 수 있습니다.")
         return self._request("PUT", path, payload, authenticated=True)
 
     def _request(
@@ -125,7 +141,7 @@ class CkingBackendClient:
                     f"BE {method} 요청 실패: HTTP {error.code}",
                     status=error.code,
                     transient=transient,
-                ) from error
+                ) from None
             except (http.client.IncompleteRead, urllib.error.URLError, TimeoutError, OSError) as error:
                 if attempt < self.config.max_retries:
                     self._wait_before_retry(attempt)
@@ -133,7 +149,16 @@ class CkingBackendClient:
                 raise BackendRequestError(
                     f"BE {method} 요청 실패: {type(error).__name__}",
                     transient=True,
-                ) from error
+                ) from None
+            except BackendRequestError as error:
+                message = str(error)
+                for secret in (self._recommendation_api_key, self._access_token):
+                    if secret:
+                        message = message.replace(secret, "[REDACTED]")
+                raise BackendRequestError(message, status=error.status, transient=error.transient) from None
+            except Exception as error:
+                # SDK/사용자 opener 예외의 원문이나 traceback에도 키가 남지 않게 한다.
+                raise BackendRequestError(f"BE {method} 요청 실패: {type(error).__name__}") from None
 
         raise AssertionError("도달할 수 없는 재시도 상태입니다.")
 
