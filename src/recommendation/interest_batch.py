@@ -40,16 +40,20 @@ class InterestRecommendationBatch:
     def __init__(
         self, recommender: InterestRecommender, paths: InterestBatchPaths, *,
         backend: JsonBackend | None = None, evaluation_top_n: int = 10,
-        secret_values: tuple[str, ...] = (),
+        secret_values: tuple[str, ...] = (), selected_method: str = M3_METHOD,
     ) -> None:
         _integer("evaluation_top_n", evaluation_top_n, 1, recommender.config.top_n)
         self.recommender = recommender
         self.paths = paths
         self.backend = backend
         self.evaluation_top_n = evaluation_top_n
+        if selected_method not in METHODS:
+            raise ValueError("지원하지 않는 관심 분야 적재 방식입니다.")
+        self.selected_method = selected_method
         self._secrets = tuple(value for value in secret_values if value)
         self._config_hash = _json_hash({**recommender.config.identity(), "methods": list(METHODS),
-                                      "evaluationTopN": evaluation_top_n})
+                                      "evaluationTopN": evaluation_top_n,
+                                      **({"selectedMethod": selected_method} if selected_method != M3_METHOD else {})})
 
     def run(self, mode: str) -> dict[str, object]:
         if mode not in {"dry-run", "apply"}:
@@ -73,7 +77,7 @@ class InterestRecommendationBatch:
             bundle = self._reusable_bundle(code, record)
             if bundle is None:
                 try:
-                    # M2도 같은 Top-N과 manifest로 생성하되 BE에는 M3만 전달한다.
+                    # 비교 자료는 두 방식 모두 보존하고 확정된 방식만 BE에 전달한다.
                     bundle = {method: self.recommender.recommend(code, method).to_backend_payload()
                               for method in METHODS}
                     for method, payload in bundle.items():
@@ -81,7 +85,7 @@ class InterestRecommendationBatch:
                     for method, payload in bundle.items():
                         _write_json_atomic(self.paths.payload(code, method), payload)
                     record = {
-                        "generationStatus": "success" if bundle[M3_METHOD]["candidates"] else "empty",
+                        "generationStatus": "success" if bundle[self.selected_method]["candidates"] else "empty",
                         "payloadHashes": {method: _json_hash(payload) for method, payload in bundle.items()},
                         "applyStatus": "pending",
                     }
@@ -101,7 +105,7 @@ class InterestRecommendationBatch:
                     skipped += 1
                     continue
                 try:
-                    payload = bundle[M3_METHOD]
+                    payload = bundle[self.selected_method]
                     response = self.backend.put(
                         f"/api/admin/interests/{quote(code, safe='')}/recommendations", payload,
                     )
@@ -128,7 +132,7 @@ class InterestRecommendationBatch:
         if evaluation["status"] == "failed":
             failures.append(evaluation["error"])
         summary = {
-            "schemaVersion": 1, "mode": mode,
+            "schemaVersion": 1, "mode": mode, "selectedMethod": self.selected_method,
             "manifestHash": self.recommender.manifest.manifest_hash,
             "generationConfigHash": self._config_hash,
             "generationConfig": self.recommender.config.identity(),
