@@ -4,3 +4,7 @@
 data/*.csv text eol=lf
 # e2_judgments.json도 같은 이유로 해시를 검사한다(src/paired_diff.py)
 data/*.json text eol=lf
+# 계약 fixture는 원본 CRLF/CR과 canonical JSON의 마지막 개행 부재까지 검증한다.
+tests/fixtures/taxonomy/* -text
+# 원본 CSV의 의도적인 CR·탭·양끝 공백은 텍스트 공백 오류 검사에서 제외한다.
+tests/fixtures/taxonomy/input.csv -diff
