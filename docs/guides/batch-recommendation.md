@@ -10,7 +10,7 @@
 - `manifest`: `GET /api/creators?page={page}&size=100`을 끝까지 읽어 결정적 입력을 저장한다.
 - `dry-run`: 외부 모델 캐시를 재사용해 seed별 BE payload와 실행 요약을 저장한다. BE 쓰기 요청은 하지 않는다.
 - `apply`: 같은 생성 과정을 거친 뒤에만 `PUT /api/admin/creators/{creatorId}/similar`을 호출한다.
-- ADMIN Access Token과 모델 API Key는 환경 변수에서만 읽으며 manifest, payload, 체크포인트, 요약에 기록하지 않는다.
+- 추천 적재 API Key와 모델 API Key는 환경 변수에서만 읽으며 manifest, payload, 체크포인트, 요약에 기록하지 않는다.
 
 manifest와 배치 결과는 기본적으로 `results/recommendation/batch/`에 저장되며 Git에 포함되지 않는다.
 
@@ -76,7 +76,7 @@ manifest 또는 Top-N, 모델, 프롬프트, 분류체계, M4 설정이 바뀌�
 키 값 자체를 출력 파일에 복사하지 않는다.
 
 ```bash
-export CKING_ADMIN_ACCESS_TOKEN='...'
+export CKING_RECOMMENDATION_API_KEY='...'
 export DEEPINFRA_API_KEY='...'
 export OPENAI_API_KEY='...'
 
@@ -91,8 +91,8 @@ python3 -m src.recommendation.batch_cli apply \
   --retry-backoff 0.5
 ```
 
-Windows PowerShell에서는 `$env:CKING_ADMIN_ACCESS_TOKEN='...'` 형식으로 설정한다. `CKING_ADMIN_ACCESS_TOKEN`은 apply에 항상
-필요하다. `DEEPINFRA_API_KEY`는 임베딩 캐시 미스, `OPENAI_API_KEY`는 M4 태그 캐시 미스가 있을 때 필요하다.
+Windows PowerShell에서는 `$env:CKING_RECOMMENDATION_API_KEY='...'` 형식으로 설정한다. 추천 전용 키는 apply에 항상
+필요하며 JWT를 함께 보내지 않는다. `DEEPINFRA_API_KEY`는 임베딩 캐시 미스, `OPENAI_API_KEY`는 M4 태그 캐시 미스가 있을 때 필요하다.
 
 BE 응답의 `creatorId`, `inputHash`, `candidateCount`, `applied`를 요청과 대조한다. `applied=false`는 정상 멱등 결과로 기록한다.
 신규 적용과 멱등 완료 seed는 체크포인트에서 건너뛰고, 적용 실패 seed만 재호출한다. 빈 세대도 정상 payload로 보내 이전 활성 추천을 비운다.
@@ -103,6 +103,9 @@ BE 응답의 `creatorId`, `inputHash`, `candidateCount`, `applied`를 요청과 
 대상을 확인할 수 없으므로 같은 안전 정책을 적용해 생성 결과는 재사용하고 모든 payload를 다시 적재한다.
 
 ## 재시도와 오류 정책
+
+실행 상태와 모델 캐시는 OS 파일 잠금으로 보호한다. 같은 캐시를 쓰는 배치는 동시 실행을 거부한다.
+최신 manifest를 매일 감지하고 두 추천 작업을 재개하려면 [일일 통합 배치](daily-recommendation.md)를 사용한다.
 
 BE base URL, Top-N, timeout, 재시도 횟수와 첫 backoff는 CLI 설정으로 관리한다. 네트워크·timeout·불완전한 응답 본문과 HTTP
 `408`, `425`, `429`, `500`, `502`, `503`, `504`만 지수 backoff로 제한 재시도한다. 인증·검증 등 다른 4xx는 즉시 실패한다.

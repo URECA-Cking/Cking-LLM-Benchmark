@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import traceback
 import urllib.error
 
 import pytest
@@ -138,3 +139,81 @@ def test_apply_requires_access_token_before_http_call() -> None:
     client = CkingBackendClient(BackendClientConfig("https://be"), opener=lambda *_args, **_kwargs: None)
     with pytest.raises(RuntimeError, match="CKING_ADMIN_ACCESS_TOKEN"):
         client.put("/api/admin/creators/1/similar", {"creatorId": 1})
+
+
+@pytest.mark.parametrize("path", ["/api/admin/creators/1/similar", "/api/admin/interests/EDU/recommendations"])
+@pytest.mark.parametrize("status,retries", [(401, 1), (403, 1), (302, 1), (503, 3)])
+def test_key_http_status_retries_and_full_traceback_redaction(path, status, retries):
+    calls = []
+    sleeps = []
+
+    def opener(request, timeout):
+        calls.append(request)
+        headers = dict((key.lower(), value) for key, value in request.header_items())
+        assert headers["x-cking-recommendation-key"] == "key-secret"
+        assert "authorization" not in headers
+        raise urllib.error.HTTPError("https://be/api", status, "key-secret", {}, io.BytesIO(b"key-secret"))
+
+    client = CkingBackendClient(BackendClientConfig("https://be", max_retries=2),
+                                recommendation_api_key="key-secret", access_token="jwt-secret",
+                                opener=opener, sleep=sleeps.append)
+    with pytest.raises(BackendRequestError) as raised:
+        client.put(path, {})
+    assert len(calls) == retries and len(sleeps) == retries - 1
+    assert raised.value.status == status and raised.value.transient == (status == 503)
+    assert "key-secret" not in "".join(traceback.format_exception(raised.value))
+
+
+def test_timeout_retries_and_masks_exception_chain():
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request)
+        raise TimeoutError("key-secret")
+
+    client = CkingBackendClient(BackendClientConfig("https://be", max_retries=1),
+                                recommendation_api_key="key-secret", opener=opener, sleep=lambda _: None)
+    with pytest.raises(BackendRequestError) as raised:
+        client.put("/api/admin/creators/1/similar", {})
+    assert len(calls) == 2 and raised.value.transient and raised.value.status is None
+    assert "key-secret" not in "".join(traceback.format_exception(raised.value))
+
+
+@pytest.mark.parametrize("path", ["/api/admin/members", "/api/admin/creators/0/similar",
+                                 "/api/admin/creators/1/similar?key=x", "https://other/api"])
+def test_key_cannot_be_sent_to_other_paths(path):
+    client = CkingBackendClient(BackendClientConfig("https://be"), recommendation_api_key="key-secret",
+                                opener=lambda *_a, **_k: pytest.fail("HTTP 호출 금지"))
+    with pytest.raises(ValueError, match="적재 경로"):
+        client.put(path, {})
+
+
+def test_unexpected_transport_error_is_sanitized_without_retry():
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request)
+        raise ValueError("key-secret")
+
+    client = CkingBackendClient(BackendClientConfig("https://be", max_retries=3),
+                                recommendation_api_key="key-secret", opener=opener)
+    with pytest.raises(BackendRequestError) as raised:
+        client.put("/api/admin/creators/1/similar", {})
+    assert len(calls) == 1 and not raised.value.transient
+    assert "key-secret" not in "".join(traceback.format_exception(raised.value))
+
+
+def test_backend_error_message_and_nested_cause_are_redacted():
+    def opener(request, timeout):
+        try:
+            raise ValueError("key-secret jwt-secret")
+        except ValueError as error:
+            raise BackendRequestError("key-secret jwt-secret", status=401) from error
+
+    client = CkingBackendClient(BackendClientConfig("https://be"), access_token="jwt-secret",
+                                recommendation_api_key="key-secret", opener=opener)
+    with pytest.raises(BackendRequestError) as raised:
+        client.put("/api/admin/creators/1/similar", {})
+    rendered = "".join(traceback.format_exception(raised.value))
+    assert "key-secret" not in rendered and "jwt-secret" not in rendered
+    assert raised.value.status == 401

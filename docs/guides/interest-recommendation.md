@@ -88,9 +88,13 @@ PowerShell에서는 줄 연속 기호를 바꾸거나 명령을 한 줄로 실�
 비기본 Top-N이 10 미만이면 `--evaluation-top-n`도 함께 줄인다.
 
 `apply`는 `CKING_RECOMMENDATION_API_KEY`를 `X-Cking-Recommendation-Key`로 보낸다.
-키가 없으면 `CKING_ADMIN_ACCESS_TOKEN`의 ADMIN JWT를 사용한다. 둘 다 있으면 키만 보낸다.
+키가 없으면 모델·BE 쓰기 전에 실패한다. ADMIN JWT를 함께 보내지 않는다.
 키/JWT는 공개 manifest GET에 보내지 않으며, 체크포인트와 실패 요약에도 기록하지 않는다.
 인증 값은 CLI 인자로 받지 않는다. BE #420의 인증 연결은 해당 적재 경로에도 적용되어야 한다.
+
+공유 캐시와 실행 상태는 OS 파일 잠금으로 보호하며 동시 배치를 거부한다.
+이 명령은 #41의 M3 생성·평가 경로다. #44에서 선택한 M2/M3를 실제 적재하는 일일 실행은
+[manifest 감지 통합 배치](daily-recommendation.md)를 사용한다.
 
 ## 적재 요청·응답 계약
 

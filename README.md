@@ -22,6 +22,7 @@ M4는 소개글 유사도에 LLM이 분류한 상위 분야 일치 보정을 더
 
 서비스 적용 코드는 [단일 크리에이터 추천 후보 생성](docs/guides/service-recommendation.md)과
 [전체 크리에이터 배치 생성·적재](docs/guides/batch-recommendation.md)에서 입력·출력 계약과 실행 방법을 확인합니다.
+[일일 통합 배치](docs/guides/daily-recommendation.md)는 최신 manifest의 변경을 감지하고 두 추천 작업을 함께 재개·적재합니다.
 관심 분야 기반 추천의 오프라인 입력은 [17개 분야별 M3 Top-20 생성·적재](docs/guides/interest-recommendation.md)를 참고합니다.
 분야 추천 방식 비교는 [M2·M3 블라인드 Judge·사람 평가](docs/guides/interest-judge-evaluation.md)에서 사전 판단 기준과 실행 계약을 확인합니다.
 저장된 분야·팔로우 후보의 혼합 규칙은 [개인화 참조 구현과 Python·Java 공용 fixture](docs/reference/hybrid-personalized-contract.md)를 참고합니다.

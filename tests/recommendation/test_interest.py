@@ -200,3 +200,52 @@ def test_wrong_taxonomy_duplicate_creator_and_tampered_manifest_rejected(tmp_pat
         service.recommend("UNKNOWN")
     with pytest.raises(ValueError, match="방식"):
         service.recommend(categories()[0].code, "M4")
+
+@pytest.mark.parametrize("method", [M2_METHOD, M3_METHOD])
+def test_shared_cache_order_and_disk_reload_preserve_exact_payload(tmp_path, method):
+    import hashlib
+    from src.recommendation.service import RecommendationConfig, SimilarCreatorRecommender
+
+    class DenseEmbedding:
+        name = "BAAI/bge-m3"
+        dim = 1024
+
+        def __init__(self):
+            self.calls = []
+
+        def embed(self, texts):
+            self.calls.append(list(texts))
+            rows = []
+            for text in texts:
+                seed = int.from_bytes(hashlib.sha256(text.encode()).digest()[:8], "big")
+                row = np.random.default_rng(seed).normal(size=self.dim).astype(np.float32)
+                rows.append(row / np.linalg.norm(row))
+            return np.asarray(rows)
+
+    profiles = [CreatorProfile(i, f"creator introduction {i}") for i in range(1, 31)]
+    manifest = build_manifest(profiles)
+    settings = InterestRecommendationConfig(zero_shot_tau=.02)
+    similar_settings = RecommendationConfig(embedding_model_version=settings.embedding_model_version, short_introduction_chars=100)
+
+    def payloads(cache, client):
+        service = InterestRecommender(manifest, categories(), client, cache, settings)
+        return [service.recommend(row.code, method).to_backend_payload() for row in categories()]
+
+    direct = payloads(JsonModelCache(tmp_path / "direct.json"), DenseEmbedding())
+    path = tmp_path / "shared.json"
+    cache, client = JsonModelCache(path), DenseEmbedding()
+    similar = SimilarCreatorRecommender(client, None, cache, similar_settings)
+    first_similar = similar.recommend(profiles[0], profiles).to_backend_payload()
+    assert payloads(cache, client) == direct
+    reloaded, cached_client = JsonModelCache(path), DenseEmbedding()
+    assert payloads(reloaded, cached_client) == direct
+    assert SimilarCreatorRecommender(cached_client, None, reloaded, similar_settings).recommend(
+        profiles[0], profiles,
+    ).to_backend_payload() == first_similar
+    assert cached_client.calls == []
+    # 관심 분야가 먼저 캐시를 채운 반대 순서도 유사 추천 payload를 보존한다.
+    reverse_cache, reverse_client = JsonModelCache(tmp_path / "reverse.json"), DenseEmbedding()
+    assert payloads(reverse_cache, reverse_client) == direct
+    assert SimilarCreatorRecommender(reverse_client, None, reverse_cache, similar_settings).recommend(
+        profiles[0], profiles,
+    ).to_backend_payload() == first_similar
