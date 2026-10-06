@@ -100,6 +100,20 @@ def choose_decision(contract, judge_report, human_report):
               "evaluatedM3": {"method": M3_METHOD, "tau": generation["zeroShotTau"],
                               "bonus": generation["m3Bonus"], "modelVersion": generation["embeddingModelVersion"]},
               "provisional": True}
+    # 신뢰구간은 사전 채택 문턱을 바꾸지 않고 결론과 함께 해석 정보를 제공한다.
+    result["primaryMetricUncertainty"] = None
+    if judge_report["complete"]:
+        interval = judge_report["pairedBootstrap"]["intervals"]["strictPrecision@5"]
+        result["primaryMetricUncertainty"] = {
+            "metric": "strictPrecision@5", "difference": "M3-M2",
+            "confidenceLevel": judge_report["pairedBootstrap"]["confidenceLevel"],
+            **interval, "lowerBelowZero": interval["lower"] < 0,
+            "interpretation": (
+                "95% bootstrap 구간 하한이 0 미만으로 M3의 개선을 확정할 수 없음. 사전 채택 기준과 별도로 해석해야 함"
+                if interval["lower"] < 0 else
+                "95% bootstrap 구간은 보조 지표이며 온라인 사용자 반응·개인화 효과를 입증하지 않음"
+            ),
+        }
     def finalized():
         config = {"method": result["method"], "tau": result["tau"], "bonus": result["bonus"],
                   "maxTags": result["maxTags"], "modelVersion": generation["embeddingModelVersion"],

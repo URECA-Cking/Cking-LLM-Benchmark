@@ -314,7 +314,7 @@ def test_stratified_blank_human_sheet_and_independent_agreement(prepared):
     sampling = create_human_sheet(contract, scores, work)
     assert sampling["sampleSize"] == 50
     assert sampling["strataSelectedCounts"]["noise"] > 0
-    assert any(tag.startswith("judgeDisagreement") for tag in sampling["strataSelectedCounts"])
+    assert any(tag.startswith("methodOnlyRelevanceDiffers") for tag in sampling["strataSelectedCounts"])
     for interest in contract["interests"]:
         assert sampling["strataSelectedCounts"]["interest:" + interest["code"]] >= 1
     with (work / "human-blank.csv").open(encoding="utf-8") as stream:
@@ -444,3 +444,36 @@ def test_rules_cannot_change_after_prepare(prepared):
     _write_json_atomic(work / "contract.json", contract)
     with pytest.raises(ValueError): load_contract(work / "contract.json")
     assert decision_rules()["minimumMeanGain"] == .03
+
+
+@pytest.mark.parametrize("gain, lower, complete", [(0.03, -0.1, True), (0.03, 0., True), (0.02, -0.1, True), (0.03, -0.1, False)])
+def test_decision_reports_uncertainty_without_changing_adoption_gate(prepared, gain, lower, complete):
+    contract, work, cache = prepared
+    completed(prepared)
+    judge = aggregate(contract, load_scores(contract, cache))
+    judge["complete"] = complete
+    judge["overall"]["deltaM3MinusM2"]["strictPrecision@5"] = gain
+    judge["pairedBootstrap"]["intervals"]["strictPrecision@5"] = {
+        "mean": gain, "lower": lower, "upper": .2}
+    human = {"complete": True, "pairCount": 50, "methods": {
+        method: {"byCutoff": {str(k): {"pairCount": 30, "binaryFitRate": .8, "noiseRate": .1}
+                              for k in (5, 10)}} for method in METHODS}}
+    decision = choose_decision(contract, judge, human)
+    if not complete:
+        assert decision["primaryMetricUncertainty"] is None
+        assert decision["conclusion"] == "M2 유지"
+        return
+    uncertainty = decision["primaryMetricUncertainty"]
+    assert uncertainty["mean"] == gain and uncertainty["lower"] == lower
+    assert uncertainty["lowerBelowZero"] == (lower < 0)
+    if lower < 0:
+        assert "개선을 확정할 수 없음" in uncertainty["interpretation"]
+    assert decision["conclusion"] == ("M3 채택" if gain >= .03 else "추가 실험")
+    create_human_sheet(contract, load_scores(contract, cache), work)
+    filled, _ = fill_sheet(work)
+    report = cli.write_report(contract, work, cache, human_filled=filled)
+    public = read_json(work / "public-summary.json")
+    assert public["decision"]["primaryMetricUncertainty"] == report["decision"]["primaryMetricUncertainty"]
+    for method in METHODS:
+        for k in ("5", "10"):
+            assert public["human"]["methods"][method]["byCutoff"][k]["pairCount"] > 0

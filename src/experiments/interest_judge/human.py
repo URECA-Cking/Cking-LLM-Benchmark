@@ -58,13 +58,13 @@ def create_human_sheet(contract, scores, work_dir: Path, *, sample_size: int = 5
             tags.append("noise")
         top5_memberships = [method for method in METHODS if cid in contract["rankings"][code][method][:5]]
         if len(top5_memberships) == 1:
-            # 동일 쌍의 판정은 공유하므로 서로 다른 단독 후보의 판정 차이를 불일치 사례로 삼는다.
+            # 동일 쌍의 판정은 공유하므로 서로 다른 방식의 단독 Top-5 후보 간 관련도 차이를 층화한다. 사람과의 불일치가 아니다.
             other_method = M3_METHOD if top5_memberships[0] == M2_METHOD else M2_METHOD
             other_ids = set(contract["rankings"][code][other_method][:5]) - set(contract["rankings"][code][top5_memberships[0]][:5])
             other_scores = [scores[p["pairId"]]["relevance"] for p in contract["pairs"]
                             if p["interestCode"] == code and p["creatorId"] in other_ids]
             if any(value != scores[pid]["relevance"] for value in other_scores):
-                tags.append("judgeDisagreement:" + top5_memberships[0])
+                tags.append("methodOnlyRelevanceDiffers:" + top5_memberships[0])
         for method in memberships:
             tags.append("methodCoverage:" + method)
         strata[pid] = tags
@@ -76,7 +76,7 @@ def create_human_sheet(contract, scores, work_dir: Path, *, sample_size: int = 5
         group = groups.get("interest:" + interest["code"], [])
         if group:
             selected[group[0]["pairId"]] = group[0]
-    order = sorted(groups, key=lambda tag: (not tag.startswith("judgeDisagreement:"), tag != "noise",
+    order = sorted(groups, key=lambda tag: (not tag.startswith("methodOnlyRelevanceDiffers:"), tag != "noise",
                                            not tag.startswith("outcome:"), tag))
     while len(selected) < sample_size:
         before = len(selected)
