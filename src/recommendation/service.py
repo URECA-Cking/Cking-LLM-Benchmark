@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Protocol
 
 import numpy as np
@@ -17,6 +17,11 @@ from src.recommendation.models import (
     CreatorProfile,
     RecommendationCandidate,
     RecommendationResult,
+)
+from src.recommendation.taxonomy import (
+    DEFAULT_TAG_PROMPT_VERSION,
+    DEFAULT_TAXONOMY_VERSION,
+    default_taxonomy_hash,
 )
 
 
@@ -39,9 +44,10 @@ class RecommendationConfig:
     tag_cache_flush_size: int = 100
     embedding_model_version: str = "BAAI/bge-m3@deepinfra-v1"
     tag_model_version: str = "gpt-5.4-nano-2026-03-17"
-    tag_prompt_version: str = "creator-category-v1"
-    tag_prompt: str = "creator-category-v1"
-    taxonomy_version: str = "v0.1"
+    tag_prompt_version: str = DEFAULT_TAG_PROMPT_VERSION
+    tag_prompt: str = DEFAULT_TAG_PROMPT_VERSION
+    taxonomy_version: str = DEFAULT_TAXONOMY_VERSION
+    taxonomy_hash: str = field(default_factory=default_taxonomy_hash)
     allowed_tags: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
@@ -66,6 +72,8 @@ class RecommendationConfig:
         ):
             if not value.strip():
                 raise ValueError(f"{name}은 비어 있을 수 없습니다.")
+        if len(self.taxonomy_hash) != 64 or any(char not in "0123456789abcdef" for char in self.taxonomy_hash):
+            raise ValueError("taxonomy_hash는 64자리 SHA-256 소문자 hex여야 합니다.")
         for method in ("M2", "M4"):
             if len(self.model_version(method)) > 255:
                 raise ValueError(f"{method} modelVersion은 255자를 초과할 수 없습니다.")
@@ -74,7 +82,7 @@ class RecommendationConfig:
     def tag_cache_version(self) -> str:
         """프롬프트 본문이나 분류체계가 바뀌어도 태그 캐시가 무효화되는 식별자다."""
         prompt_hash = hashlib.sha256(self.tag_prompt.encode("utf-8")).hexdigest()
-        return f"{self.tag_prompt_version}:{self.taxonomy_version}:{prompt_hash}"
+        return f"{self.tag_prompt_version}:{self.taxonomy_version}:{self.taxonomy_hash}:{prompt_hash}"
 
     def model_version(self, method: str) -> str:
         if method == "M2":
@@ -306,8 +314,8 @@ class SimilarCreatorRecommender:
             "m4Bonus": self.config.m4_bonus,
             "scoreDecimals": self.config.score_decimals,
             "taxonomyVersion": self.config.taxonomy_version,
+            "taxonomyHash": self.config.taxonomy_hash,
+            "tagCacheVersion": self.config.tag_cache_version,
         }
-        if method == "M4":
-            manifest["tagCacheVersion"] = self.config.tag_cache_version
         encoded = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

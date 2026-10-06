@@ -41,6 +41,12 @@ manifest는 트랜잭션 DB snapshot이 아니다. 페이지 순회가 끝난 �
 
 ## 2. dry-run
 
+서비스 기본 분류는 `data/categories_v2.csv`의 17개 분야, `taxonomyVersion=v0.2`,
+`tagPromptVersion=creator-category-v2`다. 초기 10개 `data/categories.csv`는 과거 실험용으로 보존한다.
+[공통 taxonomyHash 계약](../reference/taxonomy-contract.md)에 따라 분류 내용·행 순서 변경도 태그 캐시와 생성 설정에 반영한다.
+v0.1 체크포인트는 새 기본값과 호환되지 않으므로 v0.2 실행에는 새 `--output-dir`을 사용한다.
+
+
 ```bash
 python3 -m src.recommendation.batch_cli dry-run \
   --manifest results/recommendation/batch/creator-manifest.json \

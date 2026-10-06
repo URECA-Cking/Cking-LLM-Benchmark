@@ -60,6 +60,7 @@ def generation_config_hash(config: RecommendationConfig, top_n: int) -> str:
         "tagPromptVersion": config.tag_prompt_version,
         "tagPrompt": config.tag_prompt,
         "taxonomyVersion": config.taxonomy_version,
+        "taxonomyHash": config.taxonomy_hash,
         "allowedTags": sorted(config.allowed_tags),
     }
     encoded = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

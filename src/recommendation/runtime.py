@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import csv
 import os
-from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 from openai import OpenAI
@@ -13,11 +10,16 @@ from openai import OpenAI
 from src.clients.openai_embedding import OpenAIEmbeddingClient
 from src.clients.openai_tagger import OpenAITagger, TagResult
 from src.config import API_BGE_M3_BASE_URL, API_BGE_M3_MODEL, LLM_TAG_MAX
+from src.recommendation.taxonomy import (
+    DEFAULT_CATEGORIES_CSV,
+    DEFAULT_TAG_PROMPT_VERSION,
+    DEFAULT_TAXONOMY_VERSION,
+    ServiceCategory,
+    load_service_categories,
+)
 
 
 DEFAULT_TAG_MODEL = "gpt-5.4-nano-2026-03-17"
-DEFAULT_TAG_PROMPT_VERSION = "creator-category-v1"
-DEFAULT_TAXONOMY_VERSION = "v0.1"
 DEEPINFRA_EMBEDDING_DIM = 1024
 
 
@@ -64,29 +66,6 @@ class LazyOpenAITagger:
                 system_prompt=self._tag_prompt,
             )
         return self._delegate.tag(input_text)
-
-
-@dataclass(frozen=True)
-class ServiceCategory:
-    code: str
-    name: str
-    description: str
-
-
-def load_service_categories(path: Path) -> list[ServiceCategory]:
-    """서비스 태거가 쓸 상위 분야 CSV를 읽고 코드 중복·빈 값을 검증한다."""
-    with path.open(encoding="utf-8-sig", newline="") as stream:
-        rows = list(csv.DictReader(stream))
-    categories = [
-        ServiceCategory(row["code"].strip(), row["name"].strip(), row["description"].strip())
-        for row in rows
-    ]
-    if not categories or any(not category.code or not category.name or not category.description for category in categories):
-        raise ValueError("분야 CSV의 code, name, description은 모두 필요합니다.")
-    codes = [category.code for category in categories]
-    if len(codes) != len(set(codes)):
-        raise ValueError("분야 CSV에 중복 code가 있습니다.")
-    return categories
 
 
 def build_service_tag_prompt(categories: list[ServiceCategory], max_tags: int = LLM_TAG_MAX) -> str:

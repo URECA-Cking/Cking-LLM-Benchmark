@@ -63,7 +63,9 @@ python3 -m src.recommendation.cli \
   --m4-bonus 0.2
 ```
 
-상위 분야는 기본 `data/categories.csv`의 `code`, `name`, `description`을 사용한다. 다른 파일은 `--categories`로 지정한다.
+상위 분야는 기본 `data/categories_v2.csv`의 17개 `code`, `name`, `description`을 사용한다.
+기본 분류체계 버전은 `v0.2`, 태깅 프롬프트 버전은 `creator-category-v2`다. 다른 파일은 `--categories`로 지정한다.
+초기 10개 `data/categories.csv`는 과거 실험 재현용이며, [taxonomyHash 계약](../reference/taxonomy-contract.md)에서 정규화와 공통 fixture를 확인한다.
 `--output`과 `--cache`는 서로 달라야 하고, 두 쓰기 경로 모두 `--input`, `--categories`와 같은 파일을 가리킬 수 없다.
 
 ## BE 전달 계약
@@ -72,7 +74,7 @@ python3 -m src.recommendation.cli \
 {
   "creatorId": 10,
   "method": "M4",
-  "modelVersion": "BAAI/bge-m3@deepinfra-v1+gpt-5.4-nano-2026-03-17@creator-category-v1",
+  "modelVersion": "BAAI/bge-m3@deepinfra-v1+gpt-5.4-nano-2026-03-17@creator-category-v2",
   "inputHash": "64자리 SHA-256",
   "candidates": [
     {
@@ -81,7 +83,7 @@ python3 -m src.recommendation.cli \
       "score": 1.08341234,
       "rank": 1,
       "method": "M4",
-      "modelVersion": "BAAI/bge-m3@deepinfra-v1+gpt-5.4-nano-2026-03-17@creator-category-v1",
+      "modelVersion": "BAAI/bge-m3@deepinfra-v1+gpt-5.4-nano-2026-03-17@creator-category-v2",
       "inputHash": "64자리 SHA-256"
     }
   ]
@@ -100,8 +102,8 @@ python3 -m src.recommendation.cli \
 기본 캐시는 `results/recommendation/model-cache.json`이며 Git에 포함하지 않는다.
 
 - 임베딩: 정규화한 소개의 SHA-256과 임베딩 모델 버전으로 조회
-- GPT 태그: 소개 SHA-256, 태그 모델 버전, 프롬프트 버전, 프롬프트 본문 SHA-256, 분류체계 버전으로 조회
-- 소개·모델·프롬프트 본문·분류체계 중 하나라도 바뀌면 해당 캐시를 재사용하지 않는다.
+- GPT 태그: 소개 SHA-256, 태그 모델 버전, 프롬프트 버전, 프롬프트 본문 SHA-256, 분류체계 버전과 taxonomyHash로 조회
+- 소개·모델·프롬프트 버전·본문·분류체계 버전·내용 중 하나라도 바뀌면 해당 캐시를 재사용하지 않는다.
 - 성공한 모델 결과만 저장한다. 작업이 중간에 실패해도 후보 묶음은 출력하지 않고, 다음 실행은 이미 성공한 개별 캐시부터 이어 쓴다.
 - 같은 입력과 설정으로 재실행하면 외부 API를 다시 호출하지 않고 같은 BE payload를 만든다.
 
