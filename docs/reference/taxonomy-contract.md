@@ -55,5 +55,15 @@ Java 구현에서도 줄바꿈 처리, ASCII trim 범위, NFC, 행·키 순서�
 배치 생성 설정 해시에도 `taxonomyHash`를 포함하므로 분류 내용이 바뀐 기존 체크포인트는 거부한다.
 v0.1 결과 디렉터리를 보관하고 v0.2에는 새 `--output-dir`을 사용한다.
 
-현재 BE 추천 적재 payload에는 별도 `taxonomyHash` 필드를 추가하지 않는다.
-이번 계약은 두 언어가 같은 정본을 검증하는 함수·fixture를 제공하며, BE의 분류체계 검증 API 구현은 별도 범위다.
+## BE 적재 payload와의 관계
+
+`taxonomyHash` 필드는 적재 payload마다 다르다.
+
+- 기존 Creator 유사 추천 적재(`PUT /api/admin/creators/{creatorId}/similar`) payload에는 `taxonomyHash` 필드를 추가하지 않는다.
+  이 추천에서 분류체계 버전·해시는 payload 필드가 아니라 `inputHash`에만 반영된다.
+- 관심 분야 추천 적재(`PUT /api/admin/interests/{interestCode}/recommendations`) payload는 최상위에 `taxonomyVersion`과
+  `taxonomyHash`를 포함한다. [관심 분야 추천 가이드](../guides/interest-recommendation.md)의 요청 예시를 따른다.
+  BE는 분류체계 버전과 해시를 `interest_taxonomy`에 등록해 두고(Cking-BE #431), 적재 시 등록된 버전이고 해시가 같은지 대조해
+  다르면 묶음 전체를 거부한다(Cking-BE #439).
+
+이 문서의 계약은 두 언어가 같은 정본을 검증하는 함수·fixture를 제공한다.
