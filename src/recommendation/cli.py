@@ -7,10 +7,11 @@ import json
 import os
 from pathlib import Path
 
-from src.config import CATEGORIES_CSV, RESULTS_DIR
+from src.config import RESULTS_DIR
 from src.recommendation.cache import JsonModelCache
 from src.recommendation.models import MAX_BACKEND_CANDIDATES, CreatorProfile
 from src.recommendation.runtime import (
+    DEFAULT_CATEGORIES_CSV,
     DEFAULT_TAG_MODEL,
     DEFAULT_TAG_PROMPT_VERSION,
     DEFAULT_TAXONOMY_VERSION,
@@ -19,6 +20,7 @@ from src.recommendation.runtime import (
     load_service_categories,
 )
 from src.recommendation.service import RecommendationConfig, SimilarCreatorRecommender
+from src.recommendation.taxonomy import taxonomy_hash
 
 
 DEFAULT_CACHE = RESULTS_DIR / "recommendation" / "model-cache.json"
@@ -96,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", type=Path, required=True, help="creatorId/introduction/candidateCreators JSON")
     parser.add_argument("--output", type=Path, required=True, help="Cking-BE 적재용 결과 JSON")
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="모델 호출 결과 JSON 캐시")
-    parser.add_argument("--categories", type=Path, default=CATEGORIES_CSV, help="상위 분야 CSV")
+    parser.add_argument("--categories", type=Path, default=DEFAULT_CATEGORIES_CSV, help="상위 분야 CSV")
     parser.add_argument("--top-n", type=int, default=5, help="입력 JSON에 topN이 없을 때 후보 수(1~100)")
     parser.add_argument("--short-introduction-chars", type=int, default=15, help="이 값 미만이면 M2 적용")
     parser.add_argument("--m4-bonus", type=float, default=0.2, help="M4 상위 분야 일치 가산점(0~1)")
@@ -128,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         tag_prompt_version=args.tag_prompt_version,
         tag_prompt=tag_prompt,
         taxonomy_version=args.taxonomy_version,
+        taxonomy_hash=taxonomy_hash(categories),
         allowed_tags=frozenset(category.code for category in categories),
     )
     embedding_client, tagging_client = create_external_clients(

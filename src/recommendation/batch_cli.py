@@ -6,12 +6,13 @@ import argparse
 import os
 from pathlib import Path
 
-from src.config import CATEGORIES_CSV, RESULTS_DIR
+from src.config import RESULTS_DIR
 from src.recommendation.batch import BatchPaths, RecommendationBatch
 from src.recommendation.cache import JsonModelCache
 from src.recommendation.http import BackendClientConfig, CkingBackendClient
 from src.recommendation.manifest import fetch_manifest, load_manifest, write_manifest
 from src.recommendation.runtime import (
+    DEFAULT_CATEGORIES_CSV,
     DEFAULT_TAG_MODEL,
     DEFAULT_TAG_PROMPT_VERSION,
     DEFAULT_TAXONOMY_VERSION,
@@ -20,6 +21,7 @@ from src.recommendation.runtime import (
     load_service_categories,
 )
 from src.recommendation.service import RecommendationConfig, SimilarCreatorRecommender
+from src.recommendation.taxonomy import taxonomy_hash
 
 
 DEFAULT_BATCH_DIR = RESULTS_DIR / "recommendation" / "batch"
@@ -38,7 +40,7 @@ def _add_generation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_BATCH_DIR)
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
-    parser.add_argument("--categories", type=Path, default=CATEGORIES_CSV)
+    parser.add_argument("--categories", type=Path, default=DEFAULT_CATEGORIES_CSV)
     parser.add_argument("--top-n", type=int, default=5)
     parser.add_argument("--short-introduction-chars", type=int, default=15)
     parser.add_argument("--m4-bonus", type=float, default=0.2)
@@ -97,6 +99,7 @@ def _recommendation_config(args: argparse.Namespace) -> tuple[RecommendationConf
         tag_prompt_version=args.tag_prompt_version,
         tag_prompt=prompt,
         taxonomy_version=args.taxonomy_version,
+        taxonomy_hash=taxonomy_hash(categories),
         allowed_tags=frozenset(codes),
     )
     return config, codes, prompt
