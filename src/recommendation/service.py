@@ -12,6 +12,7 @@ import numpy as np
 from src.clients.base import EmbeddingClient
 from src.clients.openai_tagger import TagResult
 from src.recommendation.cache import ModelCache, text_hash
+from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION, validated_embeddings
 from src.recommendation.models import (
     MAX_BACKEND_CANDIDATES,
     CreatorProfile,
@@ -215,15 +216,13 @@ class SimilarCreatorRecommender:
         if missing:
             for start in range(0, len(missing), self.config.embedding_batch_size):
                 texts = missing[start : start + self.config.embedding_batch_size]
-                generated = self._validated_embeddings(
-                    self.embedding_client.embed(texts),
-                    expected_rows=len(texts),
-                    source="모델 응답",
+                raw, generated = validated_embeddings(
+                    self.embedding_client.embed(texts), len(texts), self.embedding_client.dim,
                 )
                 records = []
-                for text, vector in zip(texts, generated):
+                for text, vector, original in zip(texts, generated, raw):
                     vector_by_text[text] = vector
-                    records.append((text_hash(text), self.config.embedding_model_version, vector.tolist()))
+                    records.append((text_hash(text), self.config.embedding_model_version, original.tolist()))
                 self.cache.put_embeddings(records)
 
         return {
@@ -234,23 +233,7 @@ class SimilarCreatorRecommender:
 
     def _validated_embeddings(self, values: object, expected_rows: int, source: str) -> np.ndarray:
         """캐시와 모델 응답을 같은 계약으로 검증하고 단위 벡터로 정규화한다."""
-        vectors = np.asarray(values, dtype=np.float32)
-        if vectors.ndim != 2 or vectors.shape[0] != expected_rows:
-            raise ValueError(f"{source}의 임베딩 행 수가 요청 텍스트 수와 다릅니다.")
-        expected_dim = self.embedding_client.dim
-        if vectors.shape[1] != expected_dim:
-            raise ValueError(
-                f"{source}의 임베딩 차원이 클라이언트 기대값과 다릅니다: "
-                f"expected={expected_dim}, actual={vectors.shape[1]}"
-            )
-        if not np.isfinite(vectors).all():
-            raise ValueError(f"{source}의 임베딩에 유한하지 않은 값이 있습니다.")
-
-        vectors_64 = vectors.astype(np.float64)
-        norms = np.linalg.norm(vectors_64, axis=1)
-        if not np.isfinite(norms).all() or np.any(norms <= 0):
-            raise ValueError(f"{source}의 임베딩에는 norm이 양수인 유효한 벡터가 필요합니다.")
-        return (vectors_64 / norms[:, np.newaxis]).astype(np.float32)
+        return validated_embeddings(values, expected_rows, self.embedding_client.dim)[1]
 
     def _tags_many(self, texts: list[str]) -> dict[str, frozenset[str]]:
         by_text: dict[str, frozenset[str]] = {}
@@ -301,6 +284,7 @@ class SimilarCreatorRecommender:
         model_version: str,
     ) -> str:
         manifest = {
+            "embeddingContract": EMBEDDING_CONTRACT_VERSION,
             "creatorId": seed.creator_id,
             "introduction": seed.text,
             "candidates": [

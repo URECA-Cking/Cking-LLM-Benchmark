@@ -11,6 +11,7 @@ import numpy as np
 from src.clients.base import EmbeddingClient
 from src.recommendation.batch import _json_hash
 from src.recommendation.cache import ModelCache, text_hash
+from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION, validated_embeddings
 from src.recommendation.manifest import CreatorManifest, build_manifest
 from src.recommendation.taxonomy import (
     DEFAULT_TAXONOMY_VERSION, ServiceCategory, default_taxonomy_hash, taxonomy_hash,
@@ -64,6 +65,7 @@ class InterestRecommendationConfig:
     def identity(self) -> dict[str, object]:
         """점수·태그·정렬 계약과 결과에 영향을 주는 설정을 모두 해시에 넣는다."""
         return {
+            "embeddingContract": EMBEDDING_CONTRACT_VERSION,
             "schemaVersion": 1, "taxonomyVersion": self.taxonomy_version,
             "taxonomyHash": self.taxonomy_hash, "topN": self.top_n,
             "embeddingModelVersion": self.embedding_model_version,
@@ -189,17 +191,7 @@ class InterestRecommender:
         self._scores = scores
 
     def _validated(self, values: object, rows: int) -> tuple[np.ndarray, np.ndarray]:
-        raw = np.asarray(values, dtype=np.float64)
-        if raw.shape != (rows, self.embedding_client.dim):
-            raise ValueError("임베딩 행 수 또는 차원이 요청과 다릅니다.")
-        if not np.isfinite(raw).all():
-            raise ValueError("임베딩에 유한하지 않은 값이 있습니다.")
-        # 큰 유한 벡터도 overflow 없이 정규화하며 영벡터는 명시적으로 거부한다.
-        scale = np.max(np.abs(raw), axis=1)
-        if np.any(scale <= 0):
-            raise ValueError("임베딩 norm은 양수여야 합니다.")
-        scaled = raw / scale[:, None]
-        return raw, scaled / np.linalg.norm(scaled, axis=1)[:, None]
+        return validated_embeddings(values, rows, self.embedding_client.dim)
 
     def _embeddings(self, texts: list[str]) -> dict[str, np.ndarray]:
         vectors = {}

@@ -12,6 +12,7 @@ from typing import Protocol
 from src.recommendation.http import JsonBackend
 from src.recommendation.manifest import CreatorManifest
 from src.recommendation.models import CreatorProfile, RecommendationResult
+from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION
 from src.recommendation.service import RecommendationConfig
 
 
@@ -51,6 +52,7 @@ class BatchPaths:
 def generation_config_hash(config: RecommendationConfig, top_n: int) -> str:
     """체크포인트 재사용 여부를 결정하는 생성 설정 SHA-256이다."""
     identity = {
+        "embeddingContract": EMBEDDING_CONTRACT_VERSION,
         "topN": top_n,
         "shortIntroductionChars": config.short_introduction_chars,
         "m4Bonus": config.m4_bonus,

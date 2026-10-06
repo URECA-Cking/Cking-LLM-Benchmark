@@ -16,7 +16,7 @@ def test_json_cache_persists_empty_tags_and_embeddings(tmp_path) -> None:
     assert reloaded.get_tags(input_hash, "tag-v1", "prompt-v1") == ()
     assert reloaded.get_embedding(input_hash, "embed-v2") is None
     assert reloaded.get_tags(input_hash, "tag-v1", "prompt-v2") is None
-    assert json.loads(path.read_text(encoding="utf-8"))["schemaVersion"] == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["schemaVersion"] == 2
 
 
 def test_unknown_cache_schema_starts_fresh(tmp_path) -> None:
@@ -45,3 +45,12 @@ def test_batch_writes_persist_all_records(tmp_path) -> None:
     reloaded = JsonModelCache(path)
     assert reloaded.get_embedding(second_hash, "embed-v1") == [0.0, 1.0]
     assert reloaded.get_tags(first_hash, "tag-v1", "prompt-v1") == ("FITNESS",)
+
+def test_old_normalized_embedding_cache_is_invalidated(tmp_path):
+    path = tmp_path / "cache.json"
+    cache = JsonModelCache(path)
+    cache.put_embedding(text_hash("intro"), "embed-v1", [.6, .8])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["schemaVersion"] = 1
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert JsonModelCache(path).get_embedding(text_hash("intro"), "embed-v1") is None

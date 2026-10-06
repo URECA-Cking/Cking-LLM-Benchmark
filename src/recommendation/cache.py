@@ -50,7 +50,7 @@ class ModelCache(Protocol):
 class JsonModelCache:
     """프로세스가 다시 시작돼도 재사용하는 원자적 JSON 모델 캐시다."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, path: Path) -> None:
         self.path = path
