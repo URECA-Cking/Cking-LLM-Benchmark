@@ -63,11 +63,17 @@ class CkingBackendClient:
         config: BackendClientConfig,
         access_token: str | None = None,
         *,
+        recommendation_api_key: str | None = None,
         opener: Callable[..., object] = urllib.request.urlopen,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.config = config
         self._access_token = access_token
+        if recommendation_api_key is not None and (
+            not recommendation_api_key.strip() or "\r" in recommendation_api_key or "\n" in recommendation_api_key
+        ):
+            raise ValueError("추천 적재 API Key는 비어 있거나 줄바꿈을 포함할 수 없습니다.")
+        self._recommendation_api_key = recommendation_api_key
         self._opener = opener
         self._sleep = sleep
 
@@ -80,8 +86,8 @@ class CkingBackendClient:
         return self._request("GET", path, None, authenticated=False)
 
     def put(self, path: str, payload: dict[str, object]) -> dict[str, object]:
-        if not self._access_token:
-            raise RuntimeError("apply에는 CKING_ADMIN_ACCESS_TOKEN이 필요합니다.")
+        if not self._access_token and not self._recommendation_api_key:
+            raise RuntimeError("apply에는 CKING_RECOMMENDATION_API_KEY 또는 CKING_ADMIN_ACCESS_TOKEN이 필요합니다.")
         return self._request("PUT", path, payload, authenticated=True)
 
     def _request(
@@ -98,7 +104,11 @@ class CkingBackendClient:
         if body is not None:
             headers["Content-Type"] = "application/json"
         if authenticated:
-            headers["Authorization"] = f"Bearer {self._access_token}"
+            # BE #420: 키 헤더가 있으면 키 인증만 평가하므로 JWT와 함께 보내지 않는다.
+            if self._recommendation_api_key:
+                headers["X-Cking-Recommendation-Key"] = self._recommendation_api_key
+            else:
+                headers["Authorization"] = f"Bearer {self._access_token}"
 
         for attempt in range(self.config.max_retries + 1):
             request = urllib.request.Request(url, data=body, headers=headers, method=method)
