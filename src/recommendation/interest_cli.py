@@ -14,6 +14,7 @@ from src.recommendation.interest import METHODS, InterestRecommendationConfig, I
 from src.recommendation.interest_batch import InterestBatchPaths, InterestRecommendationBatch
 from src.recommendation.interest_runtime import create_interest_embedding_client
 from src.recommendation.manifest import load_manifest
+from src.recommendation.locking import batch_locks
 from src.recommendation.taxonomy import DEFAULT_CATEGORIES_CSV, load_service_categories, taxonomy_hash
 
 
@@ -85,6 +86,11 @@ def main(argv: list[str] | None = None) -> int:
         for method in METHODS:
             named_paths[f"{category.code}/{method}"] = paths.payload(category.code, method)
     _validate_paths(named_paths)
+    with batch_locks(args.output_dir, args.cache):
+        return _run_locked_batch(args, categories, config, paths)
+
+
+def _run_locked_batch(args, categories, config, paths):
     manifest = load_manifest(args.manifest)
     backend = None
     api_key = os.environ.get("CKING_RECOMMENDATION_API_KEY")

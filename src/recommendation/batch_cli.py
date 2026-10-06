@@ -11,6 +11,7 @@ from src.recommendation.batch import BatchPaths, RecommendationBatch
 from src.recommendation.cache import JsonModelCache
 from src.recommendation.http import BackendClientConfig, CkingBackendClient
 from src.recommendation.manifest import fetch_manifest, load_manifest, write_manifest
+from src.recommendation.locking import batch_locks
 from src.recommendation.runtime import (
     DEFAULT_CATEGORIES_CSV,
     DEFAULT_TAG_MODEL,
@@ -106,6 +107,11 @@ def _recommendation_config(args: argparse.Namespace) -> tuple[RecommendationConf
 
 
 def _run_batch(args: argparse.Namespace) -> int:
+    with batch_locks(args.output_dir, args.cache):
+        return _run_locked_batch(args)
+
+
+def _run_locked_batch(args: argparse.Namespace) -> int:
     backend = None
     api_key = os.environ.get("CKING_RECOMMENDATION_API_KEY")
     if args.command == "apply":
