@@ -8,6 +8,7 @@
 | 직접 선택 태그·자동 조합 | src/experiments/selected_topics/ | src.selected_subtopic_eval, src.selected_subtopic_score, src.selected_subtopic_auto, src.selected_subtopic_auto_score |
 | 모델 호출 | src/clients/ | 공통 파이프라인에서 사용 |
 | 서비스 후보 생성 | src/recommendation/ | 단일: src.recommendation.cli, 전체 배치: src.recommendation.batch_cli |
+| 저장 순위 기반 개인화 참조 정책 | src/recommendation/hybrid.py | 공용 입력·기대값: fixtures/hybrid_personalized_v1.json |
 | 선행 실험·공통 계산 | src/의 기존 모듈 | 기존 명령 유지 |
 
 최근 실험 테스트는 tests/experiments/final_eval/과 tests/experiments/selected_topics/에 있다.
