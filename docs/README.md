@@ -27,6 +27,7 @@
 - [단일 크리에이터 서비스 후보 생성](guides/service-recommendation.md)
 - [전체 크리에이터 배치 생성·BE 적재](guides/batch-recommendation.md)
 - [manifest 변경 감지·API Key 기반 일일 통합 배치](guides/daily-recommendation.md)
+- [실제 BE HTTP·MySQL 추천 배치 E2E](guides/recommendation-e2e.md)
 - [관심 분야별 M3 Top-20 생성·BE 적재와 M2 비교 자료](guides/interest-recommendation.md)
 - [관심 분야 M2·M3 블라인드 Judge·사람 비교 평가](guides/interest-judge-evaluation.md)
 - [17개 관심 분야와 taxonomyHash 계약](reference/taxonomy-contract.md)
