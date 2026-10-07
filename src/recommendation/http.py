@@ -152,7 +152,7 @@ class CkingBackendClient:
                     "RECOMMENDATION_INPUT_CONFLICT": "같은 실행의 payload 변경을 조사하세요. 의도적인 재적용은 새 번호로 실행하세요.",
                 }.get(code, "409 계약을 확인하세요." if error.code == 409 else "")
                 raise BackendRequestError(
-                    f"BE {method} 요청 실패: HTTP {error.code} {code or ''} {guidance}",
+                    f"BE {method} 요청 실패: HTTP {error.code} {code or ''} {guidance}".rstrip(),
                     code=code,
                     status=error.code,
                     transient=transient,

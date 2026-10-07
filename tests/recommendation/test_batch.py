@@ -79,7 +79,8 @@ def test_dry_run_writes_payload_summary_and_never_calls_backend(tmp_path) -> Non
     backend = FakeBackend({})
     paths = BatchPaths(tmp_path)
     summary = RecommendationBatch(
-        manifest(), recommender, paths, config(), top_n=1, backend=backend
+        manifest(), recommender, paths, config(), top_n=1, backend=backend,
+        sequence_ledger=tmp_path / "applications.json",
     ).run("dry-run")
 
     assert recommender.calls == [1, 2, 3]
@@ -116,7 +117,8 @@ def test_apply_distinguishes_success_idempotent_empty_and_partial_failure(tmp_pa
     )
     paths = BatchPaths(tmp_path)
     summary = RecommendationBatch(
-        manifest(), FakeRecommender(), paths, config(), top_n=1, backend=backend
+        manifest(), FakeRecommender(), paths, config(), top_n=1, backend=backend,
+        sequence_ledger=tmp_path / "applications.json",
     ).run("apply")
 
     assert [path for path, _ in backend.puts] == [
@@ -143,7 +145,8 @@ def test_apply_resume_skips_already_applied_and_retries_failed_apply_without_reg
     )
     paths = BatchPaths(tmp_path)
     RecommendationBatch(
-        manifest(), FakeRecommender(), paths, config(), top_n=1, backend=first_backend
+        manifest(), FakeRecommender(), paths, config(), top_n=1, backend=first_backend,
+        sequence_ledger=tmp_path / "applications.json",
     ).run("apply")
 
     recommender = FakeRecommender()
@@ -151,7 +154,8 @@ def test_apply_resume_skips_already_applied_and_retries_failed_apply_without_reg
         {2: {"creatorId": 2, "inputHash": INPUT_HASH, "candidateCount": 1, "applied": True}}
     )
     summary = RecommendationBatch(
-        manifest(), recommender, paths, config(), top_n=1, backend=second_backend
+        manifest(), recommender, paths, config(), top_n=1, backend=second_backend,
+        sequence_ledger=tmp_path / "applications.json",
     ).run("apply")
 
     assert recommender.calls == []
@@ -176,12 +180,14 @@ def test_apply_target_change_reuses_generation_and_reapplies_every_payload(tmp_p
         config(),
         top_n=1,
         backend=FakeBackend(responses, "https://dev.example"),
+        sequence_ledger=tmp_path / "applications.json",
     ).run("apply")
 
     recommender = FakeRecommender()
     production = FakeBackend(responses, "https://prod.example")
     summary = RecommendationBatch(
-        manifest(), recommender, paths, config(), top_n=1, backend=production
+        manifest(), recommender, paths, config(), top_n=1, backend=production,
+        sequence_ledger=tmp_path / "applications.json",
     ).run("apply")
 
     assert recommender.calls == []
@@ -203,6 +209,7 @@ def test_error_summary_redacts_environment_secrets(tmp_path) -> None:
     summary = RecommendationBatch(
         manifest(), FakeRecommender(), BatchPaths(tmp_path), config(), top_n=1,
         backend=backend, secret_values=(secret,),
+        sequence_ledger=tmp_path / "applications.json",
     ).run("apply")
 
     assert secret not in json.dumps(summary)

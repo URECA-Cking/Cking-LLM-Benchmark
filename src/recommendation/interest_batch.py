@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
-from src.recommendation.batch import _json_hash, _write_json_atomic
+from src.recommendation.batch import _json_hash
+from src.recommendation.storage import _write_json_atomic
+from src.recommendation.application import bind_application, resolve_sequence
 from src.recommendation.http import JsonBackend
 from src.recommendation.interest import METHODS, M3_METHOD, InterestRecommender, _integer
 from src.recommendation.interest_evaluation import write_interest_evaluation
@@ -40,6 +42,7 @@ class InterestRecommendationBatch:
     def __init__(
         self, recommender: InterestRecommender, paths: InterestBatchPaths, *,
         backend: JsonBackend | None = None, evaluation_top_n: int = 10,
+        sequence_ledger: Path | None = None,
         secret_values: tuple[str, ...] = (), selected_method: str = M3_METHOD,
     ) -> None:
         _integer("evaluation_top_n", evaluation_top_n, 1, recommender.config.top_n)
@@ -47,7 +50,7 @@ class InterestRecommendationBatch:
         self.paths = paths
         self.backend = backend
         self.application_sequence = None
-        self.sequence_ledger = paths.output_dir.parent / "applications.json"
+        self.sequence_ledger = sequence_ledger
         self.evaluation_top_n = evaluation_top_n
         if selected_method not in METHODS:
             raise ValueError("지원하지 않는 관심 분야 적재 방식입니다.")
@@ -64,13 +67,9 @@ class InterestRecommendationBatch:
             raise ValueError("apply에는 BE 클라이언트가 필요합니다.")
         checkpoint = self._load_checkpoint()
         if mode == "apply":
-            from src.recommendation.application import allocate_sequence, bind_application, validate_sequence
-            sequence = self.application_sequence
-            if sequence is None and checkpoint.get("applyTarget") == self.backend.target_identity:
-                sequence = checkpoint.get("applicationSequence")
-            if sequence is None:
-                sequence = allocate_sequence(self.sequence_ledger, self.backend.target_identity)
-            sequence = validate_sequence(sequence)
+            sequence = resolve_sequence(
+                self.sequence_ledger, self.backend.target_identity, checkpoint, self.application_sequence,
+            )
             bind_application(checkpoint, self.backend.target_identity, sequence, "interests")
             self._save(checkpoint)
         generated = reused = applied = skipped = 0

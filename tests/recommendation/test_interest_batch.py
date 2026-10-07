@@ -40,7 +40,7 @@ def test_dry_run_saves_all_payloads_baselines_summary_and_config_without_be_writ
     service = recommender(tmp_path)
     paths = InterestBatchPaths(tmp_path / "batch")
     backend = FakeBackend()
-    summary = InterestRecommendationBatch(service, paths, backend=backend).run("dry-run")
+    summary = InterestRecommendationBatch(service, paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("dry-run")
     assert summary["interestCount"] == summary["nonEmptyGenerationCount"] == 17
     assert summary["eligibleCreatorCount"] == 3
     assert summary["generationConfig"]["zeroShotTau"] == .4296248555
@@ -58,14 +58,14 @@ def test_partial_apply_retry_skips_successes_and_reuses_generation_and_cache(tmp
     paths = InterestBatchPaths(tmp_path / "batch")
     backend = FakeBackend([code], idempotent=[categories()[0].code])
     first = InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend,
-                                        secret_values=("key-secret",)).run("apply")
+                                        secret_values=("key-secret",), sequence_ledger=tmp_path / "applications.json").run("apply")
     assert first["failureCount"] == 1
     assert first["idempotentCount"] == 1
     assert first["appliedSuccessCount"] == 15
     assert "key-secret" not in paths.checkpoint.read_text(encoding="utf-8")
     assert "key-secret" not in paths.summary.read_text(encoding="utf-8")
     second_service = recommender(tmp_path)
-    second = InterestRecommendationBatch(second_service, paths, backend=backend).run("apply")
+    second = InterestRecommendationBatch(second_service, paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("apply")
     assert second["reusedGenerationCount"] == 17
     assert second["reusedApplyCount"] == 16
     assert second["appliedNowCount"] == 1
@@ -79,10 +79,10 @@ def test_partial_apply_retry_skips_successes_and_reuses_generation_and_cache(tmp
 def test_target_change_reapplies_all_existing_payloads(tmp_path):
     paths = InterestBatchPaths(tmp_path / "batch")
     first = FakeBackend()
-    InterestRecommendationBatch(recommender(tmp_path), paths, backend=first).run("apply")
+    InterestRecommendationBatch(recommender(tmp_path), paths, backend=first, sequence_ledger=tmp_path / "applications.json").run("apply")
     second = FakeBackend(target="https://another-be.example")
     service = recommender(tmp_path)
-    summary = InterestRecommendationBatch(service, paths, backend=second).run("apply")
+    summary = InterestRecommendationBatch(service, paths, backend=second, sequence_ledger=tmp_path / "applications.json").run("apply")
     assert len(second.puts) == 17
     assert summary["reusedGenerationCount"] == 17
     assert summary["applyTarget"] == "https://another-be.example"
@@ -94,7 +94,7 @@ def test_empty_generations_are_applied_and_distinguished_from_failure(tmp_path):
     service = recommender(tmp_path, [CreatorProfile(1, "")])
     backend = FakeBackend()
     summary = InterestRecommendationBatch(service, InterestBatchPaths(tmp_path / "batch"),
-                                          backend=backend).run("apply")
+                                          backend=backend, sequence_ledger=tmp_path / "applications.json").run("apply")
     assert summary["emptyGenerationCount"] == 17
     assert summary["generationFailureCount"] == summary["failureCount"] == 0
     assert summary["appliedSuccessCount"] == 17
@@ -133,7 +133,7 @@ def test_failed_generation_is_retried_and_other_interests_complete(tmp_path, mon
 ])
 def test_inconsistent_backend_response_is_recorded_as_failed(tmp_path, wrong):
     summary = InterestRecommendationBatch(recommender(tmp_path), InterestBatchPaths(tmp_path / "batch"),
-                                          backend=FakeBackend(wrong=wrong)).run("apply")
+                                          backend=FakeBackend(wrong=wrong), sequence_ledger=tmp_path / "applications.json").run("apply")
     assert summary["failureCount"] == 17
     assert all(row["stage"] == "apply" for row in summary["failures"])
 
@@ -146,7 +146,7 @@ def test_changed_settings_refuse_checkpoint_before_calls(tmp_path, change):
     other = recommender(tmp_path, config=replace(service.config, **change))
     backend = FakeBackend()
     with pytest.raises(ValueError, match="생성 설정"):
-        InterestRecommendationBatch(other, paths, backend=backend).run("apply")
+        InterestRecommendationBatch(other, paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("apply")
     assert backend.puts == other.embedding_client.calls == []
 
 
@@ -161,7 +161,7 @@ def test_changed_manifest_refuses_old_generations(tmp_path):
 def test_corrupt_or_wrong_metadata_payload_is_regenerated_and_reapplied(tmp_path):
     paths = InterestBatchPaths(tmp_path / "batch")
     backend = FakeBackend()
-    InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend).run("apply")
+    InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("apply")
     code = categories()[0].code
     payload = json.loads(paths.payload(code).read_text(encoding="utf-8"))
     payload["taxonomyHash"] = "a" * 64
@@ -170,7 +170,7 @@ def test_corrupt_or_wrong_metadata_payload_is_regenerated_and_reapplied(tmp_path
     checkpoint = json.loads(paths.checkpoint.read_text(encoding="utf-8"))
     checkpoint["interests"][code]["payloadHashes"][M3_METHOD] = _json_hash(payload)
     paths.checkpoint.write_text(json.dumps(checkpoint), encoding="utf-8")
-    summary = InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend).run("apply")
+    summary = InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("apply")
     assert summary["generatedNowCount"] == summary["appliedNowCount"] == 1
     assert backend.puts[-1][1]["taxonomyHash"] != "a" * 64
 
@@ -217,5 +217,5 @@ def test_failed_checkpoint_without_error_is_rejected_before_applying(tmp_path):
     paths.checkpoint.write_text(json.dumps(checkpoint), encoding="utf-8")
     backend = FakeBackend()
     with pytest.raises(ValueError, match="상태"):
-        InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend).run("apply")
+        InterestRecommendationBatch(recommender(tmp_path), paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("apply")
     assert backend.puts == []

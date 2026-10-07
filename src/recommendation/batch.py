@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from src.recommendation.storage import _write_json_atomic
+from src.recommendation.application import bind_application, resolve_sequence
 from src.recommendation.http import JsonBackend
 from src.recommendation.manifest import CreatorManifest
 from src.recommendation.models import CreatorProfile, RecommendationResult
@@ -81,6 +82,7 @@ class RecommendationBatch:
         *,
         top_n: int,
         backend: JsonBackend | None = None,
+        sequence_ledger: Path | None = None,
         secret_values: tuple[str, ...] = (),
     ) -> None:
         if isinstance(top_n, bool) or not isinstance(top_n, int) or not 1 <= top_n <= 100:
@@ -92,7 +94,7 @@ class RecommendationBatch:
         self.top_n = top_n
         self.backend = backend
         self.application_sequence = None
-        self.sequence_ledger = paths.output_dir.parent / "applications.json"
+        self.sequence_ledger = sequence_ledger
         self._secret_values = tuple(value for value in secret_values if value)
         self._config_hash = generation_config_hash(config, top_n)
 
@@ -104,13 +106,9 @@ class RecommendationBatch:
 
         checkpoint = self._load_checkpoint()
         if mode == "apply":
-            from src.recommendation.application import allocate_sequence, bind_application, validate_sequence
-            sequence = self.application_sequence
-            if sequence is None and checkpoint.get("applyTarget") == self.backend.target_identity:
-                sequence = checkpoint.get("applicationSequence")
-            if sequence is None:
-                sequence = allocate_sequence(self.sequence_ledger, self.backend.target_identity)
-            sequence = validate_sequence(sequence)
+            sequence = resolve_sequence(
+                self.sequence_ledger, self.backend.target_identity, checkpoint, self.application_sequence,
+            )
             bind_application(checkpoint, self.backend.target_identity, sequence, "creators")
             self._save_checkpoint(checkpoint)
         generated_now = 0
@@ -296,14 +294,3 @@ class RecommendationBatch:
 def _json_hash(payload: dict[str, object]) -> str:
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        os.replace(temp, path)
-    except BaseException:
-        temp.unlink(missing_ok=True)
-        raise

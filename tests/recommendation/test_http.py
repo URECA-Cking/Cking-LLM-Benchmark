@@ -160,6 +160,7 @@ def test_key_http_status_retries_and_full_traceback_redaction(path, status, retr
     with pytest.raises(BackendRequestError) as raised:
         client.put(path, {})
     assert len(calls) == retries and len(sleeps) == retries - 1
+    assert str(raised.value) == str(raised.value).rstrip()
     assert raised.value.status == status and raised.value.transient == (status == 503)
     assert "key-secret" not in "".join(traceback.format_exception(raised.value))
 

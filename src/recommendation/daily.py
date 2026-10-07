@@ -9,7 +9,7 @@ from typing import Callable, Protocol
 
 from src.recommendation.batch import _json_hash, _write_json_atomic
 from src.recommendation.http import JsonBackend
-from src.recommendation.application import allocate_sequence, validate_sequence
+from src.recommendation.application import allocate_sequence, reset_apply_records, validate_sequence
 from src.recommendation.locking import batch_locks
 from src.recommendation.manifest import CreatorManifest, fetch_manifest, write_manifest
 
@@ -119,10 +119,7 @@ class DailyRecommendationBatch:
                     if checkpoint_path.exists():
                         checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
                         checkpoint["applyTarget"] = None
-                        for record in checkpoint[records_key].values():
-                            record["applyStatus"] = "pending"
-                            if record.get("error", {}).get("stage") == "apply":
-                                record.pop("error", None)
+                        reset_apply_records(checkpoint[records_key])
                         _write_json_atomic(checkpoint_path, checkpoint)
                 active = {**active, "resetRequired": False}
                 _write_json_atomic(self.paths.active, active)
@@ -133,6 +130,7 @@ class DailyRecommendationBatch:
             try:
                 batch = factory(manifest, directory)
                 if mode == "apply":
+                    batch.sequence_ledger = ledger
                     batch.application_sequence = validate_sequence(active["applicationSequence"])
                 stage = batch.run(mode)
                 expected = len(manifest.creators) if name == "similar" else 17
