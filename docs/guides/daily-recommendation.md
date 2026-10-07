@@ -127,11 +127,15 @@ hash 전환·이전 hash 복귀, 설정·대상 변경, API Key 전용 인증, �
 
 캐시 schemaVersion은 2입니다. 저장 표현이 불명확한 이전 v1 캐시는 재사용하지 않으며 최초 실행에서 모델 결과를 다시 채웁니다. 태그 캐시도 함께 초기화되므로 최초 실행 비용이 발생할 수 있습니다. 임베딩 계약 버전을 입력 해시와 생성 설정 해시에 포함하므로 이전 payload 및 체크포인트와 완료 상태를 재사용하지 않고 새 세대를 생성합니다.
 
-
 ## 적용 실행 번호 계약 (#52)
 
 BE #473의 정본 `docs/domains/creator/similarity-recommendation.md`와 동일한 계약이다.
-실제 HTTP 통합 검증은 [#53](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/53)에서 수행한다.
+2026-10-07 확인 기준 [BE PR #478](https://github.com/URECA-Cking/Cking-BE/pull/478)은
+`develop`에 머지되어 V47과 필수 실행 번호 계약이 반영되었다. 머지는 대상 환경 배포 완료를 뜻하지 않는다.
+
+배포 순서는 구형 배치 중지 → 대상 환경에 BE V47 및 API 배포 → 이 LLM 클라이언트 배포 →
+[#53](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/53)의 실제 HTTP E2E 검증이다.
+BE 배포와 #53 검증이 모두 완료될 때까지 일일 배치 스케줄을 활성화하지 않는다.
 
 두 PUT의 최상위에 `applicationSequence`를 전달한다. 정수 범위는 1~9223372036854775807이며
 한 일일 실행의 유사 추천과 관심 분야는 같은 번호를 사용한다. `inputHash`, 모델 캐시 키,
@@ -146,7 +150,9 @@ BE #473의 정본 `docs/domains/creator/similarity-recommendation.md`와 동일�
 원자 파일 교체로 직렬화하며, 발급 직후 중단되어 생긴 번호 공백은 허용하고 재사용하지 않는다.
 서로 다른 머신은 로컬 파일 잠금을 공유하지 않으므로 단일 조정자로 운영해야 한다.
 동일 출력·캐시의 동시 실행은 기존 배치 잠금으로 차단한다.
-Python API를 직접 사용하는 경우 `sequence_ledger`를 동일 경로로 설정하고 호출 전체를 잠근다.
+Python API를 직접 사용하는 경우 생성자의 `sequence_ledger`에 동일 경로를 명시하고 호출 전체를 잠근다.
+기본값은 `None`이며 apply는 경로가 없으면 중단한다. 재개 시에도 ledger 유실·해당 대상 번호의
+후퇴를 검사하며, 체크포인트 번호가 있으면 1부터 다시 발급하지 않는다.
 
 A(1)→B(2)→새 실행 A(3)는 A의 모델 결과를 재사용하고 모든 대상에 3을 전송한다.
 B의 일부 적용 후 A 복귀도 새 번호로 전부 적용한다. 중단된 같은 실행은 active-run에 저장한 번호를
