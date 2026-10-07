@@ -196,3 +196,6 @@ python -m pytest -q tests/recommendation
 ```
 
 테스트는 가짜 임베딩·가짜 BE로 수행하며 유료 API와 실제 서버에 요청하지 않는다.
+
+
+적재 실행 번호·409·schema 2 전환·재적용 절차는 [일일 배치 계약](daily-recommendation.md#적용-실행-번호-계약-52)을 따른다. 단독 CLI도 공유 캐시의 ledger를 사용하며 같은 출력의 재개에는 체크포인트 번호를 유지한다.

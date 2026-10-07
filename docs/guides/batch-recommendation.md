@@ -129,3 +129,6 @@ python3 -m pytest -q tests/recommendation
 
 테스트는 실제 BE 또는 유료 모델 API를 호출하지 않는다. 페이지네이션, 일시적 오류 재시도, dry-run 쓰기 차단, 재시작,
 생성·적재 부분 실패, 빈 세대, 멱등 응답, payload 계약, 체크포인트·manifest 해시 불일치를 검증한다.
+
+
+적재 실행 번호·409·schema 2 전환·재적용 절차는 [일일 배치 계약](daily-recommendation.md#적용-실행-번호-계약-52)을 따른다. 단독 CLI도 공유 캐시의 ledger를 사용하며 같은 출력의 재개에는 체크포인트 번호를 유지한다.
