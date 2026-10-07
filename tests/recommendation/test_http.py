@@ -217,3 +217,20 @@ def test_backend_error_message_and_nested_cause_are_redacted():
     rendered = "".join(traceback.format_exception(raised.value))
     assert "key-secret" not in rendered and "jwt-secret" not in rendered
     assert raised.value.status == 401
+
+
+@pytest.mark.parametrize("code", ["STALE_RECOMMENDATION_INPUT", "RECOMMENDATION_INPUT_CONFLICT", "UNKNOWN"])
+def test_409_classifies_only_known_codes_without_retry_or_body_leak(code):
+    calls, sleeps = [], []
+    def opener(request, timeout):
+        calls.append(request)
+        body = json.dumps({"code": code, "message": "private profile key-secret"}).encode()
+        raise urllib.error.HTTPError("https://be", 409, "conflict", {}, io.BytesIO(body))
+    client = CkingBackendClient(BackendClientConfig("https://be"),
+                               recommendation_api_key="key-secret", opener=opener, sleep=sleeps.append)
+    with pytest.raises(BackendRequestError) as caught:
+        client.put("/api/admin/creators/1/similar", {})
+    assert caught.value.status == 409 and caught.value.transient is False
+    assert caught.value.code == (None if code == "UNKNOWN" else code)
+    assert len(calls) == 1 and not sleeps
+    assert "private profile" not in str(caught.value) and "key-secret" not in str(caught.value)
