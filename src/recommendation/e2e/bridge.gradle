@@ -1,0 +1,25 @@
+// BE의 추적 파일을 수정하지 않고 LLM 소유 테스트만 별도 컴파일한다.
+allprojects {
+    afterEvaluate {
+        if (plugins.hasPlugin('java')) {
+            sourceSets {
+                recommendationE2e {
+                    java.srcDir System.getenv('CKING_E2E_JAVA_SOURCE')
+                    compileClasspath += sourceSets.main.output
+                    runtimeClasspath += sourceSets.main.output
+                }
+            }
+            configurations.recommendationE2eImplementation.extendsFrom configurations.testImplementation
+            configurations.recommendationE2eRuntimeOnly.extendsFrom configurations.testRuntimeOnly
+            tasks.register('recommendationE2e', Test) {
+                testClassesDirs = sourceSets.recommendationE2e.output.classesDirs
+                classpath = sourceSets.recommendationE2e.runtimeClasspath
+                useJUnitPlatform()
+                maxHeapSize = '1g'
+                outputs.upToDateWhen { false }
+                filter { includeTestsMatching 'kr.co.cking.e2e.RecommendationHttpE2eTest' }
+                testLogging { events 'failed'; showStandardStreams = false }
+            }
+        }
+    }
+}
