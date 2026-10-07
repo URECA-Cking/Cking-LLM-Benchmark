@@ -44,8 +44,9 @@ class JsonBackend(Protocol):
 class BackendRequestError(RuntimeError):
     """BE 요청이 재시도 뒤에도 성공하지 못했음을 나타낸다."""
 
-    def __init__(self, message: str, *, status: int | None = None, transient: bool = False) -> None:
+    def __init__(self, message: str, *, status: int | None = None, transient: bool = False, code: str | None = None) -> None:
         super().__init__(message)
+        self.code = code
         self.status = status
         self.transient = transient
 
@@ -137,8 +138,22 @@ class CkingBackendClient:
                 if transient and attempt < self.config.max_retries:
                     self._wait_before_retry(attempt)
                     continue
+                code = None
+                if error.code == 409:
+                    try:
+                        envelope = json.loads(error.read(65536))
+                        candidate = envelope.get("code") or envelope.get("error", {}).get("code")
+                        if candidate in {"STALE_RECOMMENDATION_INPUT", "RECOMMENDATION_INPUT_CONFLICT"}:
+                            code = candidate
+                    except (ValueError, TypeError, AttributeError, OSError):
+                        pass
+                guidance = {
+                    "STALE_RECOMMENDATION_INPUT": "과거 실행을 중단하고 최신 실행을 완료하세요. ledger를 초기화하지 마세요.",
+                    "RECOMMENDATION_INPUT_CONFLICT": "같은 실행의 payload 변경을 조사하세요. 의도적인 재적용은 새 번호로 실행하세요.",
+                }.get(code, "409 계약을 확인하세요." if error.code == 409 else "")
                 raise BackendRequestError(
-                    f"BE {method} 요청 실패: HTTP {error.code}",
+                    f"BE {method} 요청 실패: HTTP {error.code} {code or ''} {guidance}",
+                    code=code,
                     status=error.code,
                     transient=transient,
                 ) from None
@@ -155,7 +170,7 @@ class CkingBackendClient:
                 for secret in (self._recommendation_api_key, self._access_token):
                     if secret:
                         message = message.replace(secret, "[REDACTED]")
-                raise BackendRequestError(message, status=error.status, transient=error.transient) from None
+                raise BackendRequestError(message, status=error.status, transient=error.transient, code=error.code) from None
             except Exception as error:
                 # SDK/사용자 opener 예외의 원문이나 traceback에도 키가 남지 않게 한다.
                 raise BackendRequestError(f"BE {method} 요청 실패: {type(error).__name__}") from None
