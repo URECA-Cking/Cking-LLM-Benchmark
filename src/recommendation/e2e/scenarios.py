@@ -29,12 +29,32 @@ from src.recommendation.manifest import fetch_manifest
 from src.recommendation.service import RecommendationConfig, SimilarCreatorRecommender
 from src.recommendation.storage import _write_json_atomic
 from src.recommendation.taxonomy import DEFAULT_CATEGORIES_CSV, load_service_categories, taxonomy_hash
-from src.recommendation.e2e.runner import ROOT, git_sha
+from src.recommendation.e2e.runner import ROOT, EnvironmentFailure, git_sha
+
+
+class ControlChannelFailure(EnvironmentFailure):
+    """Java 제어 채널이 닫혔거나 유효한 응답을 전달하지 못했다."""
+
+
+def receive_control():
+    try:
+        line = sys.stdin.readline()
+        if not line:
+            raise ControlChannelFailure("control_channel_eof")
+        value = json.loads(line)
+        if not isinstance(value, dict):
+            raise ControlChannelFailure("control_channel_invalid_response")
+        return value
+    except (OSError, ValueError):
+        raise ControlChannelFailure("control_channel_read_failed") from None
 
 
 def control(op, **values):
-    print(json.dumps({"op": op, **values}), flush=True)
-    return json.loads(sys.stdin.readline())
+    try:
+        print(json.dumps({"op": op, **values}), flush=True)
+    except (OSError, ValueError):
+        raise ControlChannelFailure("control_channel_write_failed") from None
+    return receive_control()
 
 
 class FixedModels:
@@ -359,12 +379,11 @@ class Suite:
 
 
 def main():
-    config = json.loads(sys.stdin.readline())
     output = Path(os.environ["CKING_E2E_OUTPUT"])
     report_path = output / "report.json"
     report = {"schemaVersion": 1, "status": "running", "completed": False, "checks": [],
               "llmCommitSha": git_sha(ROOT), "beCommitSha": git_sha(Path(os.environ["CKING_E2E_BE_ROOT"])),
-              "taxonomyHash": config["taxonomyHash"], "externalConnectionAttempts": 0}
+              "externalConnectionAttempts": 0}
     original_connect = socket.socket.connect
     _write_json_atomic(report_path, report)
     def loopback_only(sock, address):
@@ -373,6 +392,8 @@ def main():
             raise AssertionError("External network prohibited")
         return original_connect(sock, address)
     try:
+        config = receive_control()
+        report["taxonomyHash"] = config["taxonomyHash"]
         with patch.object(socket.socket, "connect", loopback_only):
             suite = Suite(config, output)
             report["checks"] = suite.checks
@@ -386,12 +407,15 @@ def main():
         return 0
     except Exception as error:
         # 메시지·HTTP 응답·SQL·토큰·소개 원문은 보고하지 않는다.
-        report.update(status="verification_failure", completed=True)
+        channel_failure = isinstance(error, ControlChannelFailure)
+        report.update(status="environment_failure" if channel_failure else "verification_failure", completed=True)
+        if channel_failure:
+            report.update(failedPhase="control_channel", environmentError=str(error))
         report["errorType"] = type(error).__name__
         import traceback
         report["failureLocation"] = [{"file": Path(frame.filename).name, "line": frame.lineno}
                                      for frame in traceback.extract_tb(error.__traceback__)]
-        return 1
+        return 2 if channel_failure else 1
     finally:
         _write_json_atomic(report_path, report)
 

@@ -43,7 +43,7 @@ def test_remote_docker_is_rejected_before_any_container_is_created(monkeypatch):
         runner.require_local_docker({"DOCKER_HOST": "tcp://remote.example:2376"})
 
 
-@pytest.mark.parametrize("stage", ["prerequisites", "containers", "be_build_or_start", "verification", "success", "cleanup", "running_timeout", "passed_crash", "corrupt", "audit"])
+@pytest.mark.parametrize("stage", ["prerequisites", "containers", "be_build_or_start", "verification", "success", "cleanup", "running_timeout", "passed_crash", "corrupt", "audit", "channel"])
 def test_exit_classification_and_owned_cleanup(tmp_path, monkeypatch, stage, capsys):
     be = tmp_path / "be"
     be.mkdir()
@@ -71,8 +71,11 @@ def test_exit_classification_and_owned_cleanup(tmp_path, monkeypatch, stage, cap
             if stage in {"verification", "audit"}:
                 report.update(failedCheck="be_final_fixture_audit" if stage == "audit" else "batch_lifecycle",
                               failureLocation=[{"file": "scenarios.py", "line": 1}])
+            if stage == "channel":
+                report.update(status="environment_failure", failedPhase="control_channel",
+                              environmentError="control_channel_eof")
             report_path.write_text("{broken" if stage == "corrupt" else json.dumps(report), encoding="utf-8")
-            if stage in {"verification", "audit", "passed_crash"}:
+            if stage in {"verification", "audit", "passed_crash", "channel"}:
                 raise runner.EnvironmentFailure("command_failed")
             if stage == "running_timeout":
                 raise runner.EnvironmentFailure("command_unavailable_or_timeout")
@@ -90,6 +93,13 @@ def test_exit_classification_and_owned_cleanup(tmp_path, monkeypatch, stage, cap
     assert all(name.startswith("cking-e2e-") for name in deleted)
     assert "must-not-leak" not in capsys.readouterr().out
 
+    if stage in {"prerequisites", "containers", "be_build_or_start"}:
+        assert "failedCheck" not in report
+        assert "failureLocation" not in report
+    if stage == "channel":
+        assert report["status"] == "environment_failure"
+        assert report["failedPhase"] == "control_channel"
+        assert report["environmentError"] == "control_channel_eof"
     if stage in {"verification", "audit"}:
         assert report["failedCheck"]
         assert report["failureLocation"]

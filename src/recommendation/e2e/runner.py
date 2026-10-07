@@ -61,7 +61,7 @@ def read_report(path):
         report = json.loads(path.read_text(encoding="utf-8"))
         if (not isinstance(report, dict) or not isinstance(report.get("checks"), list)
                 or not isinstance(report.get("status"), str)
-                or report["status"] not in {"running", "passed", "verification_failure"}):
+                or report["status"] not in {"running", "passed", "verification_failure", "environment_failure"}):
             raise ValueError
         return report
     except (OSError, ValueError):
@@ -167,7 +167,7 @@ def main(argv=None):
         report = read_report(report_path)
         if report.get("completed") is not True or report["status"] == "running":
             raise EnvironmentFailure("scenario_incomplete")
-        exit_code = 0 if report["status"] == "passed" else 1
+        exit_code = {"passed": 0, "verification_failure": 1, "environment_failure": 2}[report["status"]]
     except EnvironmentFailure as error:
         try:
             report = read_report(report_path)
@@ -175,12 +175,15 @@ def main(argv=None):
             # 손상된 원본은 별도 보존하고 안전한 진단 보고서를 생성한다.
             if report_path.exists():
                 report_path.replace(output / "report.invalid.json")
-            report.update(failedCheck="report_read", failureLocation="report.json")
+                report.update(failedCheck="report_read", failureLocation="report.json")
+            elif str(error) == "report_invalid_or_missing":
+                report.update(failedCheck="report_missing", failureLocation="report.json")
         if (str(error) == "command_failed" and report.get("completed") is True
                 and report.get("status") == "verification_failure"):
             exit_code = 1
         else:
-            report.update(status="environment_failure", failedPhase=phase, environmentError=str(error))
+            report.update(status="environment_failure", failedPhase=report.get("failedPhase", phase),
+                          environmentError=report.get("environmentError", str(error)))
             exit_code = 2
     finally:
         cleanup = True
