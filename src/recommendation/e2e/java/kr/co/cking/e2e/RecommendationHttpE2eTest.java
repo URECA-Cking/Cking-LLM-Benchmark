@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import kr.co.cking.auth.application.port.AccessTokenIssuer;
@@ -112,8 +113,19 @@ class RecommendationHttpE2eTest {
             }
             assertThat(child.waitFor(10, TimeUnit.SECONDS)).isTrue();
             assertThat(child.exitValue()).as("See LLM E2E report.json (no raw HTTP bodies logged)").isZero();
-            assertThat(jdbc.queryForObject("select count(*) from member", Long.class)).isEqualTo(12L);
-            assertThat(jdbc.queryForObject("select count(*) from creator", Long.class)).isEqualTo(11L);
+            try {
+                assertThat(jdbc.queryForObject("select count(*) from member", Long.class)).isEqualTo(12L);
+                assertThat(jdbc.queryForObject("select count(*) from creator", Long.class)).isEqualTo(11L);
+            } catch (AssertionError failure) {
+                // Python 완료 이후의 실제 fixture 감사 실패만 검증 실패로 기록한다.
+                File reportFile = Path.of(required("CKING_E2E_OUTPUT"), "report.json").toFile();
+                var report = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(reportFile);
+                report.put("status", "verification_failure");
+                report.put("completed", true);
+                report.put("failedCheck", "be_final_fixture_audit");
+                json.writeValue(reportFile, report);
+                throw failure;
+            }
         } finally {
             child.destroyForcibly();
             timer.shutdownNow();

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import signal
 import subprocess
 import sys
 import time
@@ -22,15 +23,49 @@ class EnvironmentFailure(RuntimeError):
     """Docker·빌드·실행 환경이 준비되지 않았다."""
 
 
+def stop_process_tree(process):
+    # POSIX에서는 부모가 먼저 종료되어도 같은 세션의 자손을 정리한다.
+    if os.name == "nt":
+        if process.poll() is None:
+            result = subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                    capture_output=True, timeout=30)
+            if result.returncode and process.poll() is None:
+                raise EnvironmentFailure("process_cleanup_failed")
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def command(args, *, env=None, cwd=None, timeout=60):
-    # 도구의 stdout/stderr에는 비밀값이나 fixture 원문이 있을 수 있어 그대로 전달하지 않는다.
+    # 도구 출력은 비밀값을 포함할 수 있으므로 예외와 콘솔에 전달하지 않는다.
     try:
-        result = subprocess.run(args, env=env, cwd=cwd, capture_output=True, timeout=timeout)
+        process = subprocess.Popen(args, env=env, cwd=cwd, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=os.name != "nt",
+                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        try:
+            stdout, _ = process.communicate(timeout=timeout)
+        finally:
+            stop_process_tree(process)
+            process.communicate()
     except (OSError, subprocess.TimeoutExpired):
         raise EnvironmentFailure("command_unavailable_or_timeout") from None
-    if result.returncode:
+    if process.returncode:
         raise EnvironmentFailure("command_failed")
-    return result.stdout.decode("utf-8", errors="replace").strip()
+    return stdout.decode("utf-8", errors="replace").strip()
+
+
+def read_report(path):
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if (not isinstance(report, dict) or not isinstance(report.get("checks"), list)
+                or not isinstance(report.get("status"), str)
+                or report["status"] not in {"running", "passed", "verification_failure"}):
+            raise ValueError
+        return report
+    except (OSError, ValueError):
+        raise EnvironmentFailure("report_invalid_or_missing") from None
 
 
 def clean_environment():
@@ -84,7 +119,7 @@ def main(argv=None):
     output.mkdir(parents=True)
     report_path = output / "report.json"
     report = {"schemaVersion": 1, "status": "environment_failure", "checks": [],
-              "externalModelCalls": 0, "cleanupVerified": False}
+              "cleanupVerified": False}
     env = clean_environment()
     suffix = uuid.uuid4().hex
     names = [f"cking-e2e-mysql-{suffix}", f"cking-e2e-redis-{suffix}"]
@@ -129,16 +164,24 @@ def main(argv=None):
                  "org.gradle.wrapper.GradleWrapperMain", "--no-daemon", "--console=plain", "-q",
                  "-I", str(ASSETS / "bridge.gradle"), "recommendationE2e"],
                 env=env, cwd=be, timeout=args.timeout)
-        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report = read_report(report_path)
+        if report.get("completed") is not True or report["status"] == "running":
+            raise EnvironmentFailure("scenario_incomplete")
         exit_code = 0 if report["status"] == "passed" else 1
-    except EnvironmentFailure:
-        if report_path.exists():
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-            if report["status"] == "passed":
-                report.update(status="verification_failure", failedCheck="be_final_fixture_audit")
+    except EnvironmentFailure as error:
+        try:
+            report = read_report(report_path)
+        except EnvironmentFailure:
+            # 손상된 원본은 별도 보존하고 안전한 진단 보고서를 생성한다.
+            if report_path.exists():
+                report_path.replace(output / "report.invalid.json")
+            report.update(failedCheck="report_read", failureLocation="report.json")
+        if (str(error) == "command_failed" and report.get("completed") is True
+                and report.get("status") == "verification_failure"):
             exit_code = 1
         else:
-            report["failedPhase"] = phase
+            report.update(status="environment_failure", failedPhase=phase, environmentError=str(error))
+            exit_code = 2
     finally:
         cleanup = True
         for name in reversed(owned):

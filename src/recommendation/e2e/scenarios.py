@@ -362,9 +362,9 @@ def main():
     config = json.loads(sys.stdin.readline())
     output = Path(os.environ["CKING_E2E_OUTPUT"])
     report_path = output / "report.json"
-    report = {"schemaVersion": 1, "status": "verification_failure", "checks": [],
+    report = {"schemaVersion": 1, "status": "running", "completed": False, "checks": [],
               "llmCommitSha": git_sha(ROOT), "beCommitSha": git_sha(Path(os.environ["CKING_E2E_BE_ROOT"])),
-              "taxonomyHash": config["taxonomyHash"], "externalModelCalls": 0, "externalConnectionAttempts": 0}
+              "taxonomyHash": config["taxonomyHash"], "externalConnectionAttempts": 0}
     original_connect = socket.socket.connect
     _write_json_atomic(report_path, report)
     def loopback_only(sock, address):
@@ -381,11 +381,12 @@ def main():
                 _write_json_atomic(report_path, report)
                 getattr(suite, name)()
             assert report["externalConnectionAttempts"] == 0
-        report.update(status="passed", sharedFixtureCases=18, syntheticModelInputs=suite.models.calls)
+        report.update(status="passed", completed=True, sharedFixtureCases=18, syntheticModelInputs=suite.models.calls)
         report.pop("failedCheck", None)
         return 0
     except Exception as error:
         # 메시지·HTTP 응답·SQL·토큰·소개 원문은 보고하지 않는다.
+        report.update(status="verification_failure", completed=True)
         report["errorType"] = type(error).__name__
         import traceback
         report["failureLocation"] = [{"file": Path(frame.filename).name, "line": frame.lineno}
