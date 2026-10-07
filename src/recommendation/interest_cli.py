@@ -103,11 +103,13 @@ def _run_locked_batch(args, categories, config, paths):
         manifest, categories, create_interest_embedding_client(args.embedding_provider),
         JsonModelCache(args.cache), config,
     )
-    summary = InterestRecommendationBatch(
+    batch = InterestRecommendationBatch(
         recommender, paths, backend=backend, evaluation_top_n=args.evaluation_top_n,
         secret_values=tuple(value for value in (api_key, token, os.environ.get("DEEPINFRA_API_KEY"),
                                                os.environ.get("OPENAI_API_KEY")) if value),
-    ).run(args.command)
+    )
+    batch.sequence_ledger = args.cache.with_suffix(".applications.json")
+    summary = batch.run(args.command)
     print(f"[interest-{args.command}] interests={summary['interestCount']}, "
           f"empty={summary['emptyGenerationCount']}, failures={summary['failureCount']}, summary={paths.summary}")
     return 1 if summary["failureCount"] else 0
