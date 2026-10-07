@@ -121,3 +121,14 @@ Python 시나리오는 `.env` 자동 로드를 끄고 loopback 외 소켓 연결
 ```bash
 python -m pytest -q tests/recommendation/test_e2e_runner.py
 ```
+
+보고서의 `completed`는 Python 시나리오가 결과 기록을 완료했는지 나타낸다.
+미완료 보고서, Gradle/JVM 비정상 종료, timeout은 환경 실패(2)로 분류한다.
+완료된 시나리오 실패와 명시적으로 기록된 BE 최종 fixture 감사 실패는 검증 실패(1)다.
+손상된 보고서는 `report.invalid.json`으로 보존하고 새 보고서에 읽기 실패 위치를 남긴다.
+외부 호출 관련 측정값은 `externalConnectionAttempts`이며 Python 시나리오의
+`socket.connect`에서 감지한 loopback 외 연결 시도 수다. 별도 모델 API 호출 횟수나
+Java를 포함한 전체 프로세스의 네트워크 활동 측정값으로 해석하지 않는다.
+시나리오 시작 전 실패에는 이 측정값을 기록하지 않는다.
+명령 종료 시 POSIX는 전용 세션의 프로세스 그룹을 제거하고,
+Windows timeout은 `taskkill /T /F`로 실행 중인 명령과 자손을 함께 종료한다.
