@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from src.recommendation.storage import _write_json_atomic
+from src.recommendation.application import bind_application, resolve_sequence
 from src.recommendation.http import JsonBackend
 from src.recommendation.manifest import CreatorManifest
 from src.recommendation.models import CreatorProfile, RecommendationResult
@@ -16,7 +17,7 @@ from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION
 from src.recommendation.service import RecommendationConfig
 
 
-CHECKPOINT_SCHEMA_VERSION = 1
+CHECKPOINT_SCHEMA_VERSION = 2
 
 
 class Recommender(Protocol):
@@ -81,6 +82,7 @@ class RecommendationBatch:
         *,
         top_n: int,
         backend: JsonBackend | None = None,
+        sequence_ledger: Path | None = None,
         secret_values: tuple[str, ...] = (),
     ) -> None:
         if isinstance(top_n, bool) or not isinstance(top_n, int) or not 1 <= top_n <= 100:
@@ -91,6 +93,8 @@ class RecommendationBatch:
         self.config = config
         self.top_n = top_n
         self.backend = backend
+        self.application_sequence = None
+        self.sequence_ledger = sequence_ledger
         self._secret_values = tuple(value for value in secret_values if value)
         self._config_hash = generation_config_hash(config, top_n)
 
@@ -102,7 +106,11 @@ class RecommendationBatch:
 
         checkpoint = self._load_checkpoint()
         if mode == "apply":
-            self._bind_apply_target(checkpoint)
+            sequence = resolve_sequence(
+                self.sequence_ledger, self.backend.target_identity, checkpoint, self.application_sequence,
+            )
+            bind_application(checkpoint, self.backend.target_identity, sequence, "creators")
+            self._save_checkpoint(checkpoint)
         generated_now = 0
         reused_generation = 0
         applied_now = 0
@@ -146,7 +154,7 @@ class RecommendationBatch:
                 try:
                     response = self.backend.put(  # type: ignore[union-attr]
                         f"/api/admin/creators/{seed.creator_id}/similar",
-                        payload,
+                        {**payload, "applicationSequence": sequence},
                     )
                     self._validate_apply_response(seed, payload, response)
                     record["applyStatus"] = "success" if response["applied"] else "idempotent"
@@ -183,7 +191,7 @@ class RecommendationBatch:
         if not self.paths.checkpoint.exists():
             return self._new_checkpoint()
         payload = json.loads(self.paths.checkpoint.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict) or payload.get("schemaVersion") != CHECKPOINT_SCHEMA_VERSION:
+        if not isinstance(payload, dict) or payload.get("schemaVersion") not in {1, CHECKPOINT_SCHEMA_VERSION}:
             raise ValueError("지원하지 않는 batch 체크포인트 형식입니다.")
         if payload.get("manifestHash") != self.manifest.manifest_hash:
             raise ValueError("체크포인트의 manifestHash가 현재 manifest와 다릅니다.")
@@ -191,26 +199,11 @@ class RecommendationBatch:
             raise ValueError("체크포인트의 생성 설정이 현재 설정과 다릅니다.")
         if payload.get("creatorCount") != len(self.manifest.creators) or not isinstance(payload.get("creators"), dict):
             raise ValueError("체크포인트 Creator 메타데이터가 올바르지 않습니다.")
+        payload["schemaVersion"] = CHECKPOINT_SCHEMA_VERSION
         return payload
 
     def _save_checkpoint(self, checkpoint: dict[str, object]) -> None:
         _write_json_atomic(self.paths.checkpoint, checkpoint)
-
-    def _bind_apply_target(self, checkpoint: dict[str, object]) -> None:
-        target = self.backend.target_identity  # type: ignore[union-attr]
-        if checkpoint.get("applyTarget") == target:
-            return
-
-        records: dict[str, object] = checkpoint["creators"]  # type: ignore[assignment]
-        for record in records.values():
-            if not isinstance(record, dict):
-                continue
-            record["applyStatus"] = "pending"
-            error = record.get("error")
-            if isinstance(error, dict) and error.get("stage") == "apply":
-                record.pop("error")
-        checkpoint["applyTarget"] = target
-        self._save_checkpoint(checkpoint)
 
     def _reusable_payload(self, seed: CreatorProfile, record: object) -> dict[str, object] | None:
         if not isinstance(record, dict) or record.get("generationStatus") not in {"success", "empty"}:
@@ -283,6 +276,7 @@ class RecommendationBatch:
             "manifestHash": self.manifest.manifest_hash,
             "generationConfigHash": self._config_hash,
             "applyTarget": checkpoint.get("applyTarget"),
+            "applicationSequence": checkpoint.get("applicationSequence"),
             "creatorCount": len(self.manifest.creators),
             "generatedNowCount": generated_now,
             "reusedGenerationCount": reused_generation,
@@ -300,14 +294,3 @@ class RecommendationBatch:
 def _json_hash(payload: dict[str, object]) -> str:
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        os.replace(temp, path)
-    except BaseException:
-        temp.unlink(missing_ok=True)
-        raise

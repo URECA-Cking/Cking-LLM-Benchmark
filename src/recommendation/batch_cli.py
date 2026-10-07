@@ -146,6 +146,7 @@ def _run_locked_batch(args: argparse.Namespace) -> int:
         backend=backend,
         secret_values=secrets,
     )
+    batch.sequence_ledger = args.cache.with_suffix(".applications.json")
     summary = batch.run(args.command)
     print(
         f"[batch-{args.command}] creators={summary['creatorCount']}, "

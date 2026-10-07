@@ -26,6 +26,7 @@ class Backend:
         self.profiles = [{"creatorId": index, "introText": INTRO} for index in range(1, 26)]
         self.gets, self.puts = [], []
         self.fail_once = set()
+        self.current = {}
 
     def get(self, path):
         self.gets.append(path)
@@ -41,8 +42,19 @@ class Backend:
         if path in self.fail_once:
             self.fail_once.remove(path)
             raise RuntimeError("fake-key fake-openai fake-deepinfra fake-jwt")
+        from src.recommendation.http import BackendRequestError
+        sequence = payload["applicationSequence"]
+        assert type(sequence) is int and sequence > 0
+        key = (self.target_identity, path)
+        previous = self.current.get(key)
+        if previous and sequence < previous["applicationSequence"]:
+            raise BackendRequestError("STALE_RECOMMENDATION_INPUT", status=409)
+        if previous and sequence == previous["applicationSequence"] and payload != previous:
+            raise BackendRequestError("RECOMMENDATION_INPUT_CONFLICT", status=409)
+        applied = previous != payload
+        self.current[key] = payload
         return {key: payload[key] for key in ("creatorId", "interestCode", "taxonomyVersion", "inputHash")
-                if key in payload} | {"candidateCount": len(payload["candidates"]), "applied": True}
+                if key in payload} | {"candidateCount": len(payload["candidates"]), "applied": applied}
 
 
 class Tagger:
@@ -313,3 +325,76 @@ def test_standalone_apply_rejects_jwt_only_environment_before_models(module, tmp
     with pytest.raises(RuntimeError, match="CKING_RECOMMENDATION_API_KEY"):
         module.main(["apply", "--manifest", str(path), "--be-base-url", "https://be",
                      "--output-dir", str(tmp_path / "standalone"), "--cache", str(tmp_path / "cache.json")])
+
+
+def test_complete_reversion_and_delayed_request_use_ordered_executions(setup):
+    from src.recommendation.http import BackendRequestError
+    backend, embedding, tagger, _, _, args, paths = setup
+    assert daily_cli.main(["apply", *args]) == 0
+    first = list(backend.puts)
+    backend.profiles[0]["introText"] = OTHER
+    assert daily_cli.main(["apply", *args]) == 0
+    delayed = backend.puts[-1]
+    before = (len(embedding.calls), len(tagger.calls))
+    backend.profiles[0]["introText"] = INTRO
+    assert daily_cli.main(["apply", *args]) == 0
+    assert (len(embedding.calls), len(tagger.calls)) == before
+    assert {p["applicationSequence"] for _, p in backend.puts[-42:]} == {3}
+    assert first[0][1]["inputHash"] == backend.puts[-42][1]["inputHash"]
+    with pytest.raises(BackendRequestError, match="STALE"):
+        backend.put(*delayed)
+    path, payload = backend.puts[-43]
+    latest = backend.current[(backend.target_identity, path)]
+    assert backend.put(path, latest)["applied"] is False
+    with pytest.raises(BackendRequestError, match="CONFLICT"):
+        backend.put(path, {**latest, "inputHash": "a" * 64})
+
+
+def test_transition_interrupted_during_checkpoint_reset_keeps_sequence(setup, monkeypatch):
+    backend, _, _, _, _, args, paths = setup
+    assert daily_cli.main(["apply", *args]) == 0
+    backend.profiles[0]["introText"] = OTHER
+    assert daily_cli.main(["apply", *args]) == 0
+    backend.profiles[0]["introText"] = INTRO
+    original = daily._write_json_atomic
+    def interrupt(path, payload):
+        if path.name == "checkpoint.json":
+            raise OSError("interrupted reset")
+        return original(path, payload)
+    monkeypatch.setattr(daily, "_write_json_atomic", interrupt)
+    with pytest.raises(OSError):
+        daily_cli.main(["apply", *args])
+    assert read(paths.active)["applicationSequence"] == 3
+    monkeypatch.setattr(daily, "_write_json_atomic", original)
+    assert daily_cli.main(["apply", *args]) == 0
+    assert {p["applicationSequence"] for _, p in backend.puts[-42:]} == {3}
+
+
+def test_lost_response_retries_same_application_and_be_returns_idempotent(setup, monkeypatch):
+    backend, _, _, _, _, args, paths = setup
+    original = backend.put
+    lost = [True]
+    def put(path, payload):
+        response = original(path, payload)
+        if lost[0]:
+            lost[0] = False
+            raise TimeoutError("lost response after commit")
+        return response
+    monkeypatch.setattr(backend, "put", put)
+    assert daily_cli.main(["apply", *args]) == 1
+    assert daily_cli.main(["apply", *args]) == 0
+    assert read(paths.completed)["applicationSequence"] == 1
+    assert backend.puts[0][1] == backend.puts[-1][1]
+
+
+def test_legacy_complete_marker_forces_new_application_without_models(setup):
+    backend, embedding, tagger, _, _, args, paths = setup
+    assert daily_cli.main(["apply", *args]) == 0
+    state = read(paths.completed)
+    state["schemaVersion"] = 1
+    state.pop("applicationSequence")
+    paths.completed.write_text(json.dumps(state), encoding="utf-8")
+    before = len(embedding.calls), len(tagger.calls)
+    assert daily_cli.main(["apply", *args]) == 0
+    assert read(paths.completed)["applicationSequence"] == 2
+    assert (len(embedding.calls), len(tagger.calls)) == before

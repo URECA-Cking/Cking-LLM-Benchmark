@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
-from src.recommendation.batch import _json_hash, _write_json_atomic
+from src.recommendation.batch import _json_hash
+from src.recommendation.storage import _write_json_atomic
+from src.recommendation.application import bind_application, resolve_sequence
 from src.recommendation.http import JsonBackend
 from src.recommendation.interest import METHODS, M3_METHOD, InterestRecommender, _integer
 from src.recommendation.interest_evaluation import write_interest_evaluation
@@ -40,12 +42,15 @@ class InterestRecommendationBatch:
     def __init__(
         self, recommender: InterestRecommender, paths: InterestBatchPaths, *,
         backend: JsonBackend | None = None, evaluation_top_n: int = 10,
+        sequence_ledger: Path | None = None,
         secret_values: tuple[str, ...] = (), selected_method: str = M3_METHOD,
     ) -> None:
         _integer("evaluation_top_n", evaluation_top_n, 1, recommender.config.top_n)
         self.recommender = recommender
         self.paths = paths
         self.backend = backend
+        self.application_sequence = None
+        self.sequence_ledger = sequence_ledger
         self.evaluation_top_n = evaluation_top_n
         if selected_method not in METHODS:
             raise ValueError("지원하지 않는 관심 분야 적재 방식입니다.")
@@ -61,12 +66,11 @@ class InterestRecommendationBatch:
         if mode == "apply" and self.backend is None:
             raise ValueError("apply에는 BE 클라이언트가 필요합니다.")
         checkpoint = self._load_checkpoint()
-        if mode == "apply" and checkpoint["applyTarget"] != self.backend.target_identity:
-            checkpoint["applyTarget"] = self.backend.target_identity
-            for record in checkpoint["interests"].values():
-                record["applyStatus"] = "pending"
-                if record.get("error", {}).get("stage") == "apply":
-                    record.pop("error", None)
+        if mode == "apply":
+            sequence = resolve_sequence(
+                self.sequence_ledger, self.backend.target_identity, checkpoint, self.application_sequence,
+            )
+            bind_application(checkpoint, self.backend.target_identity, sequence, "interests")
             self._save(checkpoint)
         generated = reused = applied = skipped = 0
         bundles = {}
@@ -107,7 +111,7 @@ class InterestRecommendationBatch:
                 try:
                     payload = bundle[self.selected_method]
                     response = self.backend.put(
-                        f"/api/admin/interests/{quote(code, safe='')}/recommendations", payload,
+                        f"/api/admin/interests/{quote(code, safe='')}/recommendations", {**payload, "applicationSequence": sequence},
                     )
                     self._validate_response(payload, response)
                     record["applyStatus"] = "success" if response["applied"] else "idempotent"
@@ -136,7 +140,8 @@ class InterestRecommendationBatch:
             "manifestHash": self.recommender.manifest.manifest_hash,
             "generationConfigHash": self._config_hash,
             "generationConfig": self.recommender.config.identity(),
-            "applyTarget": checkpoint["applyTarget"], "interestCount": len(self.recommender.categories),
+            "applyTarget": checkpoint["applyTarget"], "applicationSequence": checkpoint.get("applicationSequence"),
+            "interestCount": len(self.recommender.categories),
             "creatorCount": len(self.recommender.manifest.creators),
             "eligibleCreatorCount": sum(bool(profile.text) for profile in self.recommender.manifest.creators),
             "generatedNowCount": generated, "reusedGenerationCount": reused,
@@ -157,15 +162,18 @@ class InterestRecommendationBatch:
 
     def _load_checkpoint(self) -> dict[str, object]:
         expected = {
-            "schemaVersion": 1, "manifestHash": self.recommender.manifest.manifest_hash,
+            "schemaVersion": 2, "manifestHash": self.recommender.manifest.manifest_hash,
             "generationConfigHash": self._config_hash, "applyTarget": None, "interests": {},
         }
         if not self.paths.checkpoint.exists():
             return expected
         checkpoint = json.loads(self.paths.checkpoint.read_text(encoding="utf-8"))
         if not isinstance(checkpoint, dict) or any(checkpoint.get(key) != expected[key]
-                for key in ("schemaVersion", "manifestHash", "generationConfigHash")):
+                for key in ("manifestHash", "generationConfigHash")):
             raise ValueError("체크포인트의 manifest 또는 생성 설정이 현재 계약과 다릅니다.")
+        if checkpoint.get("schemaVersion") not in {1, 2}:
+            raise ValueError("지원하지 않는 체크포인트 schema입니다.")
+        checkpoint["schemaVersion"] = 2
         records = checkpoint.get("interests")
         codes = {row.code for row in self.recommender.categories}
         if ("applyTarget" not in checkpoint or not isinstance(records, dict) or not set(records) <= codes
