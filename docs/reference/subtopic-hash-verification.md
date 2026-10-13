@@ -54,6 +54,16 @@ BE 담당자에게 두 파일을 전달하고, BE가 제공한 fixture 디렉터
 다시 비교한다. 승인 전에는 `tests/fixtures/taxonomy/subtopic-v1.*` 초안을 교체하지 않는다.
 fixture 파일은 `.gitattributes`의 `tests/fixtures/taxonomy/* -text`로 바이트를 보존한다.
 
+`test_be_draft_fixture_matches_source_bytes_and_hash`는 실제 `data/creator-subtopics.json`과
+공유 fixture의 일치를 검사한다. 승인 후 이 원본을 확정 목록으로 변경할 때는 fixture와
+해당 테스트의 초안 명칭·기대값도 같은 변경에서 함께 갱신해야 pytest/CI가 통과한다.
+
+생성 전 비어 있지 않은 `subtopics` 배열과 각 행의 필수 문자열 필드를 확인한다.
+정규화 후 빈 값 및 중복 `code`는 거부한다. 이는 후보 생성기의 입력 검증이며
+BE의 원시 해시 직렬화 규칙을 변경하지 않는다.
+입력/파일 오류는 traceback 없이 stderr의 `ERROR:` 메시지와 종료 코드 2로 알린다.
+정상 비교는 0, 바이트 또는 해시 불일치는 1이다.
+
 분류 실행의 입력/설정 해시에는 최소한 원본 목록의 `version`, `status`, `include`, `exclude`,
 `formats`와 프롬프트·모델 버전 등 실제 분류 설정을 포함하고 결과에 함께 기록해야 한다.
 이 도구의 SHA-256은 BE 저장 계약 확인용이며 분류 설정 전체 해시를 대신하지 않는다.
