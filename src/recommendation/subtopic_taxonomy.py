@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 from src.recommendation.taxonomy import normalize_taxonomy_field
@@ -12,13 +13,26 @@ def canonical_subtopic_json(taxonomy: dict) -> str:
 
     version/status/include/exclude/formats는 BE 저장 해시에 포함되지 않는다.
     """
-    rows = [
-        {key: normalize_taxonomy_field(row[source]) for key, source in (
+    if not isinstance(taxonomy, dict) or not isinstance(taxonomy.get("subtopics"), list) or not taxonomy["subtopics"]:
+        raise ValueError("subtopics는 비어 있지 않은 배열이어야 합니다.")
+    rows = []
+    codes = set()
+    for index, row in enumerate(taxonomy["subtopics"]):
+        normalized = {}
+        for key, source in (
             ("code", "code"), ("parent", "parent"), ("name", "name"),
             ("description", "definition"),
-        )}
-        for row in taxonomy["subtopics"]
-    ]
+        ):
+            if not isinstance(row, dict) or not isinstance(row.get(source), str):
+                raise ValueError(f"subtopics[{index}].{source}: 문자열 필드가 필요합니다.")
+            value = normalize_taxonomy_field(row[source])
+            if not value:
+                raise ValueError(f"subtopics[{index}].{source}: 정규화 후 빈 값입니다.")
+            normalized[key] = value
+        if normalized["code"] in codes:
+            raise ValueError(f"subtopics[{index}].code: 정규화 후 중복 코드 {normalized['code']}")
+        codes.add(normalized["code"])
+        rows.append(normalized)
     return json.dumps({"subtopics": rows}, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -27,6 +41,18 @@ def subtopic_hash(taxonomy: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _run(argv)
+    except FileExistsError as error:
+        print(f"ERROR: 출력 경로가 이미 존재합니다. 새 디렉터리를 지정하세요: {error.filename}", file=sys.stderr)
+    except FileNotFoundError as error:
+        print(f"ERROR: 파일 또는 디렉터리를 찾을 수 없습니다: {error.filename}", file=sys.stderr)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+    return 2
+
+
+def _run(argv: list[str] | None = None) -> int:
     """공유 fixture 비교 또는 별도 디렉터리에 새 검토본을 출력한다."""
     import argparse
 
