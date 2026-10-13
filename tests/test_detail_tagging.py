@@ -4,8 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import httpx
+import openai
 
-from src.detail_tagging import RevisionStore, automatic_record, classify, classify_with_model, main
+from src.detail_tagging import (RevisionStore, automatic_record, candidate_schema,
+                                classify, classify_with_model, main)
 
 
 @pytest.fixture
@@ -41,11 +44,11 @@ def test_priority_uses_grounded_rows(taxonomy):
     result = classify("주제\n첫 활동\n다음 활동\n긴 주제 인용", data, taxonomy)
     assert [r["code"] for r in result["parents"]] == ["TECH", "PET", "GAME"]
     data["parents"][3]["repetition_evidence"] = ["활동"]
-    with pytest.raises(ValueError, match="unambiguous"):
-        classify("주제\n첫 활동\n다음 활동\n긴 주제 인용", data, taxonomy)
+    result = classify("주제\n첫 활동\n다음 활동\n긴 주제 인용", data, taxonomy)
+    assert [r["code"] for r in result["parents"]] == ["TECH", "GAME", "FOOD"]
 
 
-@pytest.mark.parametrize("case", ["duplicate", "parent", "unknown", "evidence", "core", "repetition"])
+@pytest.mark.parametrize("case", ["duplicate", "parent", "unknown", "evidence", "core"])
 def test_reject_invalid(taxonomy, case):
     data = payload(["FOOD"], ["FOOD_EATING"])
     if case == "duplicate":
@@ -58,8 +61,6 @@ def test_reject_invalid(taxonomy, case):
         data["topics"][0]["evidence"] = "없는 근거"
     elif case == "core":
         data["topics"][0]["core_evidence"] = "없는 근거"
-    else:
-        data["topics"][0]["repetition_evidence"] = ["주제", "주제"]
     with pytest.raises(ValueError):
         classify("주제", data, taxonomy)
 
@@ -105,6 +106,9 @@ def test_revision_and_hash_contract(tmp_path, taxonomy):
     assert len({r["revision"] for r in (auto, reviewed, rerun, corrected)}) == 4
     assert corrected["source_revision"] == reviewed["revision"]
     assert reviewed["review_status"] == "confirmed"
+    assert reviewed["model_metadata_role"] == "original_automatic_classification"
+    assert reviewed["model_version"] == auto["model_version"]
+    assert reviewed["prompt_hash"] == auto["prompt_hash"]
     assert (tmp_path / f"{reviewed['revision']}.json").read_bytes() == original_bytes
     for text, tax in (("다른 입력", taxonomy), ("주제", changed)):
         with pytest.raises(ValueError):
@@ -128,12 +132,118 @@ def test_model_path_validates_response(taxonomy):
     calls = []
     def create(**kwargs):
         calls.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(
             content=json.dumps(payload(["FOOD"], ["FOOD_EATING"]))))])
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     result = classify_with_model(client, "channel", "주제", taxonomy, "model")
     assert result["result"]["topics"][0]["code"] == "FOOD_EATING"
     assert calls[0]["model"] == "model"
     assert "include" in calls[0]["messages"][0]["content"]
+    assert calls[0]["response_format"]["type"] == "json_schema"
+    assert calls[0]["response_format"]["json_schema"]["strict"] is True
     with pytest.raises(ValueError):
         classify_with_model(client, "channel", "근거 없음", taxonomy, "model")
+
+
+def test_schema_requires_complete_objects(taxonomy):
+    schema = candidate_schema(taxonomy)
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {"parents", "topics"}
+    for axis in ("parents", "topics"):
+        item = schema["properties"][axis]["items"]
+        assert item["additionalProperties"] is False
+        assert set(item["required"]) == set(item["properties"])
+        assert item["properties"]["repetition_evidence"]["items"] == {"type": "string"}
+    assert "parent" in schema["properties"]["topics"]["items"]["required"]
+
+
+@pytest.mark.parametrize("quotes", [["활동"], ["없는 인용"], ["첫 활동", "첫 활동"],
+                                    ["첫 활동", "다음 활동", "활동"]])
+def test_bad_repetition_only_clears_auxiliary_score(taxonomy, quotes):
+    data = payload(["FOOD"], ["FOOD_EATING"])
+    data["topics"][0]["repetition_evidence"] = quotes
+    topic = classify("주제\n첫 활동\n다음 활동", data, taxonomy)["topics"][0]
+    assert topic["priority"][1] == 0
+    assert topic["repetition_warnings"]
+    assert topic["repetition_evidence"] == quotes
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), object()])
+def test_serialization_failure_leaves_no_revision(tmp_path, invalid):
+    store = RevisionStore(tmp_path)
+    original = store.save({"kind": "reviewed", "value": "confirmed"})
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    with pytest.raises((ValueError, TypeError)):
+        store.save({"candidate": invalid})
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == before
+    assert store.read(original["revision"])["value"] == "confirmed"
+
+
+def test_cli_rejects_self_consistent_unknown_parent(tmp_path, taxonomy, capsys):
+    wrong = copy.deepcopy(taxonomy)
+    wrong["parents"] = ["UNKNOWN" if p == "FOOD" else p for p in wrong["parents"]]
+    for row in wrong["subtopics"]:
+        if row["parent"] == "FOOD":
+            row["parent"] = "UNKNOWN"
+            row["code"] = row["code"].replace("FOOD_", "UNKNOWN_")
+    path = tmp_path / "taxonomy.json"
+    path.write_text(json.dumps(wrong), encoding="utf-8")
+    with pytest.raises(SystemExit) as error:
+        main([str(tmp_path / "missing.json"), "--taxonomy", str(path),
+              "--store", str(tmp_path / "store")])
+    assert error.value.code == 2
+    assert "parent list" in capsys.readouterr().err
+    assert not (tmp_path / "store").exists()
+
+
+@pytest.mark.parametrize("failure", ["key", "timeout", "400", "429"])
+def test_cli_provider_errors_are_concise(tmp_path, monkeypatch, capsys, failure):
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps({"channel_id": "channel", "text": "주제", "model_version": "model"}))
+    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    if failure == "key":
+        exception = openai.OpenAIError("private provider details")
+    elif failure == "timeout":
+        exception = openai.APITimeoutError(request=request)
+    else:
+        status = int(failure)
+        cls = openai.BadRequestError if status == 400 else openai.RateLimitError
+        exception = cls("private provider details", response=httpx.Response(status, request=request), body=None)
+    def fail(**kwargs):
+        raise exception
+    monkeypatch.setattr("src.detail_tagging.OpenAI", fail)
+    with pytest.raises(SystemExit) as error:
+        main([str(source), "--store", str(tmp_path / "store"), "--tag-llm"])
+    assert error.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "ERROR: OpenAI" in stderr
+    assert "Traceback" not in stderr
+    assert "private provider details" not in stderr
+    assert not (tmp_path / "store").exists()
+
+
+@pytest.mark.parametrize("finish,refusal,content", [
+    ("length", None, '{"parents":'), ("stop", "refused", None), ("stop", None, None)])
+def test_model_refusal_and_incomplete_output(taxonomy, finish, refusal, content):
+    def create(**kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason=finish,
+            message=SimpleNamespace(content=content, refusal=refusal))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    with pytest.raises(ValueError):
+        classify_with_model(client, "channel", "주제", taxonomy, "model")
+
+
+def test_real_sdk_serializes_strict_schema(taxonomy):
+    captured = []
+    def handler(request):
+        body = json.loads(request.content)
+        captured.append(body)
+        assert body["response_format"]["json_schema"]["schema"] == candidate_schema(taxonomy)
+        return httpx.Response(200, json={"id": "test", "object": "chat.completion", "created": 0,
+            "model": "test-model", "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                "role": "assistant", "content": '{"parents":[],"topics":[]}'}}]})
+    with openai.OpenAI(api_key="test-key", max_retries=0,
+                       http_client=httpx.Client(transport=httpx.MockTransport(handler))) as client:
+        record = classify_with_model(client, "channel", "", taxonomy, "test-model")
+    assert len(captured) == 1
+    assert record["result"]["unclassified"]
