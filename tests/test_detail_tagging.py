@@ -138,6 +138,9 @@ def test_model_path_validates_response(taxonomy):
     result = classify_with_model(client, "channel", "주제", taxonomy, "model")
     assert result["result"]["topics"][0]["code"] == "FOOD_EATING"
     assert calls[0]["model"] == "model"
+    from src.detail_tagging import digest, PROMPT_VERSION
+    assert result["prompt_hash"] == digest(calls[0]["messages"][0]["content"])
+    assert result["prompt_version"] == PROMPT_VERSION == "grounded-detail-candidates-v3"
     assert "include" in calls[0]["messages"][0]["content"]
     assert calls[0]["response_format"]["type"] == "json_schema"
     assert calls[0]["response_format"]["json_schema"]["strict"] is True
@@ -247,3 +250,23 @@ def test_real_sdk_serializes_strict_schema(taxonomy):
         record = classify_with_model(client, "channel", "", taxonomy, "test-model")
     assert len(captured) == 1
     assert record["result"]["unclassified"]
+
+
+@pytest.mark.parametrize("quote", ['"케이크 제작"', "케이크/빵", "케이크...굽기",
+                                  "cake making", "베이킹을 합니다", "", "   "])
+def test_v3_rejects_noncontiguous_evidence(taxonomy, quote):
+    with pytest.raises(ValueError, match="exact source quote"):
+        classify("케이크 제작과 빵 굽기", {"parents": [candidate("FOOD", quote)], "topics": []}, taxonomy)
+
+
+@pytest.mark.parametrize("axis", ["parents", "topics"])
+def test_v3_duplicates_in_each_array(taxonomy, axis):
+    data = payload(["FOOD"], ["FOOD_EATING"])
+    data[axis] *= 2
+    with pytest.raises(ValueError, match="Duplicate"):
+        classify("주제", data, taxonomy)
+
+
+def test_v3_short_grounded_and_ungrounded(taxonomy):
+    assert not classify("먹방", {"parents": [candidate("FOOD", "먹방")], "topics": []}, taxonomy)["unclassified"]
+    assert classify("안녕", payload([], []), taxonomy)["unclassified"]
