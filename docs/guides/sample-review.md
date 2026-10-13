@@ -63,6 +63,8 @@ legacy 모드에서는 캐시에 남은 중복·상한 위반을 진단 대상�
 | 집계 revision `reviews_file_sha256` | CSV 원본 바이트 SHA-256; `sha256sum` 또는 `Get-FileHash`와 비교 가능 |
 
 manifest `hash_scheme`, revision `reviews_hash_scheme`에도 형식을 남긴다.
+집계 시 CSV 원본 바이트는 한 번만 읽고, 같은 스냅샷으로 행 파싱·정규화 텍스트 해시·
+원본 바이트 SHA-256을 생성한다. 읽은 뒤 파일이 수정되어도 보고서와 저장 revision은 같은 입력을 가리킨다.
 
 ## 사람 검수
 
@@ -108,6 +110,8 @@ CSV의 누락·중복·추가 헤더, 짧은 행의 누락 셀과 초과 셀을 
 - `revisions/`: 기존 RevisionStore로 저장한 집계 revision. 검수표 스냅샷과 해시도 보존한다.
 
 원문과 인용이 포함되는 산출물은 Git에서 제외되는 `results/`에 보관한다.
+임시 디렉터리를 이름 변경해 게시하므로 POSIX 환경에서는 기본 `0700` 권한이 유지된다.
+Windows 접근 권한은 해당 환경의 ACL을 따른다. 팀 공유 시 접근 권한을 확인한다.
 **검수표·manifest·private_inputs·revision을 공개 이슈/로그에 붙이지 않는다.**
 보고서의 사람이 입력한 reason에도 개인정보나 원문을 쓰지 않고, 공유 전 내용을 확인한다.
 미검수 0개라도 부족한 분야나 경계 유형은 해소되지 않으며 대표 정확도 추정으로 사용하지 않는다.
