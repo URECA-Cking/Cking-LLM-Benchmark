@@ -22,6 +22,8 @@ M4는 소개글 유사도에 LLM이 분류한 상위 분야 일치 보정을 더
 
 서비스 적용 코드는 [단일 크리에이터 추천 후보 생성](docs/guides/service-recommendation.md)과
 [전체 크리에이터 배치 생성·적재](docs/guides/batch-recommendation.md)에서 입력·출력 계약과 실행 방법을 확인합니다.
+[세부 태그 분류·검수 버전](docs/guides/detail-tagging.md)은 상위 3개·상위당 세부 3개 정책,
+근거 우선순위와 반례, 자동 결과와 검수 확정본의 별도 버전 저장을 설명합니다.
 [일일 통합 배치](docs/guides/daily-recommendation.md)는 최신 manifest의 변경을 감지하고 두 추천 작업을 함께 재개·적재합니다.
 [실제 BE E2E](docs/guides/recommendation-e2e.md)는 전용 MySQL·Redis에서 HTTP 적재·복귀·개인화·인증 계약을 검증합니다.
 관심 분야 기반 추천의 오프라인 입력은 [17개 분야별 M3 Top-20 생성·적재](docs/guides/interest-recommendation.md)를 참고합니다.
