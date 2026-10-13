@@ -126,6 +126,9 @@ python -m src.detail_tagging_compare --summary results/issue62-v3-regression-new
 검증 성공 시 중단한다. 모든 시도에 요청 조건, 원본 응답(usage 포함), 검증 오류,
 시도 번호와 UTC 시각을 기록한다. 공급자 오류는 기록 후 실행을 중단한다.
 해당 오류도 한 시도로 보존하므로 실제 모델 비교에는 공급자 오류 없는 새 실행 경로를 쓴다.
+호출 전 설정 불일치는 별도 `HarnessConfigurationError`로 즉시 중단한다.
+API를 호출하지 않은 이 오류는 `harness-errors/`에 진단만 남기며 모델 검증 실패나
+시도 예산으로 집계하지 않는다. 로컬 설정을 복구하면 같은 시도 번호로 재개한다.
 
 재개 시 입력 전체/기준/모델/정책/프롬프트 버전·해시/스키마 해시/시도 상한을 대조한다.
 SDK 재시도·timeout은 주입된 클라이언트에서 읽고 temperature는 실제 호출에 전달한다.
