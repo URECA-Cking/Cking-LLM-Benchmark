@@ -78,9 +78,9 @@ include/exclude/formats까지 포함한 전체 기준 SHA-256, 정책/모델/프
 프롬프트/출력 스키마 해시, 원본 후보, 선택 태그·근거·우선순위, 검수 상태와 UTC 저장 시각을 기록한다.
 반복 점수 완화와 Structured Outputs 전환은 정책 `detail-limit-v2`, 프롬프트
 `grounded-detail-candidates-v2`로 구분한다. 기존 revision은 변경하지 않는다.
-Issue #62는 프롬프트만 `grounded-detail-candidates-v3`으로 변경한다. 출력 스키마와
-정책은 유지한다. JSON 파싱 후 한 연속 구간인 인용만 허용하고 장식 따옴표,
-연결/생략/번역/재서술을 금지한다. 근거 없는 후보는 생략하며 짧은 입력도 근거로 판단한다.
+Issue #62의 `grounded-detail-candidates-v3`은 실험용 선택지다. 리뷰 후 기본값은
+기존 `grounded-detail-candidates-v2`로 유지한다. v3의 출력 스키마와 정책은 동일하며
+인용 금지 예시와 후보 생략 지시를 추가했으나, 미분류 증가로 기본 채택을 보류했다.
 모델 버전은 호출자가 실제 사용한 스냅샷을 입력한다. 원문/근거 파일은 Git 제외
 `results/` 아래에 저장한다. 순위 변경 및 BE 저장은 후속 단계다.
 
@@ -117,8 +117,8 @@ Issue #62는 프롬프트만 `grounded-detail-candidates-v3`으로 변경한다.
 ## Issue #62 버전 분리 재평가
 
 ```powershell
-python -m src.detail_tagging_batch --inputs results/issue58-review-sample-v2/private_inputs.json --output results/issue62-v3-regression --tag-llm
-python -m src.detail_tagging_compare --summary results/issue62-v3-regression/summary-<ID>.json --baseline results/classify50-20261013 --output results/issue62-comparison.private.json
+python -m src.detail_tagging_batch --inputs results/issue58-review-sample-v2/private_inputs.json --output results/issue62-v3-regression-new --prompt-version grounded-detail-candidates-v3 --tag-llm
+python -m src.detail_tagging_compare --summary results/issue62-v3-regression-new/summary-<ID>.json --baseline results/baseline/summary-<ID>.json --output results/issue62-comparison.private.json
 ```
 
 첫 명령은 원문을 외부 API로 전송하며 비용이 발생한다. 모델은 기존과 같은
@@ -128,16 +128,38 @@ python -m src.detail_tagging_compare --summary results/issue62-v3-regression/sum
 해당 오류도 한 시도로 보존하므로 실제 모델 비교에는 공급자 오류 없는 새 실행 경로를 쓴다.
 
 재개 시 입력 전체/기준/모델/정책/프롬프트 버전·해시/스키마 해시/시도 상한을 대조한다.
+SDK 재시도·timeout은 주입된 클라이언트에서 읽고 temperature는 실제 호출에 전달한다.
+저장된 요청의 temperature·모델·프롬프트·스키마도 재개 시 검사한다. 숫자 초 단위
+timeout을 가진 클라이언트를 사용한다. 이전 실행에 timeout 기록이 없으면 새 폴더로 실행한다.
 기존 v2처럼 조건 manifest가 없는 비어 있지 않은 폴더는 거부한다. 이전 자동·검수
 revision과 인덱스는 그대로 두고 새로운 UUID revision 및 summary 파일만 생성한다.
 같은 폴더를 동시에 여러 프로세스에서 실행하지 않는다.
+시도 상한은 실행 조건이므로 소진 후 상한만 늘려 같은 폴더를 재개할 수 없다.
+JSON은 동일 디렉터리 임시 파일을 flush/fsync한 뒤 Windows에서는 배타적 rename,
+POSIX에서는 배타적 hard link로 게시한다. POSIX는 hard link를 지원하는 로컬
+파일시스템이 필요하며 양쪽 모두 기존 파일은 교체하지 않는다.
+revision 저장 직후 시도 기록 전에 프로세스가 종료되면 고아 revision이 남고 재개 시
+호출이 반복될 수 있다. 자동 채택하지 않으며 모든 원본을 보존해 수동 확인한다.
 
 로컬 `results/classify50-20261013/run_batch.py`도 추적되는 새 모듈을 호출하도록
 교체했다. 이전 코드는 `run_batch.v2-preserved.py`로 보존했다. 로컬 파일은 Git 제외이므로
 다른 체크아웃에서는 위 모듈 명령을 사용한다. 기존 v2 폴더를 출력으로 지정하지 않는다.
+로컬 wrapper도 v3을 실행하려면 `--prompt-version grounded-detail-candidates-v3`을
+명시해야 한다. 기본값 v2로 기존 v3 폴더를 재개하면 조건 불일치로 거부한다.
 
-비교 보고서는 v2 첫 시도 36/50, 최종 실패 7개의 첫 시도/재시도 이후 통과,
-기존 성공 43개 중 재시도 성공 7개 표시와 상위/세부 집합 변경을 분리한다.
+비교 스크립트의 baseline은 새 배치와 같은 summary JSON이다. 첫 시도 수는 rows에서
+계산하며 특정 로컬 파일명이나 36이라는 상수에 의존하지 않는다. 원문 없이 만든
+가짜 baseline·신규 실행의 테스트로 다른 체크아웃에서도 실행을 검증한다.
+summary의 conditions에는 inputs_hash, criteria_hash, model_version, policy_version,
+prompt_version, prompt_hash, output_schema_hash, temperature, sdk_max_retries,
+timeout_seconds가 필요하다. rows의 각 항목에는 channel_id, first_pass(bool),
+passed(bool), revision(성공 ID 또는 null)이 필요하고 revision 파일은 summary와 같은
+폴더의 revisions/에 둔다. 양쪽 채널 집합과 호출 조건을 대조한다.
+기존 로컬 v2 결과를 가져오려면 실제 실행 근거를 확인해 이 형식으로 별도 export한다.
+최초 실패 목록만으로 temperature·SDK 재시도·timeout이 검증됐다고 가정하지 않는다.
+누락된 조건이나 다른 호출 조건은 비교를 거부한다. 기존 v2/v3 보고서는 당시 로컬
+스크립트와 기록에 의존한 역사적 집계이며, 새 엄격 비교를 통과한 결과로 소급하지 않는다.
+최종 실패 집단의 첫 시도/재시도 통과와 기존 재시도 성공 집단, 태그 집합 변경을 분리한다.
 태그 완전 일치는 합격 기준이 아니다. 성공 revision만 선택한 비교에는 선택 편향이
 있으므로 실패를 포함한 모든 attempts도 확인한다. 형식 통과·사람 의미 검수·추천
 순위 개선은 별개이며 이번 작업으로 후자의 두 가지를 입증하지 않는다.
