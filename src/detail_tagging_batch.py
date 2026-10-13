@@ -14,6 +14,10 @@ from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, EXPERIMENTAL_PRO
                                build_prompt, candidate_schema, classify_with_model, digest)
 
 
+class HarnessConfigurationError(RuntimeError):
+    """Local request configuration drift detected before any provider call."""
+
+
 def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -110,7 +114,7 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
                     if (kwargs["temperature"] != contract["temperature"]
                             or client.max_retries != contract["sdk_max_retries"]
                             or client.timeout != contract["timeout_seconds"]):
-                        raise ValueError("Actual call conditions differ from manifest")
+                        raise HarnessConfigurationError("Actual call conditions differ from manifest")
                     response = client.chat.completions.create(**kwargs)
                     entry["response"] = response.model_dump()
                     return response
@@ -120,6 +124,12 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
                     record = classify_with_model(proxy, channel, row["text"], taxonomy, model,
                                                  prompt_version, temperature)
                     entry.update(status="passed", revision=store.save(record)["revision"])
+                except HarnessConfigurationError as error:
+                    # No provider call occurred: keep diagnostics outside the attempt budget.
+                    entry.update(status="harness_error", error=str(error), provider_called=False)
+                    entry["next_attempt"] = entry.pop("attempt")
+                    write_new(output / "harness-errors" / f"{uuid4().hex}.json", entry)
+                    raise
                 except ValueError as error:
                     entry.update(status="validation_error", error=str(error))
                 except Exception as error:
