@@ -354,3 +354,47 @@ def test_hash_domains_are_explicit(sample):
     assert len({module.digest(taxonomy), revision_digest(taxonomy), subtopic_hash(taxonomy)}) == 3
     taxonomy, records = sample
     assert prepare(records, taxonomy)["manifest"]["hash_scheme"].startswith("flow_eval.digest:")
+
+
+@pytest.mark.parametrize("encoding,newline", [("utf-8-sig", "\r\n"), ("utf-8", "\n"), ("utf-8-sig", "\r")])
+def test_aggregate_uses_one_csv_snapshot_despite_later_edits(legacy_cache, monkeypatch, encoding, newline):
+    import io
+
+    root, _, _ = legacy_cache
+    sample = root / "sample"
+    module.main(["prepare", "--subtopic-dir", str(root), "--output-dir", str(sample)])
+    path = sample / "reviews.csv"
+    rows = module.read_reviews(path)
+    # Include a multiline field to exercise CSV parsing and newline normalization.
+    rows[0].update(status="undecided", reviewer="human", reason=f"기준 확인{newline}추가 논의")
+    with io.StringIO(newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=module.FIELDS, lineterminator=newline)
+        writer.writeheader()
+        writer.writerows(rows)
+        raw = stream.getvalue().encode(encoding)
+    path.write_bytes(raw)
+    expected_text_hash = module.digest(path.read_text(encoding="utf-8-sig"))
+    original_read = Path.read_bytes
+    reads = []
+
+    def read_then_edit(self):
+        value = original_read(self)
+        if self == path:
+            reads.append(self)
+            self.write_bytes(b"changed after the snapshot")
+        return value
+
+    output = root / "report"
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_bytes", read_then_edit)
+        module.main(["aggregate", "--manifest", str(sample / "manifest.json"),
+                     "--reviews", str(path), "--output-dir", str(output)])
+    assert reads == [path]
+    assert path.read_bytes() != raw
+    report = module.read_json(output / "report.json")
+    revision = module.read_json(next((output / "revisions").glob("*.json")))
+    assert report["counts"] == {"undecided": 1}
+    assert revision["report"] == report
+    assert revision["reviews"] == rows
+    assert revision["reviews_hash"] == expected_text_hash
+    assert revision["reviews_file_sha256"] == hashlib.sha256(raw).hexdigest()
