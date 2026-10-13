@@ -1,6 +1,7 @@
 """Private, immutable per-attempt detail tagging regression runs."""
 import argparse
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -9,7 +10,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, RevisionStore,
+from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION, RevisionStore,
                                build_prompt, candidate_schema, classify_with_model, digest)
 
 
@@ -17,29 +18,52 @@ def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def _publish(temporary, path):
+    if os.name == "nt":
+        # Windows rename fails if the destination exists; POSIX rename replaces it.
+        os.rename(temporary, path)
+    else:
+        os.link(temporary, path)
+
+
 def write_new(path, value):
     serialized = json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8") as stream:
-        stream.write(serialized)
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as stream:
+            stream.write(serialized)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _publish(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
-def conditions(inputs, taxonomy, model):
+def conditions(inputs, taxonomy, model, client, prompt_version, temperature):
+    timeout = client.timeout
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        raise ValueError("Batch client timeout must be positive numeric seconds")
+    if not isinstance(client.max_retries, int) or client.max_retries < 0:
+        raise ValueError("Invalid SDK retry count")
     return {"inputs_hash": digest(inputs), "criteria_hash": digest(taxonomy),
             "model_version": model, "policy_version": POLICY_VERSION,
-            "prompt_version": PROMPT_VERSION, "prompt_hash": digest(build_prompt(taxonomy)),
+            "prompt_version": prompt_version, "prompt_hash": digest(build_prompt(taxonomy, prompt_version)),
             "output_schema_hash": digest(candidate_schema(taxonomy)),
-            "temperature": 0, "sdk_max_retries": 0}
+            "temperature": temperature, "sdk_max_retries": client.max_retries,
+            "timeout_seconds": timeout}
 
 
-def run_batch(client, inputs, taxonomy, model, output, max_attempts=3):
+def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
+              prompt_version=PROMPT_VERSION, temperature=0):
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
     ids = [r["channel_id"] for r in inputs]
     if len(set(ids)) != len(ids):
         raise ValueError("Duplicate input channel")
     output = Path(output)
-    contract = {**conditions(inputs, taxonomy, model), "max_attempts": max_attempts}
+    contract = {**conditions(inputs, taxonomy, model, client, prompt_version, temperature),
+                "max_attempts": max_attempts}
     manifest = output / "run-conditions.json"
     if manifest.exists():
         if read(manifest) != contract:
@@ -59,13 +83,22 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3):
         for entry in history:
             if entry["conditions"] != contract or entry["input_hash"] != digest(row["text"]):
                 raise ValueError("Attempt provenance mismatch")
+            request = entry.get("request", {})
+            if (request.get("temperature") != contract["temperature"]
+                    or request.get("model") != model
+                    or request.get("messages") != [
+                        {"role": "system", "content": build_prompt(taxonomy, prompt_version)},
+                        {"role": "user", "content": json.dumps({"creator": row["text"]}, ensure_ascii=False)}]
+                    or request.get("response_format", {}).get("json_schema", {}).get("schema") != candidate_schema(taxonomy)):
+                raise ValueError("Attempt request provenance mismatch")
             if entry.get("revision"):
                 record = store.read(entry["revision"])
                 for key in ("criteria_hash", "model_version", "policy_version",
                             "prompt_version", "prompt_hash", "output_schema_hash"):
                     if record[key] != contract[key]:
                         raise ValueError("Revision provenance mismatch")
-                if record["kind"] != "automatic" or record["input_hash"] != digest(row["text"]):
+                if (record["kind"] != "automatic" or record["input_hash"] != digest(row["text"])
+                        or record["channel_id"] != channel):
                     raise ValueError("Invalid automatic revision")
         if not any(e["status"] == "passed" for e in history):
             for number in range(len(history) + 1, max_attempts + 1):
@@ -74,13 +107,18 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3):
                          "started_at": datetime.now(timezone.utc).isoformat()}
                 def capture(**kwargs):
                     entry["request"] = kwargs
+                    if (kwargs["temperature"] != contract["temperature"]
+                            or client.max_retries != contract["sdk_max_retries"]
+                            or client.timeout != contract["timeout_seconds"]):
+                        raise ValueError("Actual call conditions differ from manifest")
                     response = client.chat.completions.create(**kwargs)
                     entry["response"] = response.model_dump()
                     return response
                 proxy = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=capture)))
                 provider_failure = False
                 try:
-                    record = classify_with_model(proxy, channel, row["text"], taxonomy, model)
+                    record = classify_with_model(proxy, channel, row["text"], taxonomy, model,
+                                                 prompt_version, temperature)
                     entry.update(status="passed", revision=store.save(record)["revision"])
                 except ValueError as error:
                     entry.update(status="validation_error", error=str(error))
@@ -113,11 +151,14 @@ def main(argv=None):
     parser.add_argument("--model", default="gpt-5.4-nano-2026-03-17")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--prompt-version", choices=[PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION],
+                        default=PROMPT_VERSION)
     parser.add_argument("--tag-llm", action="store_true", required=True)
     args = parser.parse_args(argv)
     load_dotenv()
     result = run_batch(OpenAI(timeout=60, max_retries=0), read(args.inputs),
-                       read(args.taxonomy), args.model, args.output, args.max_attempts)
+                       read(args.taxonomy), args.model, args.output, args.max_attempts,
+                       prompt_version=args.prompt_version)
     print(json.dumps({k: result[k] for k in ("total", "first_pass", "passed_after_retries")}))
     return 0 if result["passed_after_retries"] == result["total"] else 1
 

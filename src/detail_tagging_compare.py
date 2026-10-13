@@ -3,22 +3,52 @@ import argparse
 from pathlib import Path
 
 from src.detail_tagging_batch import read, write_new
+from src.detail_tagging import RevisionStore
+
+
+def load_summary(path):
+    value = read(path)
+    rows = value["rows"]
+    ids = [r["channel_id"] for r in rows]
+    if len(set(ids)) != len(ids):
+        raise ValueError("Duplicate comparison channel")
+    if any(type(r["first_pass"]) is not bool or type(r["passed"]) is not bool
+           or (r["first_pass"] and not r["passed"])
+           or bool(r["revision"]) != r["passed"] for r in rows):
+        raise ValueError("Invalid comparison row")
+    return value, {r["channel_id"]: r for r in rows}
 
 
 def compare(summary, baseline):
     baseline = Path(baseline)
-    index = read(baseline / "revision-index.json")
-    first_failures = {r["channel_id"] for r in read(baseline / "first-new-key-summary.json")["failures"]}
+    old_report, old_rows = load_summary(baseline)
+    report, new_rows = load_summary(summary)
+    if set(old_rows) != set(new_rows):
+        raise ValueError("Comparison input channel sets differ")
+    for key in ("inputs_hash", "criteria_hash", "model_version", "policy_version",
+                "output_schema_hash", "temperature", "sdk_max_retries", "timeout_seconds"):
+        if key not in old_report["conditions"] or key not in report["conditions"]:
+            raise ValueError("Unverified comparison condition: " + key)
+        if old_report["conditions"][key] != report["conditions"][key]:
+            raise ValueError("Comparison conditions differ: " + key)
+    old_store = RevisionStore(baseline.parent / "revisions")
+    new_store = RevisionStore(Path(summary).parent / "revisions")
     rows = []
-    new_store = Path(summary).parent / "revisions"
-    report = read(summary)
     for row in report["rows"]:
         cid = row["channel_id"]
-        item = {**row, "v2_final_failure": cid not in index,
-                "v2_retry_success": cid in index and cid in first_failures}
-        if cid in index and row["revision"]:
-            old = read(baseline / index[cid])
-            new = read(new_store / (row["revision"] + ".json"))
+        previous = old_rows[cid]
+        item = {**row, "v2_final_failure": not previous["passed"],
+                "v2_retry_success": previous["passed"] and not previous["first_pass"]}
+        if previous["revision"] and row["revision"]:
+            old = old_store.read(previous["revision"])
+            new = new_store.read(row["revision"])
+            for record, source in ((old, old_report), (new, report)):
+                if record["channel_id"] != cid or record["kind"] != "automatic":
+                    raise ValueError("Invalid comparison revision")
+                for key in ("criteria_hash", "model_version", "policy_version", "output_schema_hash",
+                            "prompt_version", "prompt_hash"):
+                    if record[key] != source["conditions"][key]:
+                        raise ValueError("Revision conditions differ: " + key)
             for key in ("input_hash", "criteria_hash", "model_version", "policy_version", "output_schema_hash"):
                 if old[key] != new[key]:
                     raise ValueError("Comparison conditions differ: " + key)
@@ -28,8 +58,9 @@ def compare(summary, baseline):
                 item[axis] = {"before": before, "after": after, "equal": before == after}
         rows.append(item)
     failures = [r for r in rows if r["v2_final_failure"]]
-    return {"total": len(rows), "v2_first_pass": 36, "v3_first_pass": report["first_pass"],
-            "v3_after_retries": report["passed_after_retries"],
+    return {"total": len(rows), "v2_first_pass": sum(r["first_pass"] for r in old_rows.values()),
+            "v3_first_pass": sum(r["first_pass"] for r in new_rows.values()),
+            "v3_after_retries": sum(r["passed"] for r in new_rows.values()),
             "v2_final_failure_count": len(failures),
             "v2_final_failure_v3_first_pass": sum(r["first_pass"] for r in failures),
             "v2_final_failure_v3_after_retries": sum(r["passed"] for r in failures),
