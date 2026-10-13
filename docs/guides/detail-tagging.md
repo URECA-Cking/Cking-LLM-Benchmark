@@ -78,6 +78,9 @@ include/exclude/formats까지 포함한 전체 기준 SHA-256, 정책/모델/프
 프롬프트/출력 스키마 해시, 원본 후보, 선택 태그·근거·우선순위, 검수 상태와 UTC 저장 시각을 기록한다.
 반복 점수 완화와 Structured Outputs 전환은 정책 `detail-limit-v2`, 프롬프트
 `grounded-detail-candidates-v2`로 구분한다. 기존 revision은 변경하지 않는다.
+Issue #62는 프롬프트만 `grounded-detail-candidates-v3`으로 변경한다. 출력 스키마와
+정책은 유지한다. JSON 파싱 후 한 연속 구간인 인용만 허용하고 장식 따옴표,
+연결/생략/번역/재서술을 금지한다. 근거 없는 후보는 생략하며 짧은 입력도 근거로 판단한다.
 모델 버전은 호출자가 실제 사용한 스냅샷을 입력한다. 원문/근거 파일은 Git 제외
 `results/` 아래에 저장한다. 순위 변경 및 BE 저장은 후속 단계다.
 
@@ -110,3 +113,35 @@ include/exclude/formats까지 포함한 전체 기준 SHA-256, 정책/모델/프
 - 전체 테스트는 기존 Windows 미지원 `resource` 모듈로 수집 실패한 이력이 있어
   전체 통과로 주장하지 않는다.
 - API 형식 근거: [OpenAI Structured Outputs 공식 문서](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).
+
+## Issue #62 버전 분리 재평가
+
+```powershell
+python -m src.detail_tagging_batch --inputs results/issue58-review-sample-v2/private_inputs.json --output results/issue62-v3-regression --tag-llm
+python -m src.detail_tagging_compare --summary results/issue62-v3-regression/summary-<ID>.json --baseline results/classify50-20261013 --output results/issue62-comparison.private.json
+```
+
+첫 명령은 원문을 외부 API로 전송하며 비용이 발생한다. 모델은 기존과 같은
+`gpt-5.4-nano-2026-03-17`, temperature=0, SDK 재시도=0이다. 채널별 최대 3회이며
+검증 성공 시 중단한다. 모든 시도에 요청 조건, 원본 응답(usage 포함), 검증 오류,
+시도 번호와 UTC 시각을 기록한다. 공급자 오류는 기록 후 실행을 중단한다.
+해당 오류도 한 시도로 보존하므로 실제 모델 비교에는 공급자 오류 없는 새 실행 경로를 쓴다.
+
+재개 시 입력 전체/기준/모델/정책/프롬프트 버전·해시/스키마 해시/시도 상한을 대조한다.
+기존 v2처럼 조건 manifest가 없는 비어 있지 않은 폴더는 거부한다. 이전 자동·검수
+revision과 인덱스는 그대로 두고 새로운 UUID revision 및 summary 파일만 생성한다.
+같은 폴더를 동시에 여러 프로세스에서 실행하지 않는다.
+
+로컬 `results/classify50-20261013/run_batch.py`도 추적되는 새 모듈을 호출하도록
+교체했다. 이전 코드는 `run_batch.v2-preserved.py`로 보존했다. 로컬 파일은 Git 제외이므로
+다른 체크아웃에서는 위 모듈 명령을 사용한다. 기존 v2 폴더를 출력으로 지정하지 않는다.
+
+비교 보고서는 v2 첫 시도 36/50, 최종 실패 7개의 첫 시도/재시도 이후 통과,
+기존 성공 43개 중 재시도 성공 7개 표시와 상위/세부 집합 변경을 분리한다.
+태그 완전 일치는 합격 기준이 아니다. 성공 revision만 선택한 비교에는 선택 편향이
+있으므로 실패를 포함한 모든 attempts도 확인한다. 형식 통과·사람 의미 검수·추천
+순위 개선은 별개이며 이번 작업으로 후자의 두 가지를 입증하지 않는다.
+
+2026-10-13 실제 50개 재평가는 외부 전송 승인 검토에서 거절되어 미완료다.
+제한 환경의 최초 호출은 연결 오류로 중단했으며 `results/issue62-v3/`에 보존했다.
+v3 통과율과 태그 변경의 실제 수치는 아직 없다.
