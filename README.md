@@ -66,3 +66,5 @@ tasks/             작업 계획과 진행 기록
 ```
 
 기존 python -m src.final_eval_score 등의 명령도 계속 사용할 수 있습니다.
+
+세부 태그 50개 고정 표본과 사람 검수 집계는 [실행 안내](docs/guides/sample-review.md)를 참고하세요.
