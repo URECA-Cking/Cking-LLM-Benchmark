@@ -138,6 +138,9 @@ def test_model_path_validates_response(taxonomy):
     result = classify_with_model(client, "channel", "주제", taxonomy, "model")
     assert result["result"]["topics"][0]["code"] == "FOOD_EATING"
     assert calls[0]["model"] == "model"
+    from src.detail_tagging import digest, PROMPT_VERSION
+    assert result["prompt_hash"] == digest(calls[0]["messages"][0]["content"])
+    assert result["prompt_version"] == PROMPT_VERSION == "grounded-detail-candidates-v2"
     assert "include" in calls[0]["messages"][0]["content"]
     assert calls[0]["response_format"]["type"] == "json_schema"
     assert calls[0]["response_format"]["json_schema"]["strict"] is True
@@ -247,3 +250,46 @@ def test_real_sdk_serializes_strict_schema(taxonomy):
         record = classify_with_model(client, "channel", "", taxonomy, "test-model")
     assert len(captured) == 1
     assert record["result"]["unclassified"]
+
+
+@pytest.mark.parametrize("quote", ['"케이크 제작"', "케이크/빵", "케이크...굽기",
+                                  "cake making", "베이킹을 합니다", "", "   "])
+def test_v3_rejects_noncontiguous_evidence(taxonomy, quote):
+    with pytest.raises(ValueError, match="exact source quote"):
+        classify("케이크 제작과 빵 굽기", {"parents": [candidate("FOOD", quote)], "topics": []}, taxonomy)
+
+
+@pytest.mark.parametrize("axis", ["parents", "topics"])
+def test_v3_duplicates_in_each_array(taxonomy, axis):
+    data = payload(["FOOD"], ["FOOD_EATING"])
+    data[axis] *= 2
+    with pytest.raises(ValueError, match="Duplicate"):
+        classify("주제", data, taxonomy)
+
+
+def test_v3_short_grounded_and_ungrounded(taxonomy):
+    assert not classify("먹방", {"parents": [candidate("FOOD", "먹방")], "topics": []}, taxonomy)["unclassified"]
+    assert classify("안녕", payload([], []), taxonomy)["unclassified"]
+
+
+def test_default_prompt_is_exact_original_v2(taxonomy):
+    from src.detail_tagging import build_prompt, digest
+    # Frozen original v2 prompt hash for the repository's taxonomy fixture.
+    assert digest(build_prompt(taxonomy)) == "75c0d36b571201cf8b7245441f652f50ab28c689476181a8ab1a222a73337386"
+    experimental = build_prompt(taxonomy, "grounded-detail-candidates-v3")
+    assert "후보 자체를 생략" in experimental
+    assert digest(experimental) != digest(build_prompt(taxonomy))
+
+
+def test_explicit_experiment_records_actual_prompt(taxonomy):
+    from src.detail_tagging import digest
+    calls = []
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop",
+            message=SimpleNamespace(content='{"parents":[],"topics":[]}'))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    record = classify_with_model(client, "channel", "", taxonomy, "model",
+                                 prompt_version="grounded-detail-candidates-v3")
+    assert record["prompt_version"] == "grounded-detail-candidates-v3"
+    assert record["prompt_hash"] == digest(calls[0]["messages"][0]["content"])
