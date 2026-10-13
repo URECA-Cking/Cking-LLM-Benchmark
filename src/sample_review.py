@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 from collections import Counter
 from contextlib import contextmanager
@@ -177,7 +178,14 @@ def validate_review_rows(rows):
 
 
 def read_reviews(path):
-    with path.open(encoding="utf-8-sig", newline="") as stream:
+    return read_review_snapshot(path)["reviews"]
+
+
+def read_review_snapshot(path):
+    """Parse and fingerprint the same bytes, even if the source later changes."""
+    raw = path.read_bytes()
+    text = raw.decode("utf-8-sig")
+    with io.StringIO(text, newline="") as stream:
         reader = csv.DictReader(stream, strict=True)
         try:
             header = reader.fieldnames
@@ -187,7 +195,11 @@ def read_reviews(path):
         except csv.Error as error:
             raise ValueError(f"CSV line {reader.line_num}: malformed CSV") from error
     validate_review_rows(rows)
-    return rows
+    # Preserve read_text's universal-newline normalization for the legacy hash.
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return {"reviews": rows, "reviews_hash": digest(normalized),
+            "reviews_hash_scheme": "flow_eval.digest:normalized-text-without-bom",
+            "reviews_file_sha256": hashlib.sha256(raw).hexdigest()}
 
 
 @contextmanager
@@ -279,7 +291,8 @@ def main(argv=None):
     else:
         if args.manifest is None or args.reviews is None:
             parser.error("aggregate requires --manifest and --reviews")
-        reviews = read_reviews(args.reviews)
+        snapshot = read_review_snapshot(args.reviews)
+        reviews = snapshot["reviews"]
         report = aggregate(read_json(args.manifest), reviews, taxonomy)
         with new_artifacts(args.output_dir) as output:
             (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -287,9 +300,7 @@ def main(argv=None):
                 json.dumps(report, ensure_ascii=False, indent=2) + "\n```\n", encoding="utf-8")
             RevisionStore(output / "revisions").save({"kind": "sample_review_aggregate",
                 "manifest_hash": report["manifest_hash"], "report": report,
-                "reviews": reviews, "reviews_hash": digest(args.reviews.read_text(encoding="utf-8-sig")),
-                "reviews_hash_scheme": "flow_eval.digest:normalized-text-without-bom",
-                "reviews_file_sha256": hashlib.sha256(args.reviews.read_bytes()).hexdigest()})
+                **snapshot})
     print("Artifacts saved locally; human review and schedule decisions remain separate.")
 
 
