@@ -182,3 +182,45 @@ def test_comparison_requires_matching_verified_settings(tmp_path, taxonomy, key)
     old.write_text(json.dumps(value), encoding="utf-8")
     with pytest.raises(ValueError, match="Unverified"):
         compare(new, old)
+
+
+@pytest.mark.parametrize("drift", ["temperature", "max_retries", "timeout"])
+def test_harness_drift_aborts_without_call_or_budget_use(tmp_path, taxonomy, monkeypatch, drift):
+    import src.detail_tagging_batch as batch
+    original = batch.classify_with_model
+    api = client([{"parents": [], "topics": []}])
+    calls = []
+    provider_create = api.chat.completions.create
+    def count_call(**kwargs):
+        calls.append(kwargs)
+        return provider_create(**kwargs)
+    api.chat.completions.create = count_call
+
+    def changed_call(proxy, channel, text, tax, model, prompt_version, temperature):
+        if drift == "temperature":
+            temperature = 1
+        else:
+            setattr(api, drift, 2 if drift == "max_retries" else 30)
+        return original(proxy, channel, text, tax, model, prompt_version, temperature)
+    monkeypatch.setattr(batch, "classify_with_model", changed_call)
+    inputs = [{"channel_id": "a", "text": ""}, {"channel_id": "b", "text": ""}]
+    with pytest.raises(batch.HarnessConfigurationError, match="Actual call conditions"):
+        run_batch(api, inputs, taxonomy, "model", tmp_path, max_attempts=1)
+    assert calls == []
+    assert not list((tmp_path / "attempts").rglob("*.json"))
+    assert not list((tmp_path / "revisions").glob("*.json"))
+    errors = list((tmp_path / "harness-errors").glob("*.json"))
+    assert len(errors) == 1
+    diagnostic = json.loads(errors[0].read_text(encoding="utf-8"))
+    assert diagnostic["status"] == "harness_error"
+    assert diagnostic["provider_called"] is False
+    assert diagnostic["next_attempt"] == 1 and "attempt" not in diagnostic
+
+    # Correcting local settings resumes at attempt 1, even with a one-call budget.
+    monkeypatch.setattr(batch, "classify_with_model", original)
+    # Preserve the same input manifest and run directory when resuming.
+    api = client([{"parents": [], "topics": []}, {"parents": [], "topics": []}])
+    result = run_batch(api, inputs, taxonomy, "model", tmp_path, max_attempts=1)
+    assert result["first_pass"] == 2
+    assert all(row["attempts"] == 1 for row in result["rows"])
+    assert errors[0].exists()
