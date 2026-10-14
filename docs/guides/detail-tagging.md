@@ -1,5 +1,8 @@
 # 세부 태그 상한 정책과 검수 버전
 
+Issue #64의 명시적 v4 실험과 상위/세부 사람 기준 비교는
+[v4 사람 평가 가이드](detail-tagging-v4-human-eval.md)를 따른다. 기본값은 v2로 유지한다.
+
 Issue #57의 오프라인 결과 처리 경로는 `python -m src.detail_tagging`이다.
 기존 `src/subtopic_tags.py`의 taxonomy/인용 검증을 재사용한다. 과거 실험은 전체
 최대 3개 세부 태그, zero-shot은 상위당 1개였다. selected_subtopic 계열은 사용자가
