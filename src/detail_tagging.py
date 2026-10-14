@@ -22,7 +22,10 @@ POLICY_VERSION = "detail-limit-v2"
 PROMPT_VERSION = "grounded-detail-candidates-v2"
 EXPERIMENTAL_PROMPT_VERSION = "grounded-detail-candidates-v3"
 V4_PROMPT_VERSION = "grounded-detail-candidates-v4"
-PROMPT_VERSIONS = (PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION, V4_PROMPT_VERSION)
+DEDUP_PROMPT_VERSION = "grounded-detail-candidates-v4-dedup"
+V5_PROMPT_VERSION = "grounded-detail-candidates-v5"
+PROMPT_VERSIONS = (PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION, V4_PROMPT_VERSION,
+                   DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION)
 
 
 def digest(value):
@@ -33,6 +36,14 @@ def digest(value):
 def build_prompt(taxonomy, prompt_version=PROMPT_VERSION):
     if prompt_version not in PROMPT_VERSIONS:
         raise ValueError("Unknown prompt version")
+    if prompt_version in (DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION):
+        # A shared dedup intervention makes the unrun ablation reproducible.
+        prompt = build_prompt(taxonomy, V4_PROMPT_VERSION)
+        boundary = prompt.index("\n")
+        guidance = _dedup_guidance()
+        if prompt_version == V5_PROMPT_VERSION:
+            guidance += _preserve_guidance()
+        return prompt[:boundary] + guidance + prompt[boundary:]
     prompt = _experimental_prompt(taxonomy)
     if prompt_version == PROMPT_VERSION:
         start = prompt.index("정의와 포함/제외 기준")
@@ -58,6 +69,45 @@ def build_prompt(taxonomy, prompt_version=PROMPT_VERSION):
             "추정하지 않는다."
         ) + prompt[boundary:]
     return prompt
+
+
+def _dedup_guidance():
+    return (
+        "\n출력 단위는 근거 개수가 아니라 코드다. parents 내부와 topics 내부에서 각각 "
+        "code당 객체를 정확히 하나만 반환한다. 같은 상위의 서로 다른 세부도 parents에서는 "
+        "상위 객체 하나를 공유한다. 근거가 여러 개면 가장 직접적인 연속 인용 하나를 evidence로 "
+        "선택한다. 여러 근거를 별도 객체로 나누거나 떨어진 인용을 연결하지 않는다. "
+        "합성 정상 예: 원문 '오늘 피아노 연주, 내일 기타 연주'의 parents는 "
+        '[{"code":"MUSIC","evidence":"피아노 연주","core_evidence":"","repetition_evidence":[]}], '
+        "topics의 MUSIC_INSTRUMENT도 객체 하나다. "
+        "반례: 피아노 근거와 기타 근거를 각각 MUSIC 객체로 반환하거나 "
+        "MUSIC_INSTRUMENT 객체 두 개로 반환하면 코드 중복 오류다. "
+        "repetition_evidence는 서로 다른 독립 입력 행에 실제로 있는 인용만 허용한다. "
+        "한 행의 여러 구절은 반복 근거가 아니므로 빈 배열로 둔다. 출력 전 각 배열의 코드 유일성을 확인한다."
+    )
+
+
+def _preserve_guidance():
+    return (
+        "\n의미 판단과 인용 형식을 분리한다. 태그 이름의 문자 일치가 아니라 taxonomy의 정의와 "
+        "포함/제외 기준을 충족하는지 판단한다. 자연스러운 동의 표현·짧은 표현·해시태그도 "
+        "명확한 근거라면 후보로 보존하되 evidence는 반드시 원문 그대로의 비어 있지 않은 연속 인용이다. "
+        "core_evidence는 주된 활동이라고 명시한 인용이 없으면 빈 문자열로 둔다. "
+        "core_evidence가 없다는 이유로 충분한 evidence가 있는 후보를 생략하지 않는다. "
+        "상위와 세부는 독립 판단한다. 상위만 명확하면 상위만 유지하고, 둘 다 부족하면 "
+        "parents=[], topics=[]로 미분류한다. 경계가 불확실한 세부는 생략하며 무조건 분류하지 않는다. "
+        "다음 대조 예시는 개발 표본 오류에서 유래한 합성 문장이며 사람 합의나 독립 검증 결과가 아니다. "
+        "'퇴근 후 내 하루를 기록해요'는 LIFE_PERSONAL, '살면서 겪은 사연을 들려줘요'는 LIFE_STORIES. "
+        "단순 자기소개·개인 이름·직업 언급은 LIFE 근거가 아니다. '회사원입니다'만으로 일상 기록을 추정하지 않는다. "
+        "'오늘의 옷 조합을 소개해요'는 FASHION_CLOTHING, '취미로 천을 재단하고 바느질해요'는 "
+        "HOBBY_CRAFTS. 의류 코디와 취미 제작이 각각 명시됐을 때만 두 태그를 함께 판단한다. "
+        "옷이라는 소재만으로 코디 활동을, 의류 소개만으로 직접 제작을 추정하지 않는다. "
+        "'내가 만든 단편 영화 작품을 소개합니다'는 ENTERTAIN_FILM, 일반 영상 편집이나 "
+        "쇼츠라는 형식만으로 영화를 추정하지 않는다. '패션과 뷰티 채널'은 상위만 유지할 수 있다. "
+        "배경 음악만으로 작곡을, 동물 소재만으로 직접 돌봄을 추정하지 않는다. "
+        "의미상 같은 말이어도 evidence를 번역·재서술하지 않는다. 원문 '나의 하루 기록'이면 "
+        'evidence는 "나의 하루 기록"이며 "개인 일상"으로 바꾸지 않는다.'
+    )
 
 
 def _experimental_prompt(taxonomy):
