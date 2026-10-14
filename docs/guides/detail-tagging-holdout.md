@@ -1,5 +1,8 @@
 # v2/v4 개발 표본과 독립 홀드아웃 평가
 
+v4/v5 후속 실험은 [v5 가이드](detail-tagging-v5-experiment.md)를 참고한다.
+`register --v4-v5`로 해당 쌍을 고정할 수 있으며 기존 v2/v4 기본 경로는 유지한다.
+
 Issue #66의 보조 도구는 `src.detail_tagging_holdout`이다. #64의 사람 검수·freeze·evaluate와
 기존 `run_batch`를 재사용한다. 기본 프롬프트는 v2다. 원문·채널별 기록은 Git 제외
 `results/`에만 보관한다. 아래의 준비·선정·고정·보고 명령은 모델을 호출하지 않는다.
