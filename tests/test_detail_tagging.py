@@ -318,8 +318,8 @@ def test_v4_candidate_handoff_preserves_explicit_parents(taxonomy, text, parents
 def test_v4_prompt_retains_v3_rules_and_independent_parent_examples(taxonomy):
     from src.detail_tagging import PROMPT_VERSIONS, build_prompt, digest
     prompts = [build_prompt(taxonomy, version) for version in PROMPT_VERSIONS]
-    assert len({digest(p) for p in prompts}) == 3
-    v3, v4 = prompts[1:]
+    assert len({digest(p) for p in prompts}) == len(PROMPT_VERSIONS)
+    v3, v4 = prompts[1:3]
     assert "확정하지 않고" not in v4
     for instruction in v3.splitlines():
         assert instruction in v4
