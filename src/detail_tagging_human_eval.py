@@ -101,7 +101,15 @@ def validate(pack, rows):
     return decisions
 
 
-def freeze(pack, csv_path):
+def validate_review_origin(rows, origin):
+    labeled_ai = [r["reviewer"].strip().upper().startswith("AI:") for r in rows]
+    if (origin == "human_declared" and any(labeled_ai)) or (origin == "ai_proxy" and not all(labeled_ai)):
+        raise ValueError("AI proxy reviewers require AI: labels and the explicit AI proxy mode")
+
+
+def freeze(pack, csv_path, origin="human_declared"):
+    if origin not in {"human_declared", "ai_proxy"}:
+        raise ValueError("Unknown review origin")
     # One immutable byte snapshot for parsing and provenance.
     raw = Path(csv_path).read_bytes()
     try:
@@ -115,8 +123,9 @@ def freeze(pack, csv_path):
     decisions = validate(pack, rows)
     if "pending" in decisions.values():
         raise ValueError("Human review pending; explicitly decide or hold every tag")
+    validate_review_origin(rows, origin)
     value = {"pack": pack, "rows": rows, "csv_sha256": hashlib.sha256(raw).hexdigest(),
-             "origin": "human_declared", "counts": dict(Counter(decisions.values()))}
+             "origin": origin, "counts": dict(Counter(decisions.values()))}
     return {"criteria": value, "hash": digest(value)}
 
 
@@ -238,19 +247,22 @@ def _metrics(ids, rows, results, decisions):
     return report
 
 
-def validated_criteria(frozen):
+def validated_criteria(frozen, expected_origin="human_declared"):
+    if expected_origin not in {"human_declared", "ai_proxy"}:
+        raise ValueError("Unknown review origin")
     criteria = frozen["criteria"]
-    if frozen["hash"] != digest(criteria) or criteria["origin"] != "human_declared":
+    if frozen["hash"] != digest(criteria) or criteria["origin"] != expected_origin:
         raise ValueError("Frozen human criteria changed")
     pack = criteria["pack"]
     decisions = validate(pack, criteria["rows"])
     if "pending" in decisions.values():
         raise ValueError("Human review pending")
+    validate_review_origin(criteria["rows"], expected_origin)
     return pack, decisions
 
 
-def evaluate(frozen, summaries):
-    pack, decisions = validated_criteria(frozen)
+def evaluate(frozen, summaries, reference_origin="human_declared"):
+    pack, decisions = validated_criteria(frozen, reference_origin)
     if not summaries:
         raise ValueError("At least one run required")
     ids = [r["channel_id"] for r in pack["manifest"]["inputs"]]
@@ -258,6 +270,12 @@ def evaluate(frozen, summaries):
     runs, reference = [], None
     for path in summaries:
         report, rows, results = _load_run(path, pack)
+        if reference_origin == "ai_proxy" and (
+                report["conditions"].get("reference_origin") != "ai_proxy"
+                or report["conditions"].get("reference_criteria_hash") != frozen["hash"]):
+            raise ValueError("AI proxy run criteria differ")
+        if reference_origin == "human_declared" and "reference_origin" in report["conditions"]:
+            raise ValueError("AI proxy run is not a human evaluation")
         if ("human_criteria_hash" in report["conditions"]
                 and report["conditions"]["human_criteria_hash"] != frozen["hash"]):
             raise ValueError("Run human criteria differ")
@@ -268,7 +286,7 @@ def evaluate(frozen, summaries):
         runs.append({"conditions": report["conditions"], "summary_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
                      "all": _metrics(ids, rows, results, decisions),
                      "cohorts": {name: _metrics(members, rows, results, decisions) for name, members in cohorts.items()}})
-    return {"human_criteria_hash": frozen["hash"], "sample_size": len(ids),
+    result = {"human_criteria_hash": frozen["hash"], "sample_size": len(ids),
             "human_review": "reviewed_with_holds" if "hold" in decisions.values() else "review_complete",
             "human_decisions": dict(Counter(decisions.values())), "runs": runs,
             "cohort_overlap": {cid: [name for name, members in cohorts.items() if cid in members]
@@ -280,6 +298,23 @@ def evaluate(frozen, summaries):
                             "Classification rates use successful outputs; selected-success bias remains. Empty arrays can improve format validity.",
                             "Cohorts overlap and must not be summed; explicit historical memberships require source verification.",
                             "temperature=0 does not guarantee identical output. No ranking or service-quality claim."]}
+    if reference_origin == "ai_proxy":
+        # Keep AI diagnostic evidence usable without turning it into human truth.
+        result["reference_origin"] = "ai_proxy"
+        result["reference_criteria_hash"] = result.pop("human_criteria_hash")
+        result["reference_review"] = result["human_review"]
+        result["human_review"] = "not_performed"
+        result["reference_decisions"] = result.pop("human_decisions")
+        result["adoption"] = "v2_retained_ai_proxy_diagnostic_only"
+        result["limitations"].insert(0, "User-authorized AI proxy judgments are not independent human ground truth; no adoption authorization.")
+        for run in result["runs"]:
+            for metrics in [run["all"], *run["cohorts"].values()]:
+                for key in list(metrics):
+                    if key.startswith("human_"):
+                        metrics["reference_" + key[6:]] = metrics.pop(key)
+                for axis in ("parents", "topics"):
+                    metrics[axis]["reference_positive_tags"] = metrics[axis].pop("human_positive_tags")
+    return result
 
 
 def main(argv=None):
@@ -294,10 +329,12 @@ def main(argv=None):
     lock.add_argument("--pack", type=Path, required=True)
     lock.add_argument("--reviews", type=Path, required=True)
     lock.add_argument("--output", type=Path, required=True)
+    lock.add_argument("--ai-proxy", action="store_true", help="Explicitly label this as AI proxy review, never human ground truth")
     score = commands.add_parser("evaluate")
     score.add_argument("--criteria", type=Path, required=True)
     score.add_argument("--summary", type=Path, action="append", required=True)
     score.add_argument("--output", type=Path, required=True)
+    score.add_argument("--ai-proxy", action="store_true", help="Use only explicitly labeled AI proxy criteria and runs")
     args = parser.parse_args(argv)
     try:
         if args.command == "prepare":
@@ -309,9 +346,11 @@ def main(argv=None):
                     writer.writeheader()
                     writer.writerows(review_rows(pack))
         elif args.command == "freeze":
-            write_new(args.output, freeze(read(args.pack), args.reviews))
+            write_new(args.output, freeze(read(args.pack), args.reviews,
+                                         "ai_proxy" if args.ai_proxy else "human_declared"))
         else:
-            write_new(args.output, evaluate(read(args.criteria), args.summary))
+            write_new(args.output, evaluate(read(args.criteria), args.summary,
+                                           "ai_proxy" if args.ai_proxy else "human_declared"))
     except (ValueError, KeyError, TypeError, OSError) as error:
         parser.exit(2, f"Human evaluation failed: {error}\n")
     return 0

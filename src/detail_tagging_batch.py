@@ -59,7 +59,7 @@ def conditions(inputs, taxonomy, model, client, prompt_version, temperature):
 
 
 def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
-              prompt_version=PROMPT_VERSION, temperature=0, human_criteria=None):
+              prompt_version=PROMPT_VERSION, temperature=0, human_criteria=None, ai_proxy_criteria=None):
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
     ids = [r["channel_id"] for r in inputs]
@@ -68,13 +68,20 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
     output = Path(output)
     contract = {**conditions(inputs, taxonomy, model, client, prompt_version, temperature),
                 "max_attempts": max_attempts}
-    if human_criteria is not None:
+    if human_criteria is not None and ai_proxy_criteria is not None:
+        raise ValueError("Human and AI proxy criteria must not be mixed")
+    if human_criteria is not None or ai_proxy_criteria is not None:
         from src.detail_tagging_human_eval import validated_criteria
-        pack, _ = validated_criteria(human_criteria)
+        criteria = human_criteria if human_criteria is not None else ai_proxy_criteria
+        origin = "human_declared" if human_criteria is not None else "ai_proxy"
+        pack, _ = validated_criteria(criteria, origin)
         if (pack["manifest"]["inputs_hash"] != digest(inputs)
                 or pack["manifest"]["criteria_hash"] != digest(taxonomy)):
             raise ValueError("Human criteria input/taxonomy differs")
-        contract["human_criteria_hash"] = human_criteria["hash"]
+        if human_criteria is not None:
+            contract["human_criteria_hash"] = criteria["hash"]
+        else:
+            contract.update(reference_origin="ai_proxy", reference_criteria_hash=criteria["hash"])
     manifest = output / "run-conditions.json"
     if manifest.exists():
         if read(manifest) != contract:
@@ -156,7 +163,7 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
     summary = {"conditions": contract, "total": len(rows),
                "first_pass": sum(r["first_pass"] for r in rows),
                "passed_after_retries": sum(r["passed"] for r in rows),
-               "rows": rows, "human_review": "pending"}
+               "rows": rows, "human_review": "not_performed" if ai_proxy_criteria is not None else "pending"}
     write_new(output / f"summary-{uuid4().hex}.json", summary)
     return summary
 
@@ -171,15 +178,18 @@ def main(argv=None):
     parser.add_argument("--prompt-version", choices=PROMPT_VERSIONS,
                         default=PROMPT_VERSION)
     parser.add_argument("--tag-llm", action="store_true", required=True)
-    parser.add_argument("--human-criteria", type=Path, help="Frozen human criteria JSON; required for v4 CLI")
+    criteria = parser.add_mutually_exclusive_group()
+    criteria.add_argument("--human-criteria", type=Path, help="Frozen human criteria JSON")
+    criteria.add_argument("--ai-proxy-criteria", type=Path, help="User-authorized AI proxy diagnostic; not human ground truth")
     args = parser.parse_args(argv)
-    if args.prompt_version == V4_PROMPT_VERSION and args.human_criteria is None:
-        parser.error("v4 requires --human-criteria fixed by human reviewers before evaluation")
+    if args.prompt_version == V4_PROMPT_VERSION and args.human_criteria is None and args.ai_proxy_criteria is None:
+        parser.error("v4 requires --human-criteria fixed by human reviewers or explicit --ai-proxy-criteria")
     load_dotenv()
     result = run_batch(OpenAI(timeout=60, max_retries=0), read(args.inputs),
                        read(args.taxonomy), args.model, args.output, args.max_attempts,
                        prompt_version=args.prompt_version,
-                       human_criteria=read(args.human_criteria) if args.human_criteria else None)
+                       human_criteria=read(args.human_criteria) if args.human_criteria else None,
+                       ai_proxy_criteria=read(args.ai_proxy_criteria) if args.ai_proxy_criteria else None)
     print(json.dumps({k: result[k] for k in ("total", "first_pass", "passed_after_retries")}))
     return 0 if result["passed_after_retries"] == result["total"] else 1
 
