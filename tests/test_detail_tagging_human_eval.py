@@ -84,8 +84,10 @@ def test_bad_human_review_rejected(pack, fault):
         rows.append(rows[0])
     elif fault == "input_hash":
         rows[0]["input_hash"] = "modified"
-    elif fault in {"reviewer", "reason"}:
+    elif fault == "reviewer":
         rows[0][fault] = ""
+    elif fault == "reason":
+        next(r for r in rows if r["decision"] == "keep")[fault] = ""
     elif fault == "evidence":
         next(r for r in rows if r["decision"] == "keep")["evidence"] = "없는 인용"
     elif fault == "decision":
@@ -109,6 +111,7 @@ def test_parent_correction_not_constrained_by_automatic_parents(tmp_path, pack):
     assert metrics["human_classification_denominator"] == 2
     assert report["cohort_overlap"] == {"a": ["v3_unclassified_transition", "baseline_retry_success"]}
     assert report["adoption"].startswith("v2_retained")
+    assert any("independent holdout" in item for item in report["limitations"])
 
 
 def test_holds_and_failures_have_explicit_denominators(tmp_path, pack):
@@ -238,3 +241,117 @@ def test_cli_private_artifacts_and_exclusive_outputs(tmp_path, taxonomy):
     assert json.loads(report.read_text(encoding="utf-8"))["human_review"] == "review_complete"
     with pytest.raises(SystemExit):
         main(args)
+
+
+def test_delete_reason_optional_but_reviewer_required(tmp_path, pack):
+    rows = judged(pack)
+    for row in rows:
+        if row["decision"] == "delete":
+            row["reason"] = ""
+    assert frozen(tmp_path, pack, rows)["criteria"]["counts"]["delete"] > 0
+    rows[0]["reviewer"] = ""
+    with pytest.raises(ValueError, match="reviewer required"):
+        validate(pack, rows)
+
+
+@pytest.mark.parametrize("decision", ["keep", "hold"])
+def test_positive_and_held_decisions_still_require_reason(pack, decision):
+    rows = judged(pack)
+    next(r for r in rows if r["code"] == "MUSIC_VOCAL").update(decision=decision, reason="")
+    with pytest.raises(ValueError, match="reason required"):
+        validate(pack, rows)
+
+
+def test_held_parent_cannot_have_kept_topic(pack):
+    rows = judged(pack)
+    next(r for r in rows if r["code"] == "MUSIC").update(decision="hold", reason="상위 미결정")
+    with pytest.raises(ValueError, match="kept parent"):
+        validate(pack, rows)
+    next(r for r in rows if r["code"] == "MUSIC_VOCAL").update(decision="hold", reason="상위 미결정")
+    assert "hold" in validate(pack, rows).values()
+
+
+def test_cp949_csv_has_actionable_error_and_no_output(tmp_path, pack, capsys):
+    reviews = tmp_path / "review.csv"
+    write_csv(reviews, judged(pack))
+    reviews.write_bytes(reviews.read_text(encoding="utf-8-sig").encode("cp949"))
+    pack_path = tmp_path / "pack.json"
+    pack_path.write_text(json.dumps(pack), encoding="utf-8")
+    output = tmp_path / "criteria.json"
+    with pytest.raises(SystemExit) as error:
+        main(["freeze", "--pack", str(pack_path), "--reviews", str(reviews), "--output", str(output)])
+    assert error.value.code == 2 and "CSV UTF-8" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_utf8_csv_crlf_records_preserve_exact_quote(tmp_path, pack):
+    # DictWriter emits CRLF record separators; exact single-line quotes still work.
+    criteria = frozen(tmp_path, pack)
+    assert criteria["criteria"]["origin"] == "human_declared"
+    assert b"\r\n" in (tmp_path / "review.csv").read_bytes()
+
+
+def test_embedded_quote_line_endings_are_not_silently_normalized(tmp_path, taxonomy):
+    pack = prepare([{"channel_id": "a", "text": "노래\n커버"}], taxonomy)
+    rows = judged(pack)
+    for row in rows:
+        if row["decision"] == "keep":
+            row["evidence"] = "노래\n커버"
+    frozen(tmp_path, pack, rows)
+    next(r for r in rows if r["decision"] == "keep")["evidence"] = "노래\r\n커버"
+    with pytest.raises(ValueError, match="exact source quote"):
+        frozen(tmp_path, pack, rows)
+
+
+def test_summary_first_pass_must_match_real_retry_history(tmp_path, pack):
+    criteria = frozen(tmp_path, pack)
+    output = tmp_path / "run"
+    bad = {"parents": [{"code": "MUSIC", "evidence": "없는 인용"}], "topics": []}
+    run_batch(client([bad, candidates(), candidates()]), pack["manifest"]["inputs"],
+              pack["manifest"]["taxonomy"], "model", output, max_attempts=2, prompt_version=V4_PROMPT_VERSION)
+    path = next(output.glob("summary-*.json"))
+    assert evaluate(criteria, [path])["runs"][0]["all"]["first_pass"] == 1
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    summary["rows"][0]["first_pass"] = True
+    summary["first_pass"] = 2  # Self-consistent summary still disagrees with attempts.
+    path.write_text(json.dumps(summary), encoding="utf-8")
+    with pytest.raises(ValueError, match="Summary differs from attempt history"):
+        evaluate(criteria, [path])
+
+
+@pytest.mark.parametrize("fault", ["missing", "gap", "duplicate", "status", "revision", "conditions", "input_hash", "request"])
+def test_attempt_tampering_rejects_evaluation(tmp_path, pack, fault):
+    criteria = frozen(tmp_path, pack)
+    path = run(tmp_path / "run", pack, [candidates(), candidates()])
+    attempt = next((path.parent / "attempts").rglob("*.json"))
+    value = json.loads(attempt.read_text(encoding="utf-8"))
+    if fault == "missing":
+        attempt.unlink()
+    elif fault == "duplicate":
+        attempt.with_name("duplicate.json").write_text(json.dumps(value), encoding="utf-8")
+    else:
+        if fault == "gap":
+            value["attempt"] = 2
+        elif fault == "status":
+            value["status"] = "harness_error"
+        elif fault == "revision":
+            value["revision"] = "0" * 32
+        elif fault == "conditions":
+            value["conditions"]["timeout_seconds"] = 99
+        elif fault == "input_hash":
+            value["input_hash"] = "changed"
+        else:
+            value["request"]["temperature"] = 0.5
+        attempt.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(ValueError):
+        evaluate(criteria, [path])
+
+
+def test_failed_run_also_requires_attempt_history(tmp_path, pack):
+    criteria = frozen(tmp_path, pack)
+    bad = {"parents": [{"code": "MUSIC", "evidence": "없는 인용"}], "topics": []}
+    path = run(tmp_path / "run", pack, [bad, bad])
+    assert evaluate(criteria, [path])["runs"][0]["all"]["failed_channels"] == 2
+    next((path.parent / "attempts").rglob("*.json")).unlink()
+    with pytest.raises(ValueError, match="attempt history"):
+        evaluate(criteria, [path])

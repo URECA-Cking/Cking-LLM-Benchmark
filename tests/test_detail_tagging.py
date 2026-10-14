@@ -320,6 +320,7 @@ def test_v4_prompt_retains_v3_rules_and_independent_parent_examples(taxonomy):
     prompts = [build_prompt(taxonomy, version) for version in PROMPT_VERSIONS]
     assert len({digest(p) for p in prompts}) == 3
     v3, v4 = prompts[1:]
+    assert "확정하지 않고" not in v4
     for instruction in v3.splitlines():
         assert instruction in v4
     for instruction in ("topics만 비우며", "노래 커버 → MUSIC/MUSIC_VOCAL", "남자 코디 → FASHION/FASHION_CLOTHING",
