@@ -32,6 +32,40 @@ def summaries(output):
     return [next((output / version).glob("summary-*.json")) for version in (PROMPT_VERSION, V4_PROMPT_VERSION)]
 
 
+@pytest.mark.parametrize("revision", ["grounded-detail-candidates-v5", "grounded-detail-candidates-v5-r2",
+                                    "grounded-detail-candidates-v5-r3"])
+def test_preregistered_v4_v5_pair_and_adoption_remain_explicit(study, tmp_path, revision):
+    from src.detail_tagging import V5_PROMPT_VERSION
+    manifest = study["manifest"]
+    versions = (V4_PROMPT_VERSION, revision)
+    value = protocol(manifest["development"], manifest["holdout"], manifest["selection"],
+                     manifest["acceptance"], versions)
+    assert tuple(validated_protocol(value)["prompt_hashes"]) == versions
+    assert study["manifest"]["prompt_hashes"].keys() == {PROMPT_VERSION, V4_PROMPT_VERSION}
+    output = tmp_path / "v5-pair"
+    run_pair(client([candidates(), candidates(["MUSIC"], ["MUSIC_VOCAL"])]), value, "holdout", output)
+    paths = [next((output / v).glob("summary-*.json")) for v in versions]
+    report = compare_pair(value, "holdout", paths)
+    assert report["decision"] == "eligible_for_team_review"
+    assert [r["conditions"]["prompt_version"] for r in report["runs"]] == list(versions)
+    # A report is not an adoption/default change; a v4 decision cannot target this pair.
+    with pytest.raises(ValueError, match="Team decision"):
+        record_decision(value, [], [], "adopt_v4", "human", "wrong challenger")
+    with pytest.raises(ValueError):
+        protocol(manifest["development"], manifest["holdout"], manifest["selection"],
+                 manifest["acceptance"], (PROMPT_VERSION, V5_PROMPT_VERSION))
+
+
+def test_v5_protocol_still_rejects_ai_reference(study):
+    from src.detail_tagging import V5_PROMPT_VERSION
+    manifest = copy.deepcopy(study["manifest"])
+    manifest["development"]["criteria"]["origin"] = "ai_proxy"
+    manifest["development"]["hash"] = digest(manifest["development"]["criteria"])
+    with pytest.raises(ValueError):
+        protocol(manifest["development"], manifest["holdout"], manifest["selection"],
+                 manifest["acceptance"], (V4_PROMPT_VERSION, V5_PROMPT_VERSION))
+
+
 def test_selection_is_order_independent_and_excludes_ids_and_text():
     dev = [{"channel_id": "d", "text": "dev"}]
     examples = [{"channel_id": "e", "text": "example"}]

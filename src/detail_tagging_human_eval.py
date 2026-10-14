@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 
 from src.detail_tagging import (POLICY_VERSION, RevisionStore, build_prompt,
-                                candidate_schema, classify, digest)
+                                candidate_schema, classify, digest, CODE_MAP_VERSIONS, GROUPED_VERSIONS)
 from src.detail_tagging_batch import read, write_new
 from src.detail_tagging_compare import load_summary
 from src.sample_review import new_artifacts
@@ -150,7 +150,7 @@ def validate_attempt_history(directory, row, text, taxonomy, conditions):
         request = entry.get("request", {})
         if (request.get("messages") != messages or request.get("model") != conditions["model_version"]
                 or request.get("temperature") != conditions["temperature"]
-                or request.get("response_format", {}).get("json_schema", {}).get("schema") != candidate_schema(taxonomy)):
+                or request.get("response_format", {}).get("json_schema", {}).get("schema") != candidate_schema(taxonomy, conditions["prompt_version"])):
             raise ValueError("Attempt request conditions differ")
         if (entry.get("status") not in {"passed", "validation_error", "provider_error"}
                 or bool(entry.get("revision")) != (entry["status"] == "passed")):
@@ -173,7 +173,7 @@ def _load_run(path, pack):
     if any(k not in conditions for k in required):
         raise ValueError("Unverified run conditions; historical aggregates cannot be imputed")
     for key, value in {"inputs_hash": manifest["inputs_hash"], "criteria_hash": digest(taxonomy),
-                       "policy_version": POLICY_VERSION, "output_schema_hash": digest(candidate_schema(taxonomy)),
+                       "policy_version": POLICY_VERSION, "output_schema_hash": digest(candidate_schema(taxonomy, conditions["prompt_version"])),
                        "prompt_hash": digest(build_prompt(taxonomy, conditions["prompt_version"]))}.items():
         if conditions[key] != value:
             raise ValueError("Run conditions differ: " + key)
@@ -200,6 +200,12 @@ def _load_run(path, pack):
             if record[key] != conditions[key]:
                 raise ValueError("Revision conditions differ: " + key)
         result = classify(inputs[cid], record["candidates"], taxonomy)
+        if conditions["prompt_version"] in CODE_MAP_VERSIONS:
+            from src.detail_tagging_code_map import normalize, normalize_grouped
+            grouped = conditions["prompt_version"] in GROUPED_VERSIONS
+            if (record.get("provider_schema_version") != ("code-map-grouped-v1" if grouped else "code-map-v1")
+                    or (normalize_grouped if grouped else normalize)(record.get("provider_candidates"), taxonomy) != record["candidates"]):
+                raise ValueError("Provider code-map differs from canonical candidates")
         if result != record["result"]:
             raise ValueError("Revision result differs from validated candidates")
         results[cid] = result
@@ -262,7 +268,7 @@ def validated_criteria(frozen, expected_origin="human_declared"):
     return pack, decisions
 
 
-def evaluate(frozen, summaries, reference_origin="human_declared"):
+def evaluate(frozen, summaries, reference_origin="human_declared", *, allow_schema_change=False):
     pack, decisions = validated_criteria(frozen, reference_origin)
     if not summaries:
         raise ValueError("At least one run required")
@@ -280,7 +286,8 @@ def evaluate(frozen, summaries, reference_origin="human_declared"):
         if ("human_criteria_hash" in report["conditions"]
                 and report["conditions"]["human_criteria_hash"] != frozen["hash"]):
             raise ValueError("Run human criteria differ")
-        common = {k: report["conditions"][k] for k in COMMON}
+        common = {k: report["conditions"][k] for k in COMMON
+                  if not (allow_schema_change and k == "output_schema_hash")}
         if reference is not None and reference != common:
             raise ValueError("Comparison run conditions differ")
         reference = common
@@ -299,6 +306,9 @@ def evaluate(frozen, summaries, reference_origin="human_declared"):
                             "Classification rates use successful outputs; selected-success bias remains. Empty arrays can improve format validity.",
                             "Cohorts overlap and must not be summed; explicit historical memberships require source verification.",
                             "temperature=0 does not guarantee identical output. No ranking or service-quality claim."]}
+    if allow_schema_change:
+        result["comparison_type"] = "schema_and_prompt_experiment_not_prompt_only"
+        result["schema_variants"] = sorted({run["conditions"]["output_schema_hash"] for run in runs})
     if reference_origin == "ai_proxy":
         # Keep AI diagnostic evidence usable without turning it into human truth.
         result["reference_origin"] = "ai_proxy"

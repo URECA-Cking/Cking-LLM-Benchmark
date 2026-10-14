@@ -8,6 +8,18 @@ from src.detail_tagging import RevisionStore
 from src.detail_tagging_batch import run_batch
 
 
+def test_new_prompt_version_requires_criteria_before_client_creation(monkeypatch):
+    import src.detail_tagging_batch as batch
+    monkeypatch.setattr(batch, "PROMPT_VERSIONS", (*batch.PROMPT_VERSIONS, "future-version"))
+    def forbidden_client(**kwargs):
+        pytest.fail("Missing criteria must be rejected before creating an API client")
+    monkeypatch.setattr(batch, "OpenAI", forbidden_client)
+    with pytest.raises(SystemExit) as error:
+        batch.main(["--inputs", "unused.json", "--output", "unused",
+                    "--prompt-version", "future-version", "--tag-llm"])
+    assert error.value.code == 2
+
+
 def client(outputs):
     def create(**kwargs):
         data = outputs.pop(0)

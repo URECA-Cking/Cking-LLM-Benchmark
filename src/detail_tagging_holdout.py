@@ -6,7 +6,8 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-from src.detail_tagging import (PROMPT_VERSION, V4_PROMPT_VERSION, RevisionStore,
+from src.detail_tagging import (PROMPT_VERSION, V4_PROMPT_VERSION, V5_PROMPT_VERSION,
+                                V5_REVISED_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION, RevisionStore,
                                 build_prompt, candidate_schema, classify, digest)
 from src.detail_tagging_batch import read, run_batch, write_new
 from src.detail_tagging_batch import conditions as batch_conditions
@@ -168,7 +169,11 @@ def select_holdout(candidates, development, examples, quotas, seed):
                  "limitations": "Human-declared strata and example inventory require team verification; paraphrases are not detected."})
 
 
-def protocol(development, holdout, selection, acceptance):
+def protocol(development, holdout, selection, acceptance, versions=VERSIONS):
+    if tuple(versions) not in (VERSIONS, (V4_PROMPT_VERSION, V5_PROMPT_VERSION),
+                              (V4_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION),
+                              (V4_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION)):
+        raise HoldoutValidationError("Supported pairs are v2/v4 or v4/v5")
     dev, _ = validated_criteria(development)
     test, _ = validated_criteria(holdout)
     selected = unseal(selection)
@@ -190,13 +195,14 @@ def protocol(development, holdout, selection, acceptance):
     taxonomy = dev["manifest"]["taxonomy"]
     return seal({"schema_version": 1, "development": development, "holdout": holdout,
                  "selection": selection, "acceptance": acceptance, "settings": dict(SETTINGS),
-                 "prompt_hashes": {v: digest(build_prompt(taxonomy, v)) for v in VERSIONS},
+                 "prompt_hashes": {v: digest(build_prompt(taxonomy, v)) for v in versions},
                  "adoption": "v2_retained_pending_team_decision"})
 
 
 def validated_protocol(value):
     manifest = unseal(value)
-    expected = protocol(manifest["development"], manifest["holdout"], manifest["selection"], manifest["acceptance"])
+    expected = protocol(manifest["development"], manifest["holdout"], manifest["selection"], manifest["acceptance"],
+                        tuple(manifest["prompt_hashes"]))
     if expected != value:
         raise HoldoutValidationError("Protocol/settings/prompt changed; preregister a new evaluation")
     return manifest
@@ -209,11 +215,12 @@ def run_pair(client, value, split, output):
     criteria = manifest[split]
     pack, _ = validated_criteria(criteria)
     settings = manifest["settings"]
+    versions = tuple(manifest["prompt_hashes"])
     if client.timeout != settings["timeout_seconds"] or client.max_retries != settings["sdk_max_retries"]:
         raise HoldoutValidationError("Client differs from preregistered settings")
     output = Path(output)
     # Check both resume contracts before the first potentially paid request.
-    for version in VERSIONS:
+    for version in versions:
         folder = output / version
         expected = {**batch_conditions(pack["manifest"]["inputs"], pack["manifest"]["taxonomy"],
                                        settings["model"], client, version, settings["temperature"]),
@@ -232,7 +239,7 @@ def run_pair(client, value, split, output):
             raise HoldoutValidationError("New evaluation directory required")
         write_new(output / "evaluation-binding.json", binding)
     summaries = []
-    for version in VERSIONS:
+    for version in versions:
         folder = output / version
         summary = run_batch(client, pack["manifest"]["inputs"], pack["manifest"]["taxonomy"],
                             settings["model"], folder, settings["max_attempts"], version,
@@ -243,10 +250,11 @@ def run_pair(client, value, split, output):
 
 def compare_pair(value, split, summaries):
     manifest = validated_protocol(value)
+    versions = tuple(manifest["prompt_hashes"])
     if split not in {"development", "holdout"}:
         raise HoldoutValidationError("Unknown evaluation split")
     if len(summaries) != 2:
-        raise HoldoutValidationError("Exactly one fresh v2 and one v4 run required")
+        raise HoldoutValidationError("Exactly one run per preregistered prompt required")
     for path in summaries:
         binding = read(Path(path).parent.parent / "evaluation-binding.json")
         if binding != {"protocol_hash": value["hash"], "split": split}:
@@ -259,9 +267,10 @@ def compare_pair(value, split, summaries):
                 raise HoldoutValidationError("Preregistered run settings differ")
     report = evaluate(manifest[split], summaries)
     runs = {r["conditions"]["prompt_version"]: r for r in report["runs"]}
-    if set(runs) != set(VERSIONS):
-        raise HoldoutValidationError("Exactly one v2 and one v4 required")
-    old, new = [runs[v]["all"] for v in VERSIONS]
+    if set(runs) != set(versions):
+        raise HoldoutValidationError("Exactly one v2 and one v4 required" if versions == VERSIONS
+                                     else "Exactly one v4 and one v5 required")
+    old, new = [runs[v]["all"] for v in versions]
     acceptance = manifest["acceptance"]
     checks = {"complete_human_review": report["human_review"] == "review_complete",
               "no_model_failures": old["failed_channels"] == new["failed_channels"] == 0,
@@ -291,11 +300,13 @@ def compare_pair(value, split, summaries):
 
 def record_decision(value, development_summaries, holdout_summaries, choice, reviewer, reason,
                     prompts_changed=False):
-    if choice not in {"retain_v2", "additional_experiment", "adopt_v4"} or not reviewer.strip() or not reason.strip():
+    versions = tuple(validated_protocol(value)["prompt_hashes"])
+    adopt_choice = "adopt_v4" if versions[-1] == V4_PROMPT_VERSION else "adopt_v5"
+    if choice not in {"retain_v2", "additional_experiment", adopt_choice} or not reviewer.strip() or not reason.strip():
         raise HoldoutValidationError("Team decision, reviewer and reason required")
     development = compare_pair(value, "development", development_summaries)
     holdout = compare_pair(value, "holdout", holdout_summaries)
-    if choice == "adopt_v4" and (prompts_changed or holdout["decision"] != "eligible_for_team_review"
+    if choice == adopt_choice and (prompts_changed or holdout["decision"] != "eligible_for_team_review"
                                  or development["human_review"] != "review_complete"):
         raise HoldoutValidationError("Adoption requires completed human review and eligible untouched holdout")
     return seal({"protocol_hash": value["hash"], "choice": choice, "reviewer": reviewer, "reason": reason,
@@ -331,6 +342,10 @@ def main(argv=None):
     register = commands.add_parser("register")
     for name in ("development", "holdout", "selection", "acceptance", "output"):
         register.add_argument("--" + name, type=Path, required=True)
+    pair = register.add_mutually_exclusive_group()
+    pair.add_argument("--v4-v5", action="store_true", help="Preregister v4/initial v5 instead of the default v2/v4")
+    pair.add_argument("--v4-v5-r2", action="store_true", help="Preregister v4/revised v5-r2")
+    pair.add_argument("--v4-v5-r3", action="store_true", help="Preregister v4/refined v5-r3")
     run = commands.add_parser("run")
     score = commands.add_parser("report")
     for command in (run, score):
@@ -344,7 +359,7 @@ def main(argv=None):
     decision.add_argument("--protocol", type=Path, required=True)
     decision.add_argument("--development-summary", type=Path, action="append", required=True)
     decision.add_argument("--holdout-summary", type=Path, action="append", required=True)
-    decision.add_argument("--choice", choices=("retain_v2", "additional_experiment", "adopt_v4"), required=True)
+    decision.add_argument("--choice", choices=("retain_v2", "additional_experiment", "adopt_v4", "adopt_v5"), required=True)
     decision.add_argument("--reviewer", required=True)
     decision.add_argument("--reason", required=True)
     decision.add_argument("--prompts-changed", action="store_true")
@@ -366,7 +381,10 @@ def main(argv=None):
                 publish_pack(staging / "holdout", selection["manifest"]["inputs"], read(args.taxonomy))
         elif args.command == "register":
             write_new(args.output, protocol(read(args.development), read(args.holdout),
-                                           read(args.selection), read(args.acceptance)))
+                                           read(args.selection), read(args.acceptance),
+                                           (V4_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION) if args.v4_v5_r3 else
+                                           (V4_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION) if args.v4_v5_r2 else
+                                           (V4_PROMPT_VERSION, V5_PROMPT_VERSION) if args.v4_v5 else VERSIONS))
         elif args.command == "run":
             from dotenv import load_dotenv
             from openai import OpenAI
