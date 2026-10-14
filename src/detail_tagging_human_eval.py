@@ -102,6 +102,7 @@ def validate(pack, rows):
 
 
 def validate_review_origin(rows, origin):
+    """Check the declared AI: labeling convention, not reviewer identity."""
     labeled_ai = [r["reviewer"].strip().upper().startswith("AI:") for r in rows]
     if (origin == "human_declared" and any(labeled_ai)) or (origin == "ai_proxy" and not all(labeled_ai)):
         raise ValueError("AI proxy reviewers require AI: labels and the explicit AI proxy mode")
@@ -129,8 +130,8 @@ def freeze(pack, csv_path, origin="human_declared"):
     return {"criteria": value, "hash": digest(value)}
 
 
-def _validate_attempts(directory, row, text, taxonomy, conditions):
-    """Derive summary claims from complete sequential attempt records."""
+def validate_attempt_history(directory, row, text, taxonomy, conditions):
+    """Validate summary claims against sequential attempt records for evaluation tools."""
     history = [read(p) for p in (directory / "attempts" / digest(row["channel_id"])).glob("*.json")]
     if (type(row.get("attempts")) is not int or not history or len(history) != row["attempts"]
             or type(conditions["max_attempts"]) is not int
@@ -186,7 +187,7 @@ def _load_run(path, pack):
     store = RevisionStore(Path(path).parent / "revisions")
     results = {}
     for cid, row in rows.items():
-        _validate_attempts(Path(path).parent, row, inputs[cid], taxonomy, conditions)
+        validate_attempt_history(Path(path).parent, row, inputs[cid], taxonomy, conditions)
         if not row["passed"]:
             results[cid] = None
             continue

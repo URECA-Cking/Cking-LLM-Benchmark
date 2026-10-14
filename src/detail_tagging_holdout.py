@@ -10,7 +10,7 @@ from src.detail_tagging import (PROMPT_VERSION, V4_PROMPT_VERSION, RevisionStore
                                 build_prompt, candidate_schema, classify, digest)
 from src.detail_tagging_batch import read, run_batch, write_new
 from src.detail_tagging_batch import conditions as batch_conditions
-from src.detail_tagging_human_eval import (_validate_attempts, evaluate, prepare, review_rows,
+from src.detail_tagging_human_eval import (validate_attempt_history, evaluate, prepare, review_rows,
                                           validated_criteria, FIELDS)
 from src.detail_tagging_compare import load_summary
 from src.sample_review import new_artifacts
@@ -20,13 +20,17 @@ SETTINGS = {"model": "gpt-5.4-nano-2026-03-17", "temperature": 0,
             "sdk_max_retries": 0, "timeout_seconds": 60, "max_attempts": 3}
 
 
+class HoldoutValidationError(ValueError):
+    """Safe CLI diagnostic: use fixed messages, never input values or paths."""
+
+
 def seal(value):
     return {"manifest": value, "hash": digest(value)}
 
 
 def unseal(value):
     if value["hash"] != digest(value["manifest"]):
-        raise ValueError("Manifest changed")
+        raise HoldoutValidationError("Manifest changed")
     return value["manifest"]
 
 
@@ -39,16 +43,16 @@ def historical_v3(path, inputs, taxonomy):
                           "prompt_hash": digest(build_prompt(taxonomy, "grounded-detail-candidates-v3")),
                           "output_schema_hash": digest(candidate_schema(taxonomy))}.items():
         if conditions.get(key) != expected:
-            raise ValueError("Historical v3 source differs")
+            raise HoldoutValidationError("Historical v3 source differs")
     if (set(rows) != {r["channel_id"] for r in inputs} or report["total"] != len(inputs)
             or report["first_pass"] != sum(r["first_pass"] for r in rows.values())
             or report["passed_after_retries"] != sum(r["passed"] for r in rows.values())):
-        raise ValueError("Historical v3 summary differs")
+        raise HoldoutValidationError("Historical v3 summary differs")
     store = RevisionStore(Path(path).parent / "revisions")
     results = {}
     for row in inputs:
         cid = row["channel_id"]
-        _validate_attempts(Path(path).parent, rows[cid], row["text"], taxonomy, conditions)
+        validate_attempt_history(Path(path).parent, rows[cid], row["text"], taxonomy, conditions)
         results[cid] = None
         if rows[cid]["passed"]:
             record = store.read(rows[cid]["revision"])
@@ -57,7 +61,7 @@ def historical_v3(path, inputs, taxonomy):
                     or any(record[k] != conditions[k] for k in ("criteria_hash", "model_version", "policy_version",
                                                                  "prompt_version", "prompt_hash", "output_schema_hash"))
                     or classify(row["text"], record["candidates"], taxonomy) != record["result"]):
-                raise ValueError("Historical v3 revision differs")
+                raise HoldoutValidationError("Historical v3 revision differs")
             results[cid] = record["result"]
     return report, results
 
@@ -77,15 +81,15 @@ def historical_cohorts(inputs, taxonomy, first, final, index, revisions, v3_summ
                 or snapshot["model"] != old_final["model"]
                 or snapshot["policy"] != old_final["policy"]
                 or snapshot["source_manifest_hash"] != old_final["source_manifest_hash"]):
-            raise ValueError("Historical snapshot differs")
+            raise HoldoutValidationError("Historical snapshot differs")
         failures.append(set(failed))
     if not failures[1] <= failures[0] or set(revision_index) != set(ids) - failures[1]:
-        raise ValueError("Historical success/failure sets differ")
+        raise HoldoutValidationError("Historical success/failure sets differ")
     report, results = historical_v3(v3_summary, inputs, taxonomy)
     if (report["conditions"]["prompt_version"] != "grounded-detail-candidates-v3"
             or report["conditions"]["model_version"] != old_final["model"]
             or report["conditions"]["policy_version"] != old_final["policy"]):
-        raise ValueError("Expected matching historical v3 run")
+        raise HoldoutValidationError("Expected matching historical v3 run")
     before, revision_hashes = {}, {}
     store = RevisionStore(revisions)
     for row in inputs:
@@ -101,7 +105,7 @@ def historical_cohorts(inputs, taxonomy, first, final, index, revisions, v3_summ
                 or record["policy_version"] != old_final["policy"]
                 or record["prompt_version"] != PROMPT_VERSION or record["kind"] != "automatic"
                 or classify(row["text"], record["candidates"], taxonomy) != record["result"]):
-            raise ValueError("Historical revision differs")
+            raise HoldoutValidationError("Historical revision differs")
         before[cid] = record["result"]
         revision_hashes[cid] = digest(record)
     cohorts = {
@@ -122,22 +126,22 @@ def historical_cohorts(inputs, taxonomy, first, final, index, revisions, v3_summ
 def select_holdout(candidates, development, examples, quotas, seed):
     """Deterministic stratified selection from human-declared strata, before models."""
     if not isinstance(seed, str) or not seed.strip() or not quotas:
-        raise ValueError("Selection seed and strata quotas required")
+        raise HoldoutValidationError("Selection seed and strata quotas required")
     if any(not isinstance(k, str) or not k.strip() or type(v) is not int or v < 1
            for k, v in quotas.items()):
-        raise ValueError("Positive integer quotas required")
+        raise HoldoutValidationError("Positive integer quotas required")
     for rows in (candidates, development, examples):
         ids = [r["channel_id"] for r in rows]
         if (len(ids) != len(set(ids)) or any(not isinstance(cid, str) or not cid.strip() for cid in ids)
                 or any(not isinstance(r["text"], str) or not r["text"].strip() for r in rows)):
-            raise ValueError("Invalid or duplicate source inputs")
+            raise HoldoutValidationError("Invalid or duplicate source inputs")
     excluded_ids = {r["channel_id"] for r in development + examples}
     excluded_texts = {digest(r["text"]) for r in development + examples}
     eligible = []
     excluded = 0
     for row in candidates:
         if row["stratum"] not in quotas:
-            raise ValueError("Unknown candidate stratum")
+            raise HoldoutValidationError("Unknown candidate stratum")
         if row["channel_id"] in excluded_ids or digest(row["text"]) in excluded_texts:
             excluded += 1
         else:
@@ -145,14 +149,14 @@ def select_holdout(candidates, development, examples, quotas, seed):
     available = Counter(r["stratum"] for r in eligible)
     shortage = {k: v - available[k] for k, v in quotas.items() if available[k] < v}
     if shortage:
-        raise ValueError("Insufficient independent candidates by stratum: " + str(shortage))
+        raise HoldoutValidationError("Insufficient independent candidates by stratum; provide more candidates or revise preregistered quotas")
     selected = []
     for stratum in sorted(quotas):
         pool = sorted((r for r in eligible if r["stratum"] == stratum),
                       key=lambda r: (digest([seed, r["channel_id"]]), r["channel_id"]))
         selected.extend(pool[:quotas[stratum]])
     if len({digest(r["text"]) for r in selected}) != len(selected):
-        raise ValueError("Duplicate holdout text; curate candidate pool before selection")
+        raise HoldoutValidationError("Duplicate holdout text; curate candidate pool before selection")
     inputs = [{"channel_id": r["channel_id"], "text": r["text"]} for r in selected]
     return seal({"inputs": inputs, "inputs_hash": digest(inputs), "quotas": quotas,
                  "seed": seed, "method": "sha256(seed, channel_id) within declared strata",
@@ -172,17 +176,17 @@ def protocol(development, holdout, selection, acceptance):
     if (selected["development_hash"] != digest(dev_inputs)
             or selected["inputs"] != test_inputs or selected["inputs_hash"] != digest(test_inputs)
             or dev["manifest"]["taxonomy"] != test["manifest"]["taxonomy"]):
-        raise ValueError("Selection/criteria source differs")
+        raise HoldoutValidationError("Selection/criteria source differs")
     if any(r["channel_id"] in selected["excluded_ids"] or digest(r["text"]) in selected["excluded_text_hashes"]
            for r in test_inputs):
-        raise ValueError("Holdout overlaps development/examples")
+        raise HoldoutValidationError("Holdout overlaps development/examples")
     keys = {"min_holdout_channels", "min_topic_missing_reduction", "max_topic_excess_increase",
             "max_parent_missing_increase", "max_parent_excess_increase"}
     if (set(acceptance) != keys or any(type(v) is not int or v < 0 for v in acceptance.values())
             or acceptance["min_holdout_channels"] < 1 or acceptance["min_topic_missing_reduction"] < 1):
-        raise ValueError("Explicit nonnegative acceptance counts and positive minimums required")
+        raise HoldoutValidationError("Explicit nonnegative acceptance counts and positive minimums required")
     if len(test_inputs) < acceptance["min_holdout_channels"]:
-        raise ValueError("Holdout below preregistered minimum size")
+        raise HoldoutValidationError("Holdout below preregistered minimum size")
     taxonomy = dev["manifest"]["taxonomy"]
     return seal({"schema_version": 1, "development": development, "holdout": holdout,
                  "selection": selection, "acceptance": acceptance, "settings": dict(SETTINGS),
@@ -194,19 +198,19 @@ def validated_protocol(value):
     manifest = unseal(value)
     expected = protocol(manifest["development"], manifest["holdout"], manifest["selection"], manifest["acceptance"])
     if expected != value:
-        raise ValueError("Protocol/settings/prompt changed; preregister a new evaluation")
+        raise HoldoutValidationError("Protocol/settings/prompt changed; preregister a new evaluation")
     return manifest
 
 
 def run_pair(client, value, split, output):
     manifest = validated_protocol(value)
     if split not in {"development", "holdout"}:
-        raise ValueError("Unknown evaluation split")
+        raise HoldoutValidationError("Unknown evaluation split")
     criteria = manifest[split]
     pack, _ = validated_criteria(criteria)
     settings = manifest["settings"]
     if client.timeout != settings["timeout_seconds"] or client.max_retries != settings["sdk_max_retries"]:
-        raise ValueError("Client differs from preregistered settings")
+        raise HoldoutValidationError("Client differs from preregistered settings")
     output = Path(output)
     # Check both resume contracts before the first potentially paid request.
     for version in VERSIONS:
@@ -216,16 +220,16 @@ def run_pair(client, value, split, output):
                     "max_attempts": settings["max_attempts"], "human_criteria_hash": criteria["hash"]}
         if (folder / "run-conditions.json").exists():
             if read(folder / "run-conditions.json") != expected:
-                raise ValueError("Run conditions mismatch before paired execution")
+                raise HoldoutValidationError("Run conditions mismatch before paired execution")
         elif folder.exists() and any(folder.iterdir()):
-            raise ValueError("Unversioned paired output directory")
+            raise HoldoutValidationError("Unversioned paired output directory")
     binding = {"protocol_hash": value["hash"], "split": split}
     if (output / "evaluation-binding.json").exists():
         if read(output / "evaluation-binding.json") != binding:
-            raise ValueError("Evaluation binding differs")
+            raise HoldoutValidationError("Evaluation binding differs")
     else:
         if output.exists() and any(output.iterdir()):
-            raise ValueError("New evaluation directory required")
+            raise HoldoutValidationError("New evaluation directory required")
         write_new(output / "evaluation-binding.json", binding)
     summaries = []
     for version in VERSIONS:
@@ -240,23 +244,23 @@ def run_pair(client, value, split, output):
 def compare_pair(value, split, summaries):
     manifest = validated_protocol(value)
     if split not in {"development", "holdout"}:
-        raise ValueError("Unknown evaluation split")
+        raise HoldoutValidationError("Unknown evaluation split")
     if len(summaries) != 2:
-        raise ValueError("Exactly one fresh v2 and one v4 run required")
+        raise HoldoutValidationError("Exactly one fresh v2 and one v4 run required")
     for path in summaries:
         binding = read(Path(path).parent.parent / "evaluation-binding.json")
         if binding != {"protocol_hash": value["hash"], "split": split}:
-            raise ValueError("Evaluation binding differs")
+            raise HoldoutValidationError("Evaluation binding differs")
         conditions = read(path)["conditions"]
         if conditions.get("human_criteria_hash") != manifest[split]["hash"]:
-            raise ValueError("Preregistered human criteria required")
+            raise HoldoutValidationError("Preregistered human criteria required")
         for key, expected in manifest["settings"].items():
             if conditions.get("model_version" if key == "model" else key) != expected:
-                raise ValueError("Preregistered run settings differ")
+                raise HoldoutValidationError("Preregistered run settings differ")
     report = evaluate(manifest[split], summaries)
     runs = {r["conditions"]["prompt_version"]: r for r in report["runs"]}
     if set(runs) != set(VERSIONS):
-        raise ValueError("Exactly one v2 and one v4 required")
+        raise HoldoutValidationError("Exactly one v2 and one v4 required")
     old, new = [runs[v]["all"] for v in VERSIONS]
     acceptance = manifest["acceptance"]
     checks = {"complete_human_review": report["human_review"] == "review_complete",
@@ -270,7 +274,7 @@ def compare_pair(value, split, summaries):
         attempts = [read(p) for p in (Path(path).parent / "attempts").rglob("*.json")]
         ids = {r["channel_id"] for r in manifest[split]["criteria"]["pack"]["manifest"]["inputs"]}
         if any(a.get("channel_id") not in ids for a in attempts):
-            raise ValueError("Foreign channel attempt in paired run")
+            raise HoldoutValidationError("Foreign channel attempt in paired run")
         usage = [a.get("response", {}).get("usage") for a in attempts]
         costs.append({"prompt_version": read(path)["conditions"]["prompt_version"],
                       "attempts": len(attempts), "usage_missing_attempts": sum(not isinstance(u, dict) for u in usage),
@@ -288,12 +292,12 @@ def compare_pair(value, split, summaries):
 def record_decision(value, development_summaries, holdout_summaries, choice, reviewer, reason,
                     prompts_changed=False):
     if choice not in {"retain_v2", "additional_experiment", "adopt_v4"} or not reviewer.strip() or not reason.strip():
-        raise ValueError("Team decision, reviewer and reason required")
+        raise HoldoutValidationError("Team decision, reviewer and reason required")
     development = compare_pair(value, "development", development_summaries)
     holdout = compare_pair(value, "holdout", holdout_summaries)
     if choice == "adopt_v4" and (prompts_changed or holdout["decision"] != "eligible_for_team_review"
                                  or development["human_review"] != "review_complete"):
-        raise ValueError("Adoption requires completed human review and eligible untouched holdout")
+        raise HoldoutValidationError("Adoption requires completed human review and eligible untouched holdout")
     return seal({"protocol_hash": value["hash"], "choice": choice, "reviewer": reviewer, "reason": reason,
                  "development_report_hash": digest(development), "holdout_report_hash": digest(holdout),
                  "holdout_status": "reclassified_as_development_new_holdout_required" if prompts_changed else "held_out",
@@ -377,8 +381,17 @@ def main(argv=None):
             write_new(args.output, record_decision(read(args.protocol), args.development_summary,
                                                  args.holdout_summary, args.choice, args.reviewer,
                                                  args.reason, args.prompts_changed))
-    except (ValueError, KeyError, TypeError, OSError, RuntimeError) as error:
-        parser.exit(2, f"Holdout evaluation failed ({type(error).__name__}); inspect private artifacts.\n")
+    except HoldoutValidationError as error:
+        parser.exit(2, f"Holdout evaluation failed: {error}\n")
+    except (ValueError, KeyError, TypeError) as error:
+        parser.exit(2, f"Holdout evaluation failed ({type(error).__name__}): check input schemas, "
+                       "frozen criteria and attempt history. Private error details are suppressed.\n")
+    except OSError:
+        parser.exit(2, "Holdout evaluation failed (OSError): check private input paths, "
+                       "permissions and whether the output already exists.\n")
+    except RuntimeError:
+        parser.exit(2, "Holdout evaluation failed (RuntimeError): execution stopped; "
+                       "check preserved private attempt records before resuming.\n")
     return 0
 
 
