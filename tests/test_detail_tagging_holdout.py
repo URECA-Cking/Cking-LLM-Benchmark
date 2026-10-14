@@ -268,3 +268,59 @@ def test_report_requires_exact_human_hash_even_if_legacy_evaluate_allows_missing
     paths[0].write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="human criteria"):
         compare_pair(study, "holdout", paths)
+
+
+def test_cli_reports_safe_protocol_failure_before_client_creation(study, tmp_path, capsys, monkeypatch):
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: pytest.fail("No provider client expected"))
+    changed = copy.deepcopy(study)
+    changed["manifest"]["prompt_hashes"][V4_PROMPT_VERSION] = "changed"
+    changed["hash"] = digest(changed["manifest"])
+    path = tmp_path / "protocol.json"
+    write_new(path, changed)
+    output = tmp_path / "unused"
+    with pytest.raises(SystemExit) as error:
+        main(["run", "--protocol", str(path), "--split", "holdout", "--output", str(output),
+              "--approved-paid-transfer"])
+    assert error.value.code == 2
+    assert "Protocol/settings/prompt changed; preregister a new evaluation" in capsys.readouterr().err
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("exception,hint", [(ValueError, "schemas"), (KeyError, "schemas"),
+                                           (TypeError, "schemas"), (OSError, "permissions"),
+                                           (RuntimeError, "private attempt records")])
+def test_cli_dependency_errors_give_guidance_without_private_details(tmp_path, capsys, monkeypatch, exception, hint):
+    import src.detail_tagging_holdout as holdout
+    def fail_read(path):
+        raise exception("PRIVATE_SOURCE_SENTINEL")
+    monkeypatch.setattr(holdout, "read", fail_read)
+    output = tmp_path / "unused"
+    with pytest.raises(SystemExit) as error:
+        main(["register", "--development", "private", "--holdout", "private", "--selection", "private",
+              "--acceptance", "private", "--output", str(output)])
+    message = capsys.readouterr().err
+    assert error.value.code == 2 and hint in message
+    assert "PRIVATE_SOURCE_SENTINEL" not in message
+    assert not output.exists()
+
+
+def test_cli_shortage_message_does_not_echo_private_strata(tmp_path, capsys):
+    for name, value in {"pool": [{"channel_id": "a", "text": "PRIVATE_SOURCE_SENTINEL", "stratum": "PRIVATE_STRATUM_SENTINEL"}],
+                        "dev": [], "examples": [], "quotas": {"PRIVATE_STRATUM_SENTINEL": 2}}.items():
+        write_new(tmp_path / (name + ".json"), value)
+    output = tmp_path / "unused"
+    with pytest.raises(SystemExit) as error:
+        main(["select", "--candidates", str(tmp_path / "pool.json"), "--development-inputs", str(tmp_path / "dev.json"),
+              "--examples", str(tmp_path / "examples.json"), "--quotas", str(tmp_path / "quotas.json"),
+              "--seed", "seed", "--output", str(output)])
+    message = capsys.readouterr().err
+    assert error.value.code == 2 and "Insufficient independent candidates by stratum" in message
+    assert "PRIVATE_SOURCE_SENTINEL" not in message and "PRIVATE_STRATUM_SENTINEL" not in message
+    assert not output.exists()
+
+
+def test_public_attempt_history_validator_rejects_missing_records(tmp_path):
+    from src.detail_tagging_human_eval import validate_attempt_history
+    with pytest.raises(ValueError, match="Missing or invalid attempt history"):
+        validate_attempt_history(tmp_path, {"channel_id": "a", "attempts": 1}, "text", {}, {"max_attempts": 3})
