@@ -7,7 +7,7 @@
 
 | 관찰한 문제 | 구현한 대응 |
 | --- | --- |
-| v2가 상위 키워드에서 인접 세부를 확장 | 각 세부 슬롯의 정의·include·exclude를 스키마 description에 직접 연결하고 무관한 슬롯은 null |
+| v2가 상위 키워드에서 인접 세부를 확장 | 평면/grouped는 슬롯 description에 정의를 연결; compact는 전체 taxonomy를 프롬프트에 유지하고 무관한 슬롯은 null |
 | v4가 짧은 생활·사연·제작·작품 표현을 누락 | 문자 일치와 core를 자격 조건으로 삼지 않고 정의를 충족하는 실제 활동을 인정 |
 | v4/v5가 같은 상위를 소재·세부별로 여러 객체로 반환 | 상위/세부 각각 code당 nullable 객체 슬롯 하나 |
 | 모델이 topics.parent를 잘못 선택 | 슬롯의 부모는 taxonomy에 고정하고 모델이 별도 parent 값을 작성하지 않음 |
@@ -68,13 +68,14 @@ AI 기준은 원본 그대로 유지하며 사람 정답으로 취급하지 않�
 | grounded-detail-candidates-v5-r3 | v4 바이트를 기반으로 경계·7개 합성 예시 추가 | 50개 실제 실행, 누락은 줄었으나 과잉 증가 |
 | grounded-detail-candidates-v5-code-map | 코드별 평면 고정 슬롯과 엄격한 변환·감사 | 중복 오류는 없었으나 미분류 24개로 누락 악화 |
 | grounded-detail-candidates-v5-grouped | 선택한 상위 아래에서만 세부 고정 슬롯 판단 | 계층 출력 구조 실험 |
-| grounded-detail-candidates-v5-compact | 계층 슬롯의 반복 정의를 $defs/$ref로 공유 | grouped와 같은 프롬프트·검증 형태, 더 작은 스키마 |
+| grounded-detail-candidates-v5-compact | 계층 슬롯의 반복 정의를 $defs/$ref로 공유 | grouped와 같은 프롬프트, description 제거·참조 공유를 함께 적용 |
 
 과거 이름의 프롬프트 바이트를 덮어쓰지 않는다. 각 수정본의 실패도 사용량·원본 응답과 함께 보존한다.
 
-compact는 계층 슬롯에서 반복되던 근거 객체 정의를 공유한다. 검증 형태는 참조를 펼치면 기존 계층 슬롯과 같다.
+compact는 계층 슬롯에서 반복되던 근거 객체 정의를 공유한다. 검증 형태는 참조를 펼치고 description을 제외하면 기존 계층 슬롯과 같다.
 스키마 안에서 반복된 taxonomy 설명도 제거하지만 프롬프트에는 전체 taxonomy를 그대로 유지한다.
-스키마 문자 수는 55,958→14,866(73.4% 감소)이며 grouped와 prompt_hash는 같다.
+스키마 문자 수는 55,958→description 제거 36,381→공유 적용 14,866이다. 총 감소의 47.6%는
+description 제거다. 상위만 선택하는 지침 등도 빠지므로 모델이 받는 지침이 달라진다. grouped와 prompt_hash는 같다.
 이는 모델의 정확성 향상을 보장하지 않는다. 실제 입력 토큰·첫 시도·최종 성공·누락·과잉으로 검증해야 한다.
 비교 보고서의 쌍별 changed_factors에 실제로 달라진 프롬프트/스키마 해시를 기록한다.
 
@@ -82,3 +83,5 @@ compact는 계층 슬롯에서 반복되던 근거 객체 정의를 공유한다
 최종 compact는 첫 시도·최종 49/50, 중복 오류 0회였다. v4와 공통 성공한 48개에서
 세부 누락 10→10·과잉 4→2·F1 0.816→0.838이었다. 상위 지표는 소폭 악화됐고
 독립 사람 검증은 미수행이므로 기본값 승격이나 모든 품질 지표 개선을 주장하지 않는다.
+
+최종 compact의 독립 사람 홀드아웃 등록과 버전별 스키마·채택 결정 정비는 [#70](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/70) 후속 범위다.
