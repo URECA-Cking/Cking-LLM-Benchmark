@@ -5,6 +5,39 @@ Issue #66의 보조 도구는 `src.detail_tagging_holdout`이다. #64의 사람 
 `results/`에만 보관한다. 아래의 준비·선정·고정·보고 명령은 모델을 호출하지 않는다.
 `run`만 원문을 외부로 전송하고 비용을 발생시킨다.
 
+## 사용자가 위임한 AI 대리 검수
+
+사용자가 Codex에 사람처럼 판단하도록 명시적으로 위임한 경우에는 AI 판정을 따로 기록한다.
+`reviewer`는 모든 행에 `AI:` 접두사를 붙이고 `freeze --ai-proxy`로 고정한다.
+유지의 정확한 인용·사유, 보류 사유, 상위·세부 관계와 태그 수 제한은 동일하게 검증한다.
+사람 검수 모드는 알려진 AI 검수자 표시를 거부한다. 검수자 신원을 인증하는 기능은 아니다.
+
+```powershell
+python -m src.detail_tagging_human_eval freeze --pack results/issue66-development/development/pack.private.json --reviews results/issue66-ai-proxy-review-v2/ai-review.private.csv --output results/issue66-ai-proxy-frozen.private.json --ai-proxy
+```
+
+이 파일의 origin은 `ai_proxy`다. 사람 기준과 섞지 않으며 배치 실행에는
+`--human-criteria` 대신 `--ai-proxy-criteria`를 명시해야 한다. 이 실행 역시 원문 외부 전송·
+유료 호출의 별도 승인이 필요하다. 두 버전은 같은 고정 입력·모델·시도 상한을 사용하고
+서로 다른 새 출력 경로를 사용한다. 아래는 승인 후 사용하는 명령 형식이다.
+
+```powershell
+python -m src.detail_tagging_batch --inputs results/issue66-development/development/inputs.private.json --output results/issue66-ai-new-v2 --prompt-version grounded-detail-candidates-v2 --ai-proxy-criteria results/issue66-ai-proxy-review-v2/criteria.ai-proxy.private.json --tag-llm
+python -m src.detail_tagging_batch --inputs results/issue66-development/development/inputs.private.json --output results/issue66-ai-new-v4 --prompt-version grounded-detail-candidates-v4 --ai-proxy-criteria results/issue66-ai-proxy-review-v2/criteria.ai-proxy.private.json --tag-llm
+python -m src.detail_tagging_human_eval evaluate --criteria results/issue66-ai-proxy-review-v2/criteria.ai-proxy.private.json --summary results/issue66-ai-new-v2/summary-<ID>.json --summary results/issue66-ai-new-v4/summary-<ID>.json --output results/issue66-ai-comparison.private.json --ai-proxy
+```
+
+AI 전용 실행은 `reference_origin`/`reference_criteria_hash`를 조건에 고정하고
+`human_review=not_performed`로 기록한다. 평가도 AI 모드를 명시해야 하며 AI 기준 해시가
+없는 역사적 실행과의 엄격 비교는 거부한다. 보고서는 사람 양성·미분류 같은 이름 대신
+`reference_*` 지표를 쓰며 `v2_retained_ai_proxy_diagnostic_only`를 기록한다.
+AI 기준은 사람 검수용 홀드아웃 protocol/register/decide의 채택 경로로 전달할 수 없다.
+사용자의 위임은 AI 판단을 사용할 권한이며 독립적인 사람 정답이 되었다는 뜻은 아니다.
+
+2026-10-14 전체 50개 AI 대리 검수: 유지 99행(상위 51, 세부 48), 삭제 4,969행,
+보류 32행, pending 0행이다. 보류는 15개 채널에 남겼다. 실제 사람 검수와 모델 실행은
+하지 않았으며, 원문 입력에 포함된 역사적 자동 라벨을 일부 보았으므로 블라인드 검수가 아니다.
+
 ## 역사적 집단과 검수표
 
 ```powershell
