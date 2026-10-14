@@ -24,8 +24,16 @@ EXPERIMENTAL_PROMPT_VERSION = "grounded-detail-candidates-v3"
 V4_PROMPT_VERSION = "grounded-detail-candidates-v4"
 DEDUP_PROMPT_VERSION = "grounded-detail-candidates-v4-dedup"
 V5_PROMPT_VERSION = "grounded-detail-candidates-v5"
+V5_REVISED_PROMPT_VERSION = "grounded-detail-candidates-v5-r2"
+V5_REFINED_PROMPT_VERSION = "grounded-detail-candidates-v5-r3"
+V5_CODE_MAP_PROMPT_VERSION = "grounded-detail-candidates-v5-code-map"
+V5_GROUPED_PROMPT_VERSION = "grounded-detail-candidates-v5-grouped"
+V5_COMPACT_PROMPT_VERSION = "grounded-detail-candidates-v5-compact"
+GROUPED_VERSIONS = (V5_GROUPED_PROMPT_VERSION, V5_COMPACT_PROMPT_VERSION)
+CODE_MAP_VERSIONS = (V5_CODE_MAP_PROMPT_VERSION, *GROUPED_VERSIONS)
 PROMPT_VERSIONS = (PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION, V4_PROMPT_VERSION,
-                   DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION)
+                   DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION,
+                   V5_REFINED_PROMPT_VERSION, V5_CODE_MAP_PROMPT_VERSION, *GROUPED_VERSIONS)
 
 
 def digest(value):
@@ -36,6 +44,18 @@ def digest(value):
 def build_prompt(taxonomy, prompt_version=PROMPT_VERSION):
     if prompt_version not in PROMPT_VERSIONS:
         raise ValueError("Unknown prompt version")
+    if prompt_version in GROUPED_VERSIONS:
+        from src.detail_tagging_code_map import grouped_prompt
+        return grouped_prompt(taxonomy)
+    if prompt_version == V5_CODE_MAP_PROMPT_VERSION:
+        from src.detail_tagging_code_map import build_prompt as build_code_map_prompt
+        return build_code_map_prompt(taxonomy)
+    if prompt_version == V5_REVISED_PROMPT_VERSION:
+        from src.detail_tagging_v5 import build_v5_prompt
+        return build_v5_prompt(taxonomy)
+    if prompt_version == V5_REFINED_PROMPT_VERSION:
+        from src.detail_tagging_v5 import refine_v4_prompt
+        return refine_v4_prompt(build_prompt(taxonomy, V4_PROMPT_VERSION))
     if prompt_version in (DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION):
         # A shared dedup intervention makes the unrun ablation reproducible.
         prompt = build_prompt(taxonomy, V4_PROMPT_VERSION)
@@ -136,8 +156,17 @@ def _experimental_prompt(taxonomy):
     )
 
 
-def candidate_schema(taxonomy):
+def candidate_schema(taxonomy, prompt_version=PROMPT_VERSION):
     """Strict Structured Outputs: all fields required, no unknown properties."""
+    if prompt_version == V5_COMPACT_PROMPT_VERSION:
+        from src.detail_tagging_code_map import compact_grouped_schema
+        return compact_grouped_schema(taxonomy)
+    if prompt_version == V5_GROUPED_PROMPT_VERSION:
+        from src.detail_tagging_code_map import grouped_schema
+        return grouped_schema(taxonomy)
+    if prompt_version == V5_CODE_MAP_PROMPT_VERSION:
+        from src.detail_tagging_code_map import schema
+        return schema(taxonomy)
     def item_schema(codes, topic=False):
         properties = {
             "code": {"type": "string", "enum": codes},
@@ -234,7 +263,7 @@ def automatic_record(channel_id, text, candidates, taxonomy, model_version,
             "taxonomy_snapshot": taxonomy,
             "model_version": model_version, "prompt_version": prompt_version,
             "prompt_hash": digest(build_prompt(taxonomy, prompt_version)), "candidates": candidates,
-            "output_schema_hash": digest(candidate_schema(taxonomy)),
+            "output_schema_hash": digest(candidate_schema(taxonomy, prompt_version)),
             "result": result, "kind": "automatic", "review_status": "pending"}
 
 
@@ -247,13 +276,20 @@ def classify_with_model(client, channel_id, text, taxonomy, model_version,
                   {"role": "user", "content": json.dumps({"creator": text}, ensure_ascii=False)}],
         response_format={"type": "json_schema", "json_schema": {
             "name": "detail_tag_candidates", "strict": True,
-            "schema": candidate_schema(taxonomy)}},
+            "schema": candidate_schema(taxonomy, prompt_version)}},
     )
     message = response.choices[0].message
     if getattr(message, "refusal", None):
         raise ValueError("Model refused classification; no revision saved")
     if response.choices[0].finish_reason != "stop" or not message.content:
         raise ValueError("Model response incomplete; no revision saved")
+    if prompt_version in CODE_MAP_VERSIONS:
+        from src.detail_tagging_code_map import parse, normalize, normalize_grouped
+        raw = parse(message.content)
+        candidates = (normalize_grouped if prompt_version in GROUPED_VERSIONS else normalize)(raw, taxonomy)
+        record = automatic_record(channel_id, text, candidates, taxonomy, model_version, prompt_version)
+        return {**record, "provider_candidates": raw,
+                "provider_schema_version": "code-map-grouped-v1" if prompt_version in GROUPED_VERSIONS else "code-map-v1"}
     candidates = json.loads(message.content)
     return automatic_record(channel_id, text, candidates, taxonomy, model_version, prompt_version)
 

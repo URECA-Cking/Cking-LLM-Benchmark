@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, PROMPT_VERSIONS, V4_PROMPT_VERSION,
-                               DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION, RevisionStore,
+                               DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION,
+                               V5_REFINED_PROMPT_VERSION, V5_CODE_MAP_PROMPT_VERSION,
+                               V5_GROUPED_PROMPT_VERSION, V5_COMPACT_PROMPT_VERSION, RevisionStore,
                                build_prompt, candidate_schema, classify_with_model, digest)
 
 
@@ -54,7 +56,7 @@ def conditions(inputs, taxonomy, model, client, prompt_version, temperature):
     return {"inputs_hash": digest(inputs), "criteria_hash": digest(taxonomy),
             "model_version": model, "policy_version": POLICY_VERSION,
             "prompt_version": prompt_version, "prompt_hash": digest(build_prompt(taxonomy, prompt_version)),
-            "output_schema_hash": digest(candidate_schema(taxonomy)),
+            "output_schema_hash": digest(candidate_schema(taxonomy, prompt_version)),
             "temperature": temperature, "sdk_max_retries": client.max_retries,
             "timeout_seconds": timeout}
 
@@ -108,7 +110,7 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
                     or request.get("messages") != [
                         {"role": "system", "content": build_prompt(taxonomy, prompt_version)},
                         {"role": "user", "content": json.dumps({"creator": row["text"]}, ensure_ascii=False)}]
-                    or request.get("response_format", {}).get("json_schema", {}).get("schema") != candidate_schema(taxonomy)):
+                    or request.get("response_format", {}).get("json_schema", {}).get("schema") != candidate_schema(taxonomy, prompt_version)):
                 raise ValueError("Attempt request provenance mismatch")
             if entry.get("revision"):
                 record = store.read(entry["revision"])
@@ -183,7 +185,10 @@ def main(argv=None):
     criteria.add_argument("--human-criteria", type=Path, help="Frozen human criteria JSON")
     criteria.add_argument("--ai-proxy-criteria", type=Path, help="User-authorized AI proxy diagnostic; not human ground truth")
     args = parser.parse_args(argv)
-    if args.prompt_version in (V4_PROMPT_VERSION, DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION) and args.human_criteria is None and args.ai_proxy_criteria is None:
+    if args.prompt_version in (V4_PROMPT_VERSION, DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION,
+                               V5_REVISED_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION,
+                               V5_CODE_MAP_PROMPT_VERSION, V5_GROUPED_PROMPT_VERSION,
+                               V5_COMPACT_PROMPT_VERSION) and args.human_criteria is None and args.ai_proxy_criteria is None:
         parser.error("v4/v5 requires --human-criteria fixed by human reviewers or explicit --ai-proxy-criteria")
     load_dotenv()
     result = run_batch(OpenAI(timeout=60, max_retries=0), read(args.inputs),
