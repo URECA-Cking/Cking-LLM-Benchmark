@@ -1,5 +1,8 @@
 # v5 정의 기반 후보 보존·중복 억제 실험
 
+최초 v5의 실패 이후 재분석과 출력 구조 보완은 [코드별 고정 슬롯 실험](detail-tagging-v5-code-map.md)을 참고한다.
+기존 `grounded-detail-candidates-v5`는 역사적 결과 검증을 위해 그대로 보존한다.
+
 `grounded-detail-candidates-v5`는 명시적 실험 옵션이다. 기본값 v2, 기존 v2/v3/v4
 프롬프트 바이트, 출력 스키마, `detail-limit-v2`, 인용·중복·부모 검증은 유지한다.
 결과 보정이나 중복 자동 제거는 하지 않는다.
