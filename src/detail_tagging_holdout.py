@@ -6,7 +6,8 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-from src.detail_tagging import (PROMPT_VERSION, V4_PROMPT_VERSION, V5_PROMPT_VERSION, RevisionStore,
+from src.detail_tagging import (PROMPT_VERSION, V4_PROMPT_VERSION, V5_PROMPT_VERSION,
+                                V5_REVISED_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION, RevisionStore,
                                 build_prompt, candidate_schema, classify, digest)
 from src.detail_tagging_batch import read, run_batch, write_new
 from src.detail_tagging_batch import conditions as batch_conditions
@@ -169,7 +170,9 @@ def select_holdout(candidates, development, examples, quotas, seed):
 
 
 def protocol(development, holdout, selection, acceptance, versions=VERSIONS):
-    if tuple(versions) not in (VERSIONS, (V4_PROMPT_VERSION, V5_PROMPT_VERSION)):
+    if tuple(versions) not in (VERSIONS, (V4_PROMPT_VERSION, V5_PROMPT_VERSION),
+                              (V4_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION),
+                              (V4_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION)):
         raise HoldoutValidationError("Supported pairs are v2/v4 or v4/v5")
     dev, _ = validated_criteria(development)
     test, _ = validated_criteria(holdout)
@@ -298,7 +301,7 @@ def compare_pair(value, split, summaries):
 def record_decision(value, development_summaries, holdout_summaries, choice, reviewer, reason,
                     prompts_changed=False):
     versions = tuple(validated_protocol(value)["prompt_hashes"])
-    adopt_choice = "adopt_v5" if versions[-1] == V5_PROMPT_VERSION else "adopt_v4"
+    adopt_choice = "adopt_v4" if versions[-1] == V4_PROMPT_VERSION else "adopt_v5"
     if choice not in {"retain_v2", "additional_experiment", adopt_choice} or not reviewer.strip() or not reason.strip():
         raise HoldoutValidationError("Team decision, reviewer and reason required")
     development = compare_pair(value, "development", development_summaries)
@@ -339,7 +342,10 @@ def main(argv=None):
     register = commands.add_parser("register")
     for name in ("development", "holdout", "selection", "acceptance", "output"):
         register.add_argument("--" + name, type=Path, required=True)
-    register.add_argument("--v4-v5", action="store_true", help="Preregister v4/v5 instead of the default v2/v4")
+    pair = register.add_mutually_exclusive_group()
+    pair.add_argument("--v4-v5", action="store_true", help="Preregister v4/initial v5 instead of the default v2/v4")
+    pair.add_argument("--v4-v5-r2", action="store_true", help="Preregister v4/revised v5-r2")
+    pair.add_argument("--v4-v5-r3", action="store_true", help="Preregister v4/refined v5-r3")
     run = commands.add_parser("run")
     score = commands.add_parser("report")
     for command in (run, score):
@@ -376,6 +382,8 @@ def main(argv=None):
         elif args.command == "register":
             write_new(args.output, protocol(read(args.development), read(args.holdout),
                                            read(args.selection), read(args.acceptance),
+                                           (V4_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION) if args.v4_v5_r3 else
+                                           (V4_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION) if args.v4_v5_r2 else
                                            (V4_PROMPT_VERSION, V5_PROMPT_VERSION) if args.v4_v5 else VERSIONS))
         elif args.command == "run":
             from dotenv import load_dotenv

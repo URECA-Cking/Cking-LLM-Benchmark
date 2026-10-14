@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from itertools import combinations
 from pathlib import Path
 
-from src.detail_tagging import RevisionStore, classify, digest
+from src.detail_tagging import RevisionStore, classify, digest, CODE_MAP_VERSIONS, GROUPED_VERSIONS
 from src.detail_tagging_batch import read, write_new
 from src.detail_tagging_human_eval import evaluate, validated_criteria, _load_run, _metrics
 
@@ -62,11 +62,29 @@ def audit_run(path, pack):
             candidates = json.loads(message.get("content") or "null")
         except (ValueError, TypeError):
             candidates = None
+        raw_candidates = candidates
+        normalization_error = None
+        if (conditions["prompt_version"] in CODE_MAP_VERSIONS
+                and choice.get("finish_reason") == "stop" and not message.get("refusal")
+                and message.get("content")):
+            from src.detail_tagging_code_map import parse, normalize, normalize_grouped
+            try:
+                raw_candidates = parse(message.get("content") or "null")
+                converter = normalize_grouped if conditions["prompt_version"] in GROUPED_VERSIONS else normalize
+                candidates = converter(raw_candidates, pack["manifest"]["taxonomy"])
+            except ValueError as error:
+                normalization_error = error
+                candidates = None
         if entry["status"] == "passed":
+            record = store.read(entry["revision"])
             if (choice.get("finish_reason") != "stop" or message.get("refusal")
-                    or candidates != store.read(entry["revision"])["candidates"]):
+                    or candidates != record["candidates"]
+                    or (conditions["prompt_version"] in CODE_MAP_VERSIONS
+                        and raw_candidates != record.get("provider_candidates"))):
                 raise ValueError("Raw response differs from successful revision")
         else:
+            if normalization_error and str(normalization_error) != entry.get("error"):
+                raise ValueError("Recorded normalization error differs from raw response")
             if choice.get("finish_reason") == "stop" and not message.get("refusal") and isinstance(candidates, dict):
                 try:
                     classify(texts[cid], candidates, pack["manifest"]["taxonomy"])
@@ -122,9 +140,9 @@ def audit_run(path, pack):
                                for r in summary["rows"] if not r["passed"]]}
 
 
-def compare_experiments(frozen, paths, origin="ai_proxy"):
+def compare_experiments(frozen, paths, origin="ai_proxy", *, schema_experiment=False):
     """Reuse existing strict evaluator; preserve original criteria and run artifacts."""
-    report = evaluate(frozen, paths, origin)
+    report = evaluate(frozen, paths, origin, allow_schema_change=schema_experiment)
     if origin == "human_declared" and any(
             run["conditions"].get("human_criteria_hash") != frozen["hash"] for run in report["runs"]):
         raise ValueError("Experiment runs require bound human criteria")
@@ -144,6 +162,8 @@ def compare_experiments(frozen, paths, origin="ai_proxy"):
     for first, second in combinations(range(len(paths)), 2):
         common = [cid for cid in ids if all(loaded[i][2][cid] is not None for i in (first, second))]
         paired.append({"versions": [versions[i] for i in (first, second)],
+                       "changed_factors": [key for key in ("prompt_hash", "output_schema_hash")
+                                           if loaded[first][0]["conditions"][key] != loaded[second][0]["conditions"][key]],
                        "channels": len(common), "excluded_failed_channels": len(ids) - len(common),
                        "runs": [{"prompt_version": versions[i],
                                  "metrics": reference_metrics(_metrics(common, loaded[i][1], loaded[i][2], decisions))}
@@ -161,11 +181,14 @@ def main(argv=None):
     parser.add_argument("--summary", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--ai-proxy", action="store_true")
+    parser.add_argument("--schema-experiment", action="store_true",
+                        help="Explicitly compare schema+prompt variants, never claim prompt-only isolation")
     args = parser.parse_args(argv)
     if not args.output.resolve().is_relative_to(Path("results").resolve()):
         parser.error("Private experiment reports must stay inside results/")
     report = compare_experiments(read(args.criteria), args.summary,
-                                 "ai_proxy" if args.ai_proxy else "human_declared")
+                                 "ai_proxy" if args.ai_proxy else "human_declared",
+                                 schema_experiment=args.schema_experiment)
     write_new(args.output, report)
     # Public stdout contains no source text, channel IDs, quotes or file paths.
     print(json.dumps({"sample_size": report["sample_size"], "decision": report["decision"],
