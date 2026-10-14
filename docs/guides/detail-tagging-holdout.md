@@ -10,7 +10,9 @@ Issue #66의 보조 도구는 `src.detail_tagging_holdout`이다. #64의 사람 
 사용자가 Codex에 사람처럼 판단하도록 명시적으로 위임한 경우에는 AI 판정을 따로 기록한다.
 `reviewer`는 모든 행에 `AI:` 접두사를 붙이고 `freeze --ai-proxy`로 고정한다.
 유지의 정확한 인용·사유, 보류 사유, 상위·세부 관계와 태그 수 제한은 동일하게 검증한다.
-사람 검수 모드는 알려진 AI 검수자 표시를 거부한다. 검수자 신원을 인증하는 기능은 아니다.
+사람 검수 모드는 알려진 AI 검수자 표시를 거부한다. `validate_review_origin`은 reviewer
+문자열의 `AI:` 접두사를 확인하는 **선언 관례 검사**다. 검수자 신원을 인증하거나 실제 사람
+작성 여부·AI 사용 부재를 보증하지 않는다. origin과 해시 대조도 로컬 기록의 일관성 검사다.
 
 ```powershell
 python -m src.detail_tagging_human_eval freeze --pack results/issue66-development/development/pack.private.json --reviews results/issue66-ai-proxy-review-v2/ai-review.private.csv --output results/issue66-ai-proxy-frozen.private.json --ai-proxy
@@ -166,3 +168,10 @@ python -m src.detail_tagging_holdout decide --protocol results/issue66-protocol.
 새 프롬프트에 대해서는 새 홀드아웃이 필요하다. 기본값 변경은 평가 근거와 연결한 별도 코드
 검토로 진행한다. taxonomy/코드 확정, BE 시드, 추천 순위, 서비스 E2E·배포는 별도 작업이다.
 도구 구현이나 합성 테스트만으로 이슈를 완료 처리하지 않는다.
+
+## CLI 오류 진단
+
+홀드아웃 도구 내부의 고정 검증 메시지는 원인을 표시한다(예: 사전 고정 프롬프트 변경,
+독립 표본 수량 부족). 외부 파일·검증 도구의 예외는 원문·채널·경로가 포함될 수 있어
+메시지를 그대로 출력하지 않고 스키마/기준/시도 기록 또는 경로·권한·기존 출력 확인을 안내한다.
+시도 기록의 공통 검증 함수는 `detail_tagging_human_eval.validate_attempt_history`로 공개한다.
