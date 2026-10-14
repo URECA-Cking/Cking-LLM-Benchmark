@@ -32,10 +32,12 @@ def summaries(output):
     return [next((output / version).glob("summary-*.json")) for version in (PROMPT_VERSION, V4_PROMPT_VERSION)]
 
 
-def test_preregistered_v4_v5_pair_and_adoption_remain_explicit(study, tmp_path):
+@pytest.mark.parametrize("revision", ["grounded-detail-candidates-v5", "grounded-detail-candidates-v5-r2",
+                                    "grounded-detail-candidates-v5-r3"])
+def test_preregistered_v4_v5_pair_and_adoption_remain_explicit(study, tmp_path, revision):
     from src.detail_tagging import V5_PROMPT_VERSION
     manifest = study["manifest"]
-    versions = (V4_PROMPT_VERSION, V5_PROMPT_VERSION)
+    versions = (V4_PROMPT_VERSION, revision)
     value = protocol(manifest["development"], manifest["holdout"], manifest["selection"],
                      manifest["acceptance"], versions)
     assert tuple(validated_protocol(value)["prompt_hashes"]) == versions
