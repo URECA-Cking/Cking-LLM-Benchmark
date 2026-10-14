@@ -24,6 +24,7 @@
 ## 실행·파일 찾기
 
 - [설치와 준비](guides/installation.md)
+- [세부 태그 v4 실험과 사람 기준 평가](guides/detail-tagging-v4-human-eval.md)
 - [단일 크리에이터 서비스 후보 생성](guides/service-recommendation.md)
 - [전체 크리에이터 배치 생성·BE 적재](guides/batch-recommendation.md)
 - [manifest 변경 감지·API Key 기반 일일 통합 배치](guides/daily-recommendation.md)

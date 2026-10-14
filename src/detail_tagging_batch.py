@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION, RevisionStore,
+from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, PROMPT_VERSIONS, V4_PROMPT_VERSION, RevisionStore,
                                build_prompt, candidate_schema, classify_with_model, digest)
 
 
@@ -59,7 +59,7 @@ def conditions(inputs, taxonomy, model, client, prompt_version, temperature):
 
 
 def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
-              prompt_version=PROMPT_VERSION, temperature=0):
+              prompt_version=PROMPT_VERSION, temperature=0, human_criteria=None):
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
     ids = [r["channel_id"] for r in inputs]
@@ -68,6 +68,13 @@ def run_batch(client, inputs, taxonomy, model, output, max_attempts=3,
     output = Path(output)
     contract = {**conditions(inputs, taxonomy, model, client, prompt_version, temperature),
                 "max_attempts": max_attempts}
+    if human_criteria is not None:
+        from src.detail_tagging_human_eval import validated_criteria
+        pack, _ = validated_criteria(human_criteria)
+        if (pack["manifest"]["inputs_hash"] != digest(inputs)
+                or pack["manifest"]["criteria_hash"] != digest(taxonomy)):
+            raise ValueError("Human criteria input/taxonomy differs")
+        contract["human_criteria_hash"] = human_criteria["hash"]
     manifest = output / "run-conditions.json"
     if manifest.exists():
         if read(manifest) != contract:
@@ -161,14 +168,18 @@ def main(argv=None):
     parser.add_argument("--model", default="gpt-5.4-nano-2026-03-17")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-attempts", type=int, default=3)
-    parser.add_argument("--prompt-version", choices=[PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION],
+    parser.add_argument("--prompt-version", choices=PROMPT_VERSIONS,
                         default=PROMPT_VERSION)
     parser.add_argument("--tag-llm", action="store_true", required=True)
+    parser.add_argument("--human-criteria", type=Path, help="Frozen human criteria JSON; required for v4 CLI")
     args = parser.parse_args(argv)
+    if args.prompt_version == V4_PROMPT_VERSION and args.human_criteria is None:
+        parser.error("v4 requires --human-criteria fixed by human reviewers before evaluation")
     load_dotenv()
     result = run_batch(OpenAI(timeout=60, max_retries=0), read(args.inputs),
                        read(args.taxonomy), args.model, args.output, args.max_attempts,
-                       prompt_version=args.prompt_version)
+                       prompt_version=args.prompt_version,
+                       human_criteria=read(args.human_criteria) if args.human_criteria else None)
     print(json.dumps({k: result[k] for k in ("total", "first_pass", "passed_after_retries")}))
     return 0 if result["passed_after_retries"] == result["total"] else 1
 

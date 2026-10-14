@@ -281,7 +281,8 @@ def test_default_prompt_is_exact_original_v2(taxonomy):
     assert digest(experimental) != digest(build_prompt(taxonomy))
 
 
-def test_explicit_experiment_records_actual_prompt(taxonomy):
+@pytest.mark.parametrize("version", ["grounded-detail-candidates-v3", "grounded-detail-candidates-v4"])
+def test_explicit_experiment_records_actual_prompt(taxonomy, version):
     from src.detail_tagging import digest
     calls = []
     def create(**kwargs):
@@ -290,6 +291,55 @@ def test_explicit_experiment_records_actual_prompt(taxonomy):
             message=SimpleNamespace(content='{"parents":[],"topics":[]}'))])
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     record = classify_with_model(client, "channel", "", taxonomy, "model",
-                                 prompt_version="grounded-detail-candidates-v3")
-    assert record["prompt_version"] == "grounded-detail-candidates-v3"
+                                 prompt_version=version)
+    assert record["prompt_version"] == version
     assert record["prompt_hash"] == digest(calls[0]["messages"][0]["content"])
+
+
+@pytest.mark.parametrize("text,parents,topics", [
+    ("노래 커버", ["MUSIC"], ["MUSIC_VOCAL"]),
+    ("남자 코디", ["FASHION"], ["FASHION_CLOTHING"]),
+    ("#노래커버", ["MUSIC"], ["MUSIC_VOCAL"]),
+    ("패션·뷰티", ["FASHION", "BEAUTY"], []),
+    ("동물 영상 모음", [], []),
+    ("배경 음악", [], []),
+])
+def test_v4_candidate_handoff_preserves_explicit_parents(taxonomy, text, parents, topics):
+    from src.detail_tagging import V4_PROMPT_VERSION, build_prompt, digest
+    data = payload(parents, topics)
+    for row in data["parents"] + data["topics"]:
+        row["evidence"] = text
+    record = automatic_record("channel", text, data, taxonomy, "model", V4_PROMPT_VERSION)
+    assert {r["code"] for r in record["result"]["parents"]} == set(parents)
+    assert {r["code"] for r in record["result"]["topics"]} == set(topics)
+    assert record["prompt_hash"] == digest(build_prompt(taxonomy, V4_PROMPT_VERSION))
+
+
+def test_v4_prompt_retains_v3_rules_and_independent_parent_examples(taxonomy):
+    from src.detail_tagging import PROMPT_VERSIONS, build_prompt, digest
+    prompts = [build_prompt(taxonomy, version) for version in PROMPT_VERSIONS]
+    assert len({digest(p) for p in prompts}) == 3
+    v3, v4 = prompts[1:]
+    assert "확정하지 않고" not in v4
+    for instruction in v3.splitlines():
+        assert instruction in v4
+    for instruction in ("topics만 비우며", "노래 커버 → MUSIC/MUSIC_VOCAL", "남자 코디 → FASHION/FASHION_CLOTHING",
+                        "해시태그", "메이크업·스킨케어", "배경 음악만으로 작곡·댄스·악기"):
+        assert instruction in v4
+
+
+@pytest.mark.parametrize("quote", ['"노래 커버"', "노래...커버", "song cover", "노래를 합니다", ""])
+def test_v4_does_not_relax_evidence_validation(taxonomy, quote):
+    from src.detail_tagging import V4_PROMPT_VERSION
+    with pytest.raises(ValueError, match="exact source quote"):
+        automatic_record("channel", "노래 커버", {"parents": [candidate("MUSIC", quote)], "topics": []},
+                         taxonomy, "model", V4_PROMPT_VERSION)
+
+
+@pytest.mark.parametrize("axis", ["parents", "topics"])
+def test_v4_duplicate_rejection(taxonomy, axis):
+    from src.detail_tagging import V4_PROMPT_VERSION
+    data = payload(["MUSIC"], ["MUSIC_VOCAL"])
+    data[axis] *= 2
+    with pytest.raises(ValueError, match="Duplicate"):
+        automatic_record("channel", "주제", data, taxonomy, "model", V4_PROMPT_VERSION)

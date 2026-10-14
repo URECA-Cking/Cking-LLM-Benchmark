@@ -56,6 +56,18 @@ def test_old_store_rejected(tmp_path):
         run_batch(client([]), [], {"parents": [], "subtopics": []}, "model", tmp_path)
 
 
+@pytest.mark.parametrize("old", ["grounded-detail-candidates-v2", "grounded-detail-candidates-v3"])
+def test_v4_cannot_resume_earlier_prompt(tmp_path, old):
+    from src.detail_tagging import V4_PROMPT_VERSION
+    taxonomy = json.loads(Path("data/creator-subtopics.json").read_text(encoding="utf-8"))
+    inputs = [{"channel_id": "a", "text": ""}]
+    run_batch(client([{"parents": [], "topics": []}]), inputs, taxonomy, "model", tmp_path, prompt_version=old)
+    snapshots = {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
+    with pytest.raises(ValueError, match="conditions mismatch"):
+        run_batch(client([]), inputs, taxonomy, "model", tmp_path, prompt_version=V4_PROMPT_VERSION)
+    assert snapshots == {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
+
+
 def test_compare_separates_retry_cohort(tmp_path):
     from src.detail_tagging_compare import compare
     from src.detail_tagging_batch import write_new

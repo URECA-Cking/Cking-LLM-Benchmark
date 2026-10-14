@@ -21,6 +21,8 @@ from src.recommendation.taxonomy import DEFAULT_CATEGORIES_CSV, load_service_cat
 POLICY_VERSION = "detail-limit-v2"
 PROMPT_VERSION = "grounded-detail-candidates-v2"
 EXPERIMENTAL_PROMPT_VERSION = "grounded-detail-candidates-v3"
+V4_PROMPT_VERSION = "grounded-detail-candidates-v4"
+PROMPT_VERSIONS = (PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION, V4_PROMPT_VERSION)
 
 
 def digest(value):
@@ -29,7 +31,7 @@ def digest(value):
 
 
 def build_prompt(taxonomy, prompt_version=PROMPT_VERSION):
-    if prompt_version not in (PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION):
+    if prompt_version not in PROMPT_VERSIONS:
         raise ValueError("Unknown prompt version")
     prompt = _experimental_prompt(taxonomy)
     if prompt_version == PROMPT_VERSION:
@@ -39,6 +41,22 @@ def build_prompt(taxonomy, prompt_version=PROMPT_VERSION):
                   + "정의와 포함/제외 기준을 충족하는 모든 후보를 반환한다. 근거 부족은 비운다. "
                   + "parents와 topics 배열에 code, evidence(원문 연속 인용), core_evidence를 넣는다. "
                   + prompt[end:])
+    if prompt_version == V4_PROMPT_VERSION:
+        # Keep the v2/v3 bytes intact; only v4 receives the parent/detail guidance.
+        boundary = prompt.index("\n")
+        prompt = prompt[:boundary] + (
+            "\n상위 주제 parents와 세부 주제 topics의 근거를 독립 판단한다. "
+            "상위 주제가 명시됐으면 parents를 유지한다. 세부 근거가 부족하면 "
+            "topics만 비우며, 세부 후보가 없다는 이유로 상위 후보를 지우지 않는다. "
+            "해시태그도 원문 주제 근거로 허용한다. 키워드 하나로 관련 없는 세부 태그를 확장하지 않는다. "
+            "짧고 명확한 예: 노래 커버 → MUSIC/MUSIC_VOCAL; "
+            "남자 코디 → FASHION/FASHION_CLOTHING; #노래커버 → MUSIC/MUSIC_VOCAL. "
+            "상위만 유지 예: 패션·뷰티 → parents의 FASHION, BEAUTY, topics=[]; "
+            "이 표현만으로 메이크업·스킨케어를 추정하지 않는다. "
+            "동물 영상만으로 직접 돌봄을 추정하지 않는다. 배경 음악만으로 작곡·댄스·악기를 "
+            "추정하지 않는다. 게임명만으로 장르, 다른 플랫폼 소개만으로 현재 채널의 활동을 "
+            "추정하지 않는다."
+        ) + prompt[boundary:]
     return prompt
 
 
