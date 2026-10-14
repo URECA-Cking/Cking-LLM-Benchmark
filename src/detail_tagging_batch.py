@@ -10,10 +10,8 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, PROMPT_VERSIONS, V4_PROMPT_VERSION,
-                               DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION, V5_REVISED_PROMPT_VERSION,
-                               V5_REFINED_PROMPT_VERSION, V5_CODE_MAP_PROMPT_VERSION,
-                               V5_GROUPED_PROMPT_VERSION, V5_COMPACT_PROMPT_VERSION, RevisionStore,
+from src.detail_tagging import (POLICY_VERSION, PROMPT_VERSION, PROMPT_VERSIONS,
+                               EXPERIMENTAL_PROMPT_VERSION, RevisionStore,
                                build_prompt, candidate_schema, classify_with_model, digest)
 
 
@@ -185,10 +183,8 @@ def main(argv=None):
     criteria.add_argument("--human-criteria", type=Path, help="Frozen human criteria JSON")
     criteria.add_argument("--ai-proxy-criteria", type=Path, help="User-authorized AI proxy diagnostic; not human ground truth")
     args = parser.parse_args(argv)
-    if args.prompt_version in (V4_PROMPT_VERSION, DEDUP_PROMPT_VERSION, V5_PROMPT_VERSION,
-                               V5_REVISED_PROMPT_VERSION, V5_REFINED_PROMPT_VERSION,
-                               V5_CODE_MAP_PROMPT_VERSION, V5_GROUPED_PROMPT_VERSION,
-                               V5_COMPACT_PROMPT_VERSION) and args.human_criteria is None and args.ai_proxy_criteria is None:
+    if (args.prompt_version not in (PROMPT_VERSION, EXPERIMENTAL_PROMPT_VERSION)
+            and args.human_criteria is None and args.ai_proxy_criteria is None):
         parser.error("v4/v5 requires --human-criteria fixed by human reviewers or explicit --ai-proxy-criteria")
     load_dotenv()
     result = run_batch(OpenAI(timeout=60, max_retries=0), read(args.inputs),
