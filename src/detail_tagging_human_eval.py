@@ -5,6 +5,7 @@ import argparse
 import csv
 import hashlib
 import io
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -78,7 +79,9 @@ def validate(pack, rows):
             if any(row[k] for k in ("reviewer", "evidence", "reason")):
                 raise ValueError("Pending row contains review")
         else:
-            if not row["reviewer"].strip() or not row["reason"].strip():
+            if not row["reviewer"].strip():
+                raise ValueError("Human reviewer required")
+            if decision in {"keep", "hold"} and not row["reason"].strip():
                 raise ValueError("Human reviewer and reason required")
             evidence = row["evidence"]
             if (decision == "keep" and not evidence.strip()) or (evidence and evidence not in texts[row["channel_id"]]):
@@ -101,7 +104,11 @@ def validate(pack, rows):
 def freeze(pack, csv_path):
     # One immutable byte snapshot for parsing and provenance.
     raw = Path(csv_path).read_bytes()
-    reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError("Save human reviews as CSV UTF-8; cp949 is unsupported") from error
+    reader = csv.DictReader(io.StringIO(text, newline=""))
     if reader.fieldnames != list(FIELDS):
         raise ValueError("Invalid human review header")
     rows = list(reader)
@@ -111,6 +118,40 @@ def freeze(pack, csv_path):
     value = {"pack": pack, "rows": rows, "csv_sha256": hashlib.sha256(raw).hexdigest(),
              "origin": "human_declared", "counts": dict(Counter(decisions.values()))}
     return {"criteria": value, "hash": digest(value)}
+
+
+def _validate_attempts(directory, row, text, taxonomy, conditions):
+    """Derive summary claims from complete sequential attempt records."""
+    history = [read(p) for p in (directory / "attempts" / digest(row["channel_id"])).glob("*.json")]
+    if (type(row.get("attempts")) is not int or not history or len(history) != row["attempts"]
+            or type(conditions["max_attempts"]) is not int
+            or not 1 <= len(history) <= conditions["max_attempts"]
+            or any(type(e.get("attempt")) is not int for e in history)):
+        raise ValueError("Missing or invalid attempt history")
+    history.sort(key=lambda e: e["attempt"])
+    if [e["attempt"] for e in history] != list(range(1, len(history) + 1)):
+        raise ValueError("Nonsequential attempt history")
+    messages = [{"role": "system", "content": build_prompt(taxonomy, conditions["prompt_version"])},
+                {"role": "user", "content": json.dumps({"creator": text}, ensure_ascii=False)}]
+    for entry in history:
+        if (entry.get("channel_id") != row["channel_id"] or entry.get("input_hash") != digest(text)
+                or entry.get("conditions") != conditions):
+            raise ValueError("Attempt conditions differ")
+        request = entry.get("request", {})
+        if (request.get("messages") != messages or request.get("model") != conditions["model_version"]
+                or request.get("temperature") != conditions["temperature"]
+                or request.get("response_format", {}).get("json_schema", {}).get("schema") != candidate_schema(taxonomy)):
+            raise ValueError("Attempt request conditions differ")
+        if (entry.get("status") not in {"passed", "validation_error", "provider_error"}
+                or bool(entry.get("revision")) != (entry["status"] == "passed")):
+            raise ValueError("Invalid attempt status/revision")
+    successful = [e for e in history if e["status"] == "passed"]
+    if successful and (len(successful) != 1 or successful[0] is not history[-1]):
+        raise ValueError("Attempt history continues after success")
+    if (row["first_pass"] != (history[0]["status"] == "passed")
+            or row["passed"] != bool(successful)
+            or row["revision"] != (successful[0]["revision"] if successful else None)):
+        raise ValueError("Summary differs from attempt history")
 
 
 def _load_run(path, pack):
@@ -129,9 +170,14 @@ def _load_run(path, pack):
     inputs = {r["channel_id"]: r["text"] for r in manifest["inputs"]}
     if rows.keys() != inputs.keys():
         raise ValueError("Evaluation input channel sets differ")
+    if (report.get("total") != len(rows)
+            or report.get("first_pass") != sum(r["first_pass"] for r in rows.values())
+            or report.get("passed_after_retries") != sum(r["passed"] for r in rows.values())):
+        raise ValueError("Summary totals differ from rows")
     store = RevisionStore(Path(path).parent / "revisions")
     results = {}
     for cid, row in rows.items():
+        _validate_attempts(Path(path).parent, row, inputs[cid], taxonomy, conditions)
         if not row["passed"]:
             results[cid] = None
             continue
@@ -229,6 +275,7 @@ def evaluate(frozen, summaries):
                                for cid in ids if sum(cid in members for members in cohorts.values()) > 1},
             "adoption": "v2_retained_pending_human_adoption_decision",
             "limitations": ["Human-declared reviewers are not authenticated; AI drafts are not human truth.",
+                            "v4 prompt examples derive from the original 50-item evaluation sample; reuse is development-set evaluation with optimistic bias. Adoption requires an independent holdout without example overlap.",
                             "Held tags are excluded from missing/excess denominators; failed runs are reported separately.",
                             "Classification rates use successful outputs; selected-success bias remains. Empty arrays can improve format validity.",
                             "Cohorts overlap and must not be summed; explicit historical memberships require source verification.",
