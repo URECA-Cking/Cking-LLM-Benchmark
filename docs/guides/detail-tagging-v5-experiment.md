@@ -1,5 +1,7 @@
 # v5 정의 기반 후보 보존·중복 억제 실험
 
+현재 표준은 [사용자 결정으로 채택한 v2](../results/detail-tagging-v2-adoption.md)다. 아래 명령은 명시적 실험/과거 재현 경로다.
+
 최초 v5의 실패 이후 재분석과 출력 구조 보완은 [코드별 고정 슬롯 실험](detail-tagging-v5-code-map.md)을 참고한다.
 기존 `grounded-detail-candidates-v5`는 역사적 결과 검증을 위해 그대로 보존한다.
 

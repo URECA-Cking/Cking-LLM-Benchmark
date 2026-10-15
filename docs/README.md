@@ -2,6 +2,10 @@
 
 ## 결론을 먼저 읽기
 
+[세부 태그 v2 채택 결정](results/detail-tagging-v2-adoption.md): 2026-10-15 사용자 결정,
+프롬프트/스키마/정책 지문, 개발 실험의 교환 관계와 잔여 한계.
+[표준 v2 실행](guides/detail-tagging.md#표준-v2-실행)은 실험 재현 경로와 구분합니다.
+
 [현재 추천 방식 결정](results/recommendation-decision.md)은 세 실험의 결과와 적용 범위를 한곳에 정리합니다.
 보고서의 사람 평가와 LLM 평가를 같은 성적표로 합치지 않습니다.
 

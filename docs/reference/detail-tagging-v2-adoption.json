@@ -1,0 +1,16 @@
+{
+  "decision_date": "2026-10-15",
+  "decision_origin": "user_decision",
+  "issue": 71,
+  "baseline_commit": "315de5631b4140fda618e27ddcc6e1dec0798f02",
+  "prompt_version": "grounded-detail-candidates-v2",
+  "prompt_hash": "75c0d36b571201cf8b7245441f652f50ab28c689476181a8ab1a222a73337386",
+  "output_schema_hash": "a6c00395dc91580d6669d7344c2e2b9db238b8032c8637cd5047d44137229fc0",
+  "policy_version": "detail-limit-v2",
+  "policy_source_hash": "c91d9a5899404fc4c6cea464369029b5d7895d2e21505616d6af285d56a8b1ab",
+  "taxonomy_version": "subtopic-v1-draft",
+  "criteria_hash": "c2e7ed5616db11064c6cf1621515007305b1712913591a0c072b4aa478716f60",
+  "be_hash": "7e06e15a711beb6a04599b8a6b81e6c3c1aea2975db40df9bc17cc0157feb0f6",
+  "human_review": "not_performed",
+  "independent_holdout": "not_performed"
+}

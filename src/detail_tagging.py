@@ -19,7 +19,10 @@ from src.recommendation.subtopic_taxonomy import subtopic_hash
 from src.recommendation.taxonomy import DEFAULT_CATEGORIES_CSV, load_service_categories
 
 POLICY_VERSION = "detail-limit-v2"
-PROMPT_VERSION = "grounded-detail-candidates-v2"
+# User adoption decision: 2026-10-15, #71 (not a human-holdout verdict).
+# Keep the public default name for existing callers and historical tools.
+ADOPTED_DETAIL_PROMPT_VERSION = "grounded-detail-candidates-v2"
+PROMPT_VERSION = ADOPTED_DETAIL_PROMPT_VERSION
 EXPERIMENTAL_PROMPT_VERSION = "grounded-detail-candidates-v3"
 V4_PROMPT_VERSION = "grounded-detail-candidates-v4"
 DEDUP_PROMPT_VERSION = "grounded-detail-candidates-v4-dedup"
@@ -336,6 +339,9 @@ def main(argv=None):
     parser.add_argument("--source-revision")
     parser.add_argument("--reviewer")
     parser.add_argument("--note")
+    parser.add_argument("--prompt-version", choices=(ADOPTED_DETAIL_PROMPT_VERSION,),
+                        default=ADOPTED_DETAIL_PROMPT_VERSION,
+                        help="현재 채택 버전만 허용; 실험 버전은 detail_tagging_batch 사용")
     parser.add_argument("--tag-llm", action="store_true", help="외부 유료 모델 호출을 명시적으로 활성화")
     args = parser.parse_args(argv)
     try:
@@ -354,10 +360,11 @@ def main(argv=None):
         elif args.tag_llm:
             record = store.save(classify_with_model(OpenAI(timeout=60, max_retries=2),
                                 payload["channel_id"], payload["text"], taxonomy,
-                                payload["model_version"]))
+                                payload["model_version"], prompt_version=args.prompt_version))
         else:
             record = store.save(automatic_record(payload["channel_id"], payload["text"],
-                                payload["candidates"], taxonomy, payload["model_version"]))
+                                payload["candidates"], taxonomy, payload["model_version"],
+                                prompt_version=args.prompt_version))
         print(record["revision"])
         return 0
     except OpenAIError as error:

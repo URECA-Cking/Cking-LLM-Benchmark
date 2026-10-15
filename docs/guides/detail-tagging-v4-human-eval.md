@@ -1,6 +1,6 @@
 # v4 실험과 사람 기준 평가
 
-Issue #64 구현. 기본값은 `grounded-detail-candidates-v2`이며 v4는 명시적 실험이다.
+Issue #64 구현. 표준은 [사용자 결정으로 채택한 v2](../results/detail-tagging-v2-adoption.md)이며 v4는 명시적 실험이다.
 Issue #66의 역사적 집단 추출·독립 표본 선정·사전 기준 고정·비교 실행·팀 결정 기록은
 [홀드아웃 평가 가이드](detail-tagging-holdout.md)를 따른다.
 v2/v3 프롬프트 바이트, 출력 스키마, `detail-limit-v2` 정책과 정확한 인용 검증을 유지한다.

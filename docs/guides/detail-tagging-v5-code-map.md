@@ -1,5 +1,7 @@
 # v5 코드별 고정 슬롯과 계층 슬롯 실험
 
+현재 표준은 [사용자 결정으로 채택한 v2](../results/detail-tagging-v2-adoption.md)다. 아래 명령은 명시적 실험/과거 재현 경로다.
+
 최신 구현 `grounded-detail-candidates-v5-compact`는 v2/v4의 오류를 다시 분석한 계층 슬롯·공유 스키마 실험이다.
 기본값 v2와 기존 모든 프롬프트·배열 스키마는 유지한다. taxonomy와 `detail-limit-v2` 정책을 바꾸지 않는다.
 
