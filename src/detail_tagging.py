@@ -341,7 +341,7 @@ def main(argv=None):
     parser.add_argument("--note")
     parser.add_argument("--prompt-version", choices=(ADOPTED_DETAIL_PROMPT_VERSION,),
                         default=ADOPTED_DETAIL_PROMPT_VERSION,
-                        help="채택 세부 태그 프롬프트; 실험 버전은 detail_tagging_batch 사용")
+                        help="현재 채택 버전만 허용; 실험 버전은 detail_tagging_batch 사용")
     parser.add_argument("--tag-llm", action="store_true", help="외부 유료 모델 호출을 명시적으로 활성화")
     args = parser.parse_args(argv)
     try:
