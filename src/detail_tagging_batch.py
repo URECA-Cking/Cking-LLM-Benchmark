@@ -177,7 +177,8 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--prompt-version", choices=PROMPT_VERSIONS,
-                        default=PROMPT_VERSION)
+                        default=PROMPT_VERSION,
+                        help="기본값은 채택 v2; 다른 버전은 명시적 실험/과거 재현 전용")
     parser.add_argument("--tag-llm", action="store_true", required=True)
     criteria = parser.add_mutually_exclusive_group()
     criteria.add_argument("--human-criteria", type=Path, help="Frozen human criteria JSON")
