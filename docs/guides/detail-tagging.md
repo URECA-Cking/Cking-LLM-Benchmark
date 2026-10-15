@@ -65,7 +65,8 @@ v2로 재라벨링하는 용도로 사용하지 않는다. 모델 응답이나 �
 .venv\Scripts\python.exe -m src.detail_tagging_batch --inputs results/issue58-review-sample-v2/private_inputs.json --output results/detail-tags-v2-batch-new --prompt-version grounded-detail-candidates-v2 --tag-llm
 ```
 
-두 CLI에서 `--prompt-version`을 생략해도 v2다. 단일 CLI의 실험 버전 선택은 허용하지 않고,
+두 CLI에서 `--prompt-version`을 생략해도 v2다. 단일 CLI는 현재 채택 버전만 허용하므로
+향후 채택 버전이 바뀌면 이전 버전을 고정한 명령은 거부된다. 단일 CLI의 실험 버전 선택은 허용하지 않고,
 실험은 배치의 명시적 `--prompt-version`과 해당 가이드의 기준/승인 절차로 실행한다.
 검수 모드는 원본 revision의 실제 프롬프트 출처를 그대로 보존한다.
 

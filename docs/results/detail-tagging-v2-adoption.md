@@ -17,14 +17,17 @@
 | prompt_hash | `75c0d36b571201cf8b7245441f652f50ab28c689476181a8ab1a222a73337386` |
 | output_schema_hash | `a6c00395dc91580d6669d7344c2e2b9db238b8032c8637cd5047d44137229fc0` |
 | 정책 | `detail-limit-v2` |
-| policy_source_hash | `ba5f72161786880fd8bb45c0fb0ac015691a03446df6f9d74f9b88d5d8e6f42c` |
+| policy_source_hash | `c91d9a5899404fc4c6cea464369029b5d7895d2e21505616d6af285d56a8b1ab` |
 | 세부 taxonomy | `subtopic-v1-draft` (세부 85개, 확정 아님) |
 | criteria_hash | `c2e7ed5616db11064c6cf1621515007305b1712913591a0c072b4aa478716f60` |
 | BE 정본 subtopic 해시 | `7e06e15a711beb6a04599b8a6b81e6c3c1aea2975db40df9bc17cc0157feb0f6` |
 
 prompt/schema/criteria는 기존 `detail_tagging.digest`(키 정렬 compact JSON, UTF-8, ensure_ascii=False)의 지문이다.
-정책 지문은 별도 채택 감사용으로, `inspect.getsource(_rank) + inspect.getsource(classify)`를
-LF 줄바꿈의 UTF-8로 인코딩한 SHA-256이다. 기존 실행 기록에는 `policy_version`만 저장되므로
+정책 지문은 별도 채택 감사용으로, `inspect.getsource(_rank) + inspect.getsource(classify) + inspect.getsource(validate_llm_topics)`를
+LF 줄바꿈의 UTF-8로 인코딩한 SHA-256이다. 대상은 `src/detail_tagging.py`의 `_rank`·`classify`와
+`src/subtopic_tags.py`의 `validate_llm_topics` 본문이다. 인용·부모 검증까지 포함하며 저장소 전체 소스의 해시는 아니다.
+PR #72 리뷰에서 해시 범위를 확대했으며 실제 정책 함수·프롬프트·스키마는 변경하지 않았다.
+기존 실행 기록에는 `policy_version`만 저장되므로
 과거 기록에 정책 해시가 있었다고 해석하거나 이 값을 소급 추가하지 않는다.
 전체 기준(criteria)은 include/exclude/formats까지 포함하며 BE 정본 해시와 다르다.
 상위 taxonomy v0.2, 세부 taxonomy, 개수 제한 정책, M2/M3/M4 추천 방식은 프롬프트 v2와 별개다.
@@ -68,7 +71,8 @@ hold 제외, 모델 실패 제외, 공통 성공 집합 선택과 재시도 성�
 
 `src.detail_tagging.ADOPTED_DETAIL_PROMPT_VERSION`이 채택 버전의 단일 참조이며
 기존 공개 이름 `PROMPT_VERSION`도 같은 값을 가리킨다. 함수·단일 CLI·배치 CLI는 모두 기본 v2다.
-단일 CLI의 `--prompt-version grounded-detail-candidates-v2`는 명시적 표준 선택이다.
+단일 CLI의 `--prompt-version grounded-detail-candidates-v2`는 명시적 표준 선택이며 현재 채택 버전만 허용한다.
+향후 채택 버전이 바뀌면 이전 버전을 고정한 단일 CLI 명령은 거부된다.
 실험 버전은 기존 함수 인자/배치 `--prompt-version`으로만 명시적으로 선택한다.
 v5 슬롯 스키마·변환은 해당 실험 버전에서만 사용하고 v2는 기존 parents/topics 배열을 사용한다.
 
@@ -107,6 +111,10 @@ compact 사람 홀드아웃 프로토콜·버전별 스키마 해시·과거 r2/
 실험 버전/해시 혼합 재개 시 무호출·무변경 거부, 검수 시 원본 실험 출처 보존을 확인했다.
 기존 평가·버전 격리·SDK MockTransport·정확한 인용·부모·중복·상한 테스트도 함께 통과했다.
 `git diff --check` 통과. 전체 저장소 테스트·실제 API·사람 검수·BE/서비스 E2E는 실행하지 않았다.
+
+PR #72 리뷰 반영 후 같은 범위 **381개 재통과**(19.88초, `--basetemp results/pytest-pr72-review`).
+정책 지문에 `validate_llm_topics`를 포함하고 실험 버전 선택의 튜플 순서 의존을 제거했다.
+CLI help의 “현재 채택 버전만 허용” 표시와 `git diff --check`도 확인했다.
 
 ```powershell
 .venv\Scripts\python.exe -X utf8 -m pytest tests/test_detail_tagging_adoption.py tests/test_detail_tagging.py tests/test_detail_tagging_batch.py tests/test_detail_tagging_human_eval.py tests/test_detail_tagging_holdout.py tests/test_detail_tagging_ai_proxy.py tests/test_detail_tagging_experiment.py tests/test_detail_tagging_v5.py tests/test_detail_tagging_code_map.py tests/test_sample_review.py tests/test_subtopic_tags.py tests/test_subtopic_taxonomy_hash.py -q --basetemp results/pytest-issue71-final
