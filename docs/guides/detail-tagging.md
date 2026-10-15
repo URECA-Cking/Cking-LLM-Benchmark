@@ -1,5 +1,9 @@
 # 세부 태그 상한 정책과 검수 버전
 
+표준 채택 프롬프트는 **`grounded-detail-candidates-v2`**다(2026-10-15 사용자 결정).
+[최신 채택 기록](../results/detail-tagging-v2-adoption.md)에 범위·고정 지문·실험 한계를 기록했다.
+v3/v4/v5 계열은 명시적 실험 또는 과거 재현 전용이며 자동 기본 선택하지 않는다.
+
 Issue #64의 명시적 v4 실험과 상위/세부 사람 기준 비교는
 [v4 사람 평가 가이드](detail-tagging-v4-human-eval.md)를 따른다. 기본값은 v2로 유지한다.
 
@@ -42,6 +46,28 @@ API 키 누락·타임아웃·400·429 등은 traceback 대신 간결한 오류�
 동일 후보/입력에 대한 선택 순서만 결정적이다. temperature=0이나 모델 점수만으로
 모델 응답 재현성을 보장하지 않는다. 정확한 인용이어도 의미상 정의 충족 여부와
 핵심 활동 판단은 자동 검증할 수 없으며 사람이 검수해야 한다. 후보 원본도 저장한다.
+
+## 표준 v2 실행
+
+아래 명령은 저장소 루트에서 실행한다. 단일 CLI는 기본값과 명시적 v2가 같은
+프롬프트·배열 스키마·출처를 사용한다. 입력 예시는 아래 `input.json`을 사용한다.
+
+```powershell
+.venv\Scripts\python.exe -m src.detail_tagging input.json --store results/detail-tags-v2-new --prompt-version grounded-detail-candidates-v2
+```
+
+이 오프라인 명령은 이미 v2 배열 형식으로 얻은 후보를 검증·저장한다. 다른 버전 후보를
+v2로 재라벨링하는 용도로 사용하지 않는다. 모델 응답이나 기존 결과의 버전을 변환하지 않는다.
+아래는 외부 전송·비용 승인 후에만 실행할 실제 배치 명령이며 이번 작업에서는 호출하지 않았다.
+`--inputs`는 `channel_id/text` 객체의 배열이다. 기존 결과 폴더를 덮어쓰지 않고 새 경로를 지정한다.
+
+```powershell
+.venv\Scripts\python.exe -m src.detail_tagging_batch --inputs results/issue58-review-sample-v2/private_inputs.json --output results/detail-tags-v2-batch-new --prompt-version grounded-detail-candidates-v2 --tag-llm
+```
+
+두 CLI에서 `--prompt-version`을 생략해도 v2다. 단일 CLI의 실험 버전 선택은 허용하지 않고,
+실험은 배치의 명시적 `--prompt-version`과 해당 가이드의 기준/승인 절차로 실행한다.
+검수 모드는 원본 revision의 실제 프롬프트 출처를 그대로 보존한다.
 
 ## 실행과 저장
 
