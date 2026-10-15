@@ -34,7 +34,8 @@ def test_adopted_fingerprints_preserve_baseline():
     assert detail.digest(detail.build_prompt(taxonomy)) == snapshot["prompt_hash"]
     assert detail.digest(detail.candidate_schema(taxonomy)) == snapshot["output_schema_hash"]
     assert detail.POLICY_VERSION == snapshot["policy_version"]
-    policy_source = inspect.getsource(detail._rank) + inspect.getsource(detail.classify)
+    policy_source = (inspect.getsource(detail._rank) + inspect.getsource(detail.classify)
+                     + inspect.getsource(detail.validate_llm_topics))
     assert hashlib.sha256(policy_source.encode("utf-8")).hexdigest() == snapshot["policy_source_hash"]
     assert taxonomy["version"] == snapshot["taxonomy_version"]
     assert detail.digest(taxonomy) == snapshot["criteria_hash"]
@@ -125,7 +126,7 @@ def test_review_keeps_actual_experimental_origin_with_explicit_v2_cli(tmp_path):
     assert (store.directory / f'{source["revision"]}.json').read_bytes() == original_bytes
 
 
-@pytest.mark.parametrize("version", detail.PROMPT_VERSIONS[1:])
+@pytest.mark.parametrize("version", [v for v in detail.PROMPT_VERSIONS if v != detail.PROMPT_VERSION])
 def test_adopted_default_rejects_experimental_resume_without_mutation(tmp_path, version):
     taxonomy = read("data/creator-subtopics.json")
     # Empty input still freezes a real experiment contract without any request.
