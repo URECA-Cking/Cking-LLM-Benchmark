@@ -1,8 +1,8 @@
 # 콘텐츠 태그 작업자 운영 및 BE #654 계약 제안
 
-이 구현은 LLM 쪽 계약 제안 `content-tags-v1`이다. BE #654는 아직 미구현이므로
-BE와의 합의 완료나 HTTP/DB 통합 완료를 의미하지 않는다. 운영 활성화 전에 아래 계약을
-BE에서 구현하고 Python↔Java fixture 및 실제 경쟁 테스트를 통과시켜야 한다.
+이 구현은 BE #654의 `feat/654-creator-ai-tag-api` 구현과 공유하는 `content-tags-v1` 계약이다.
+운영 활성화 전 승인 taxonomy/configHash 등록과 전용 토큰·공급자 지출 한도 설정이 필요하다.
+운영 초안 taxonomy를 자동 승인하거나 시드로 넣지 않는다.
 
 ## 입력·적재 계약
 
@@ -37,7 +37,7 @@ BE에서 구현하고 Python↔Java fixture 및 실제 경쟁 테스트를 통�
 작업은 creatorId + inputRevision/inputHash로 식별하며 BE에서 최신 세대로 병합한다.
 
 - `PUT /jobs/claim {leaseSeconds:900}` → 작업 없으면 `{}`, 있으면
-  `{jobId, leaseToken, generation}`. lease는 전달 보호용이고 데이터 쓰기 허가가 아니다.
+  `{jobId, leaseToken, generation}`. lease는 전달 보호용이고 데이터 쓰기 허가가 아니다. 작업자는 60초마다 `/jobs/{id}/renew`로 연장한다.
 - `PUT /jobs/{jobId}/ack {leaseToken,generation,status,summary}`에서 status는
   `completed|retry`. BE는 토큰과 세대를 원자적으로 비교하며 최신 후속 작업을 지우지 않는다.
 - 프로세스 중단/lease 만료 시 BE가 재전달한다. 중복·역순 이벤트도 현재 전체 입력을 다시 읽는다.
@@ -85,12 +85,14 @@ SDK 재시도는 0, 호출 timeout은 60초다. 중단된 호출도 예산에 �
 운영 목표는 변경→시작 p95 2분, 변경→완료 p95 15분(초기 목표, 부하에 따라 측정 후 조정)이다.
 BE outbox의 committedAt/claimedAt/completedAt와 attemptCount/nextRetryAt/finalFailed를 기록한다.
 작업자 summary의 startedAt/completedAt와 단계 실패, 409 refreshRequired를 연결해
-대기/처리 지연·재시도·최종 실패를 측정한다. BE는 지수 backoff로 재시도하고 최종 실패는
-운영 경보와 수동 재등록을 제공해야 한다. 긴 실행은 lease가 만료될 수 있으며 세대 검사가 필수다.
+대기/처리 지연·재시도·최종 실패를 측정한다. BE는 지수 backoff로 최대 5회 재시도하고 최종 실패는 오류 로그로 알린다.
+`PUT /jobs/{id}/retry`로 수동 재등록한다. 일일 보정이 성공하면 `/jobs/reconcile`로
+현재 revision/hash/config와 맞는 PENDING/FAILED 작업을 완료한다. RUNNING 작업은 건드리지 않는다. 긴 실행은 lease가 만료될 수 있으며 세대 검사가 필수다.
 
 ## 검증 경계
 
 Python mock 테스트는 입력 변경·모델 변경·빈 입력·성공 재사용·네트워크 재전송·409 fence·
 공급자 실패와 영속 예산·독립 단계 실패·공유 잠금·정규화 fixture를 검증한다.
-BE outbox/Java fixture/실제 HTTP·DB 경쟁/운영 systemd 실행/유료 모델 품질·사람 검수·
-독립 holdout은 이 PR에서 수행하지 않았다. BE #654 연동 완료 전에는 운영 활성화하지 않는다.
+실제 HTTP/MySQL 연동 검증은 `python -m src.recommendation.e2e.runner --suite content --be-dir ../Cking-BE`로 실행한다.
+Java fixture와 소개 수정·적재·본인 확인 경쟁, 이벤트/lease/재시작/실패 복구를 합성 provider로 검증한다.
+운영 systemd 설치·유료 모델 품질·사람 검수·독립 holdout 및 운영 taxonomy 승인은 별도다.
