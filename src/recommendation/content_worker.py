@@ -14,6 +14,7 @@ import json
 import os
 import re
 import time
+import threading
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,7 +53,7 @@ class ContentBackend(CkingBackendClient):
         return self._request('GET', path, None, authenticated=True)
 
     def put(self, path, payload):
-        if not re.fullmatch(ROOT + r'/(jobs/(claim|[A-Za-z0-9_-]+/ack)|creators/[1-9][0-9]*/automatic)', path):
+        if not re.fullmatch(ROOT + r'/(jobs/(claim|reconcile|[A-Za-z0-9_-]+/(ack|renew|retry))|creators/[1-9][0-9]*/automatic)', path):
             raise ValueError('Unsupported content write path')
         return self._request('PUT', path, payload, authenticated=True)
 
@@ -156,7 +157,25 @@ class ContentWorker:
 
     def run(self, source='daily'):
         with file_lock(self.directory / '.worker.lock'):
-            return self._run(source)
+            stopped = threading.Event()
+            self._active_job = None
+            def heartbeat():
+                while not stopped.wait(60):
+                    job = self._active_job
+                    if job:
+                        try:
+                            self.backend.put(f'{ROOT}/jobs/{job["jobId"]}/renew', {
+                                'leaseToken': job['leaseToken'], 'generation': job['generation']})
+                        except Exception:
+                            # Expired/superseded generation cannot be acknowledged; BE retains it.
+                            pass
+            thread = threading.Thread(target=heartbeat, daemon=True)
+            thread.start()
+            try:
+                return self._run(source)
+            finally:
+                stopped.set()
+                thread.join(timeout=15)
 
     def _run(self, source):
         started = self.clock()
@@ -167,6 +186,7 @@ class ContentWorker:
         if job and (not re.fullmatch('[A-Za-z0-9_-]+', str(job.get('jobId', '')))
                     or not isinstance(job.get('leaseToken'), str)):
             raise ValueError('Invalid lease')
+        self._active_job = job
         stages = {}
         try:
             rows = self.inputs()
@@ -196,12 +216,19 @@ class ContentWorker:
         failed = sum(s['status'] != 'success' for s in stages.values())
         summary = {'status': 'partial' if failed else 'completed', 'failureCount': failed,
                    'source': source, 'startedAt': started, 'completedAt': self.clock(), 'stages': stages}
+        try:
+            if not failed and source != 'event':
+                self.backend.put(ROOT + '/jobs/reconcile', {'inputs': [
+                    {key: row[key] for key in ('creatorId', 'inputRevision', 'inputHash')} for row in rows]})
+            if job:
+                # BE atomically acks only claimed generation; newer edits stay queued.
+                self.backend.put(f'{ROOT}/jobs/{job["jobId"]}/ack', {
+                    'leaseToken': job['leaseToken'], 'status': 'retry' if failed else 'completed',
+                    'generation': job['generation'], 'summary': summary})
+        except Exception as error:
+            summary.update(status='partial', failureCount=failed + 1,
+                           coordination={'status': 'failed', 'errorType': type(error).__name__})
         _write_json_atomic(self.directory / 'summary.json', summary)
-        if job:
-            # BE atomically acks only claimed generation; a newer edit stays queued.
-            self.backend.put(f'{ROOT}/jobs/{job["jobId"]}/ack', {
-                'leaseToken': job['leaseToken'], 'status': 'retry' if failed else 'completed',
-                'generation': job['generation'], 'summary': summary})
         return summary
 
 

@@ -33,6 +33,8 @@ class Backend:
                     taxonomyHash=subtopic_hash(self.taxonomy), items=self.rows, nextCursor=None)
 
     def put(self, path, payload):
+        if path.endswith('/reconcile'):
+            return {'completedCount': len(self.rows)}
         if path.endswith('/claim'):
             return dict(jobId='job-1', leaseToken='lease', generation=1)
         if path.endswith('/ack'):
