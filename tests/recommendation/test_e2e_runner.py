@@ -63,6 +63,9 @@ def test_exit_classification_and_owned_cleanup(tmp_path, monkeypatch, stage, cap
         if args[:2] == ["docker", "port"]:
             return "127.0.0.1:40000"
         if "recommendationE2e" in args:
+            assert kwargs["env"]["CKING_E2E_DB_USERNAME"] == "cking_e2e"
+            assert kwargs["env"]["MYSQL_USER"] == "cking_e2e"
+            assert kwargs["env"]["MYSQL_PASSWORD"]
             if stage == "be_build_or_start":
                 raise runner.EnvironmentFailure("unavailable")
             report_path = Path(kwargs["env"]["CKING_E2E_OUTPUT"]) / "report.json"

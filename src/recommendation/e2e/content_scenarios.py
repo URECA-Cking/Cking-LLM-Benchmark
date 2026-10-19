@@ -119,6 +119,10 @@ def main():
             passed('restart_after_commit_uses_saved_payload')
             old_payload=next(json.loads(p.read_text(encoding='utf-8')) for p in (output/'worker/records').glob('*/payload.json') if json.loads(p.read_text(encoding='utf-8'))['creatorId']==cid and json.loads(p.read_text(encoding='utf-8'))['inputRevision']==3)
             worker=ContentWorker(client,output/'worker',taxonomy,'synthetic-v2',classify,worker.recommend,approved=True,max_calls=30)
+            before=len(calls)
+            assert worker.run()['stages']['tags']['status']=='failed'
+            assert len(calls)==before
+            passed('unapproved_model_config_stops_before_provider')
             control('config',configHash=digest(worker.identity))
             run();reject('PUT',path,old_payload,409)
             passed('new_model_config_reclassifies_and_fences_previous_config')

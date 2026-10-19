@@ -34,7 +34,7 @@ class ContentTagHttpE2eTest {
         Map<String, String> properties = Map.ofEntries(
             Map.entry("spring.profiles.active", "test"),
             Map.entry("spring.datasource.url", url),
-            Map.entry("spring.datasource.username", "root"),
+            Map.entry("spring.datasource.username", required("CKING_E2E_DB_USERNAME")),
             Map.entry("spring.datasource.password", required("CKING_E2E_DB_PASSWORD")),
             Map.entry("spring.data.redis.host", "127.0.0.1"),
             Map.entry("spring.data.redis.port", required("CKING_E2E_REDIS_PORT")),
@@ -66,6 +66,7 @@ class ContentTagHttpE2eTest {
     @Autowired CreatorSpaceRepository spaces;
     @Autowired AccessTokenIssuer issuer;
     @Autowired kr.co.cking.creator.application.ContentTagService tags;
+    @Autowired kr.co.cking.creator.application.CreatorContentOutbox outbox;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     private final ObjectMapper json = new ObjectMapper();
     private long creatorId;
@@ -73,6 +74,8 @@ class ContentTagHttpE2eTest {
 
     @Test
     void pythonWorkerThroughRealHttpAndMysql() throws Exception {
+        assertThat(required("CKING_E2E_DB_USERNAME")).isNotEqualTo("root");
+        assertThat(jdbc.queryForList("SHOW GRANTS",String.class)).noneMatch(grant -> grant.contains("SUPER") || grant.contains("ALL PRIVILEGES ON *.*"));
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM creator",Long.class)).isZero();
         Member owner = members.saveAndFlush(new Member("content-owner",null,null,MemberRole.USER));
         Member other = members.saveAndFlush(new Member("content-other",null,null,MemberRole.USER));
@@ -80,8 +83,11 @@ class ContentTagHttpE2eTest {
         for (Member member : List.of(owner,other)) {
             Creator c = creators.saveAndFlush(new Creator(member.getMemberId(),member.getName()));
             ids.add(c.getCreatorId());
-            spaces.saveAndFlush(CreatorSpace.fromTemplate(c.getCreatorId(),
-                new CreatorSpaceTemplate(member.getMemberId(),"노래 커버", "profile","banner","creator-{creatorId}"), "content-"+c.getCreatorId()));
+            new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(status -> {
+                CreatorSpace space=spaces.saveAndFlush(CreatorSpace.fromTemplate(c.getCreatorId(),
+                    new CreatorSpaceTemplate(member.getMemberId(),"노래 커버", "profile","banner","creator-{creatorId}"), "content-"+c.getCreatorId()));
+                outbox.enqueue(space);
+            });
         }
         creatorId=ids.getFirst(); ownerId=owner.getMemberId();
         Map<String,Object> config = Map.of("baseUrl","http://127.0.0.1:"+port,"apiKey",required("CKING_E2E_API_KEY"),
@@ -129,6 +135,7 @@ class ContentTagHttpE2eTest {
                     CreatorSpace space=spaces.findByCreatorIdForUpdate(creatorId).orElseThrow();
                     space.updateProfile("",space.getProfileImageUrl(),space.getBannerImageUrl());
                     spaces.saveAndFlush(space);
+                    outbox.enqueue(space);
                 });
                 yield Map.of("legacyEmptyFixture",true);
             }
@@ -163,6 +170,7 @@ class ContentTagHttpE2eTest {
                 catch(InterruptedException e){throw new RuntimeException(e);}
                 space.updateProfile("수정된 노래 커버",space.getProfileImageUrl(),space.getBannerImageUrl());
                 spaces.saveAndFlush(space);
+                outbox.enqueue(space);
             });
             assertThat(pending.get().get(10,TimeUnit.SECONDS)).isTrue();
             assertThat(confirmation.get().get(10,TimeUnit.SECONDS)).isTrue();
