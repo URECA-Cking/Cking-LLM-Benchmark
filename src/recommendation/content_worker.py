@@ -114,7 +114,8 @@ def fingerprint(taxonomy, model):
 
 class ContentWorker:
     def __init__(self, backend, directory, taxonomy, model, classify_fn, recommend,
-                 *, approved=False, max_calls=0, max_attempts=3, clock=time.time, heartbeat_interval=60):
+                 *, approved=False, max_calls=0, max_attempts=3, clock=time.time, heartbeat_interval=60,
+                 max_conflict_observations=3, conflict_timeout_seconds=300):
         if type(max_calls) is not int or max_calls < 0 or type(max_attempts) is not int or max_attempts < 1:
             raise ValueError('Invalid budget')
         self.backend, self.directory = backend, Path(directory)
@@ -123,6 +124,10 @@ class ContentWorker:
         self.approved, self.max_calls, self.max_attempts = approved, max_calls, max_attempts
         if heartbeat_interval <= 0:
             raise ValueError('Invalid heartbeat interval')
+        if type(max_conflict_observations) is not int or max_conflict_observations < 1 or conflict_timeout_seconds <= 0:
+            raise ValueError('Invalid conflict limits')
+        self.max_conflict_observations = max_conflict_observations
+        self.conflict_timeout_seconds = conflict_timeout_seconds
         self.heartbeat_interval = heartbeat_interval
         self.clock = clock
         self.identity = fingerprint(taxonomy, model)
@@ -255,6 +260,8 @@ class ContentWorker:
                     self.deliver(row)
                 except Exception as error:
                     code = diagnostic(error, 'TAG_EXECUTION_FAILED')
+                    if code == 'INPUT_REFRESH_REQUIRED':
+                        code = self._observe_conflict(self.directory / 'records' / key)
                     outcome.update(status='refresh_required' if code == 'INPUT_REFRESH_REQUIRED' else 'failed', code=code)
                     outcomes[row['creatorId']] = outcome
                     if isinstance(error, BackendRequestError) and error.status in {401, 403}:
@@ -310,6 +317,18 @@ class ContentWorker:
         summary['completedAt'] = self.clock()
         self._save_summary(summary)
         return summary
+
+    def _observe_conflict(self, folder):
+        path = folder / 'conflict.json'
+        conflict = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+        now = self.clock()
+        # Legacy flags have no observation history: start now rather than inventing it.
+        first = conflict.get('firstObservedAt', now)
+        observations = conflict.get('observations', 0) + 1
+        failed = conflict.get('escalated', False) or observations >= self.max_conflict_observations or now - first >= self.conflict_timeout_seconds
+        _write_json_atomic(path, {'refreshRequired': True, 'firstObservedAt': first,
+            'lastObservedAt': now, 'observations': observations, 'escalated': failed})
+        return 'PERSISTENT_INPUT_CONFLICT' if failed else 'INPUT_REFRESH_REQUIRED'
 
     def _save_summary(self, summary):
         _write_json_atomic(self.directory / 'summary.json', summary)

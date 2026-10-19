@@ -439,3 +439,88 @@ def test_main_coordination_diagnostic_keeps_nonzero_exit(cli, monkeypatch, capsy
     monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: {'failureCount': 1, 'coordination': {'code': 'BACKEND_REQUEST_FAILED'}})
     assert module.main(args + ['--', 'apply']) == 1
     assert 'BACKEND_REQUEST_FAILED' in capsys.readouterr().out
+
+
+def test_persistent_conflict_escalates_across_event_daily_and_freezes_success_marker(tmp_path, taxonomy):
+    now = [1000.0]
+    worker, be, calls = setup_worker(tmp_path, taxonomy, clock=lambda: now[0])
+    be.error = BackendRequestError('private conflict payload', status=409)
+    marker = None
+    for i, source in enumerate(['event', 'daily'] * 3):
+        result = worker.run(source)
+        if i < 2:
+            assert result['failureCount'] == 0
+            marker = (tmp_path / 'last-success.json').read_bytes()
+        else:
+            assert result['failureCount'] == 1
+            assert result['stages']['tags']['rows'][0]['code'] == 'PERSISTENT_INPUT_CONFLICT'
+            assert (tmp_path / 'last-success.json').read_bytes() == marker
+        now[0] += 1
+    assert len(be.sent) == len(calls) == 1
+    conflict = json.loads(next((tmp_path / 'records').glob('*/conflict.json')).read_text())
+    assert conflict['observations'] == 6 and conflict['escalated'] is True
+    assert 'private' not in (tmp_path / 'summary.json').read_text()
+    be.error = None
+    be.rows = [be.row('new introduction', 2)]
+    assert worker.run()['failureCount'] == 0
+    assert len(be.sent) == len(calls) == 2
+    assert (tmp_path / 'last-success.json').read_bytes() != marker
+
+
+def test_conflict_counter_survives_restart(tmp_path, taxonomy):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    be.error = BackendRequestError('conflict', status=409)
+    assert worker.run()['failureCount'] == 0
+    for expected in [0, 1]:
+        restarted = ContentWorker(be, tmp_path, taxonomy, 'mock-model', worker.classify_fn, lambda: 0, approved=True, max_calls=10)
+        assert restarted.run()['failureCount'] == expected
+    assert len(be.sent) == len(calls) == 1
+
+
+def test_conflict_age_escalates_without_observation_limit(tmp_path, taxonomy):
+    now = [0.0]
+    worker, be, calls = setup_worker(tmp_path, taxonomy, clock=lambda: now[0], max_conflict_observations=100)
+    be.error = BackendRequestError('conflict', status=409)
+    assert worker.run()['failureCount'] == 0
+    now[0] = 299
+    assert worker.run()['failureCount'] == 0
+    now[0] = 300
+    assert worker.run()['failureCount'] == 1
+    assert len(be.sent) == 1
+
+
+def test_legacy_conflict_flag_starts_observations_without_inventing_history(tmp_path, taxonomy):
+    now = [0.0]
+    worker, be, calls = setup_worker(tmp_path, taxonomy, clock=lambda: now[0])
+    be.error = BackendRequestError('conflict', status=409)
+    worker.run()
+    path = next((tmp_path / 'records').glob('*/conflict.json'))
+    path.write_text(json.dumps({'refreshRequired': True}))
+    now[0] = 10000
+    assert worker.run()['failureCount'] == 0
+    assert json.loads(path.read_text())['firstObservedAt'] == 10000
+    assert json.loads(path.read_text())['observations'] == 1
+
+
+def test_persistent_conflict_does_not_block_other_creator_ack(tmp_path, taxonomy):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    be.rows.append({**be.row('healthy', 1), 'creatorId': 2})
+    put = be.put
+    def backend(path, payload):
+        if path.endswith('/claim'):
+            return dict(jobId='2', leaseToken='lease', generation=1)
+        if path == ROOT + '/creators/1/automatic':
+            be.sent.append(payload)
+            raise BackendRequestError('conflict', status=409)
+        return put(path, payload)
+    be.put = backend
+    for expected in [0, 0, 1]:
+        assert worker.run('event')['failureCount'] == expected
+        assert be.acks[-1]['status'] == 'completed'
+
+
+def test_main_persistent_conflict_returns_one(cli, monkeypatch, capsys):
+    module, daily, args = cli
+    monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: {'failureCount': 1, 'stages': {'tags': {'rows': [{'code': 'PERSISTENT_INPUT_CONFLICT'}]}}})
+    assert module.main(args + ['--', 'apply']) == 1
+    assert 'PERSISTENT_INPUT_CONFLICT' in capsys.readouterr().out

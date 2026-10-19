@@ -167,6 +167,27 @@ def main():
             client.put(f'{API}/jobs/{cid}/retry',{})
             run('event')
             passed('final_failure_daily_reconciliation_and_manual_retry')
+            # Seed a different valid key for the same input/config: real BE uniqueness
+            # fencing returns 409 without changing inputs across repeated worker cycles.
+            edit('노래 반복 충돌 테스트')
+            row=next(r for r in worker.inputs() if r['creatorId']==cid)
+            seeded=dict(creatorId=cid,inputRevision=row['inputRevision'],inputHash=row['inputHash'],
+                automaticRevision='f'*64,idempotencyKey='f'*64,createdAt='2026-10-19T00:00:00Z',
+                origin='automatic',creatorConfirmed=False,provenance=worker.identity,
+                record=classify(str(cid),row['introduction'],taxonomy,worker.model))
+            client.put(path,seeded)
+            before=len(calls)
+            run('event');run('daily')
+            marker=(output/'worker/last-success.json').read_bytes()
+            for _ in range(2):
+                result=worker.run('daily')
+                assert result['failureCount']==1
+                assert next(r for r in result['stages']['tags']['rows'] if r['creatorId']==cid)['code']=='PERSISTENT_INPUT_CONFLICT'
+                assert (output/'worker/last-success.json').read_bytes()==marker
+            assert len(calls)==before+1
+            edit('노래 반복 충돌 복구 새 소개')
+            run('event')
+            passed('persistent_unchanged_input_conflict_escalates_and_new_revision_recovers')
             # Verify the real background thread renews through HTTP while work is active.
             client.put(f'{API}/jobs/{cid}/retry',{})
             renewed=threading.Event()
