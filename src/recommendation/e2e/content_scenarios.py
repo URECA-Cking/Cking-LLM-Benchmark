@@ -140,7 +140,7 @@ def main():
             worker.classify_fn=original_model
             control('ready');run('event')
             passed('provider_failure_preserves_success_and_retries_independent_stage')
-            edit('')
+            control('empty')
             before=len(calls);run('event');assert len(calls)==before
             assert view()['status']=='unclassified'
             passed('empty_input_without_provider_call')

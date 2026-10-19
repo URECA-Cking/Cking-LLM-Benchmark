@@ -124,6 +124,14 @@ class ContentTagHttpE2eTest {
                 "jobs",jdbc.queryForList("SELECT creator_id,generation,status,attempt_count FROM creator_content_job ORDER BY creator_id"),
                 "similarCount",jdbc.queryForObject("SELECT COUNT(*) FROM creator_similarity_generation",Long.class),
                 "interestCount",jdbc.queryForObject("SELECT COUNT(*) FROM interest_recommendation_generation",Long.class));
+            case "empty" -> {
+                new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(status -> {
+                    CreatorSpace space=spaces.findByCreatorIdForUpdate(creatorId).orElseThrow();
+                    space.updateProfile("",space.getProfileImageUrl(),space.getBannerImageUrl());
+                    spaces.saveAndFlush(space);
+                });
+                yield Map.of("legacyEmptyFixture",true);
+            }
             case "config" -> {jdbc.update("UPDATE creator_content_taxonomy SET config_hash=?",p.path("configHash").asText());yield Map.of("changed",true);}
             case "expire" -> {jdbc.update("UPDATE creator_content_job SET lease_until=TIMESTAMPADD(SECOND,-1,UTC_TIMESTAMP(6)) WHERE creator_id=?",creatorId);yield Map.of("expired",true);}
             case "ready" -> {jdbc.update("UPDATE creator_content_job SET next_retry_at=UTC_TIMESTAMP(6)");yield Map.of("ready",true);}
