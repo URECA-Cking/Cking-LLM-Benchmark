@@ -17,7 +17,7 @@ allprojects {
                 useJUnitPlatform()
                 maxHeapSize = '1g'
                 outputs.upToDateWhen { false }
-                filter { includeTestsMatching 'kr.co.cking.e2e.RecommendationHttpE2eTest' }
+                filter { includeTestsMatching(System.getenv('CKING_E2E_TEST_CLASS') ?: 'kr.co.cking.e2e.RecommendationHttpE2eTest') }
                 testLogging { events 'failed'; showStandardStreams = false }
             }
         }
