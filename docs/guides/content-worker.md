@@ -1,4 +1,4 @@
-# 콘텐츠 태그 작업자 운영 및 BE #654 계약 제안
+# 콘텐츠 태그 작업자 운영 및 BE #654 연동 계약
 
 이 구현은 BE #654의 `feat/654-creator-ai-tag-api` 구현과 공유하는 `content-tags-v1` 계약이다.
 운영 활성화 전 승인 taxonomy/configHash 등록과 전용 토큰·공급자 지출 한도 설정이 필요하다.
@@ -96,3 +96,14 @@ Python mock 테스트는 입력 변경·모델 변경·빈 입력·성공 재사
 실제 HTTP/MySQL 연동 검증은 `python -m src.recommendation.e2e.runner --suite content --be-dir ../Cking-BE`로 실행한다.
 Java fixture와 소개 수정·적재·본인 확인 경쟁, 이벤트/lease/재시작/실패 복구를 합성 provider로 검증한다.
 운영 systemd 설치·유료 모델 품질·사람 검수·독립 holdout 및 운영 taxonomy 승인은 별도다.
+
+## 실제 연동 검증 기록 (2026-10-19)
+
+BE `e39f86e`, LLM `ebb338d`에서 실제 HTTP/MySQL 시나리오 **15/15**가 통과했다.
+공개 집계: [content-tags-http-e2e.json](../../data/summaries/content-tags-http-e2e.json).
+소개 수정·적재·본인 확인의 DB 경합, 변경 세대 보존, 설정 변경, lease 만료/연장,
+적재 후 재시작, 공급자 실패, 빈 소개, 최종 실패의 일일 보정·수동 재등록을 검증했다.
+Python 추천·태깅 회귀 518개와 BE 관련 회귀 77개도 통과했다.
+외부 모델 호출 0, Python 시나리오의 비-loopback 연결 시도 0, 전용 컨테이너 정리를 확인했다.
+기존 프로필 API는 공백 소개 저장을 계속 거부하며, 빈 소개 분류는 레거시 DB fixture로 검증했다.
+운영 systemd 설치·모델 의미 품질·사람 검수·독립 holdout·운영 taxonomy 승인은 포함하지 않는다.
