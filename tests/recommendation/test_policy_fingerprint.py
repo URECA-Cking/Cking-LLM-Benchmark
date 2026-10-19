@@ -35,3 +35,9 @@ def test_interpreter_ast_fields_never_enter_fingerprint(monkeypatch):
     monkeypatch.setattr(ast, 'parse', added_metadata)
     monkeypatch.setattr(ast, 'dump', lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('AST serialization forbidden')))
     assert normalized_policy_tokens(source) == baseline
+
+
+def test_logical_newlines_preserve_statement_semantics():
+    returns_value = 'def policy(x):\n    return x\n'
+    returns_none = 'def policy(x):\n    return\n    x\n'
+    assert normalized_policy_tokens(returns_value) != normalized_policy_tokens(returns_none)

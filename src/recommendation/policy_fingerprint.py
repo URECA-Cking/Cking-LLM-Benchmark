@@ -19,11 +19,19 @@ def normalized_policy_tokens(source):
                 def position(line, byte_column):
                     return (line, len(lines[line - 1].encode('utf-8')[:byte_column].decode('utf-8')))
                 spans.append((position(first.lineno, first.col_offset), position(first.end_lineno, first.end_col_offset)))
-    ignored = {tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.ENDMARKER, tokenize.ENCODING}
+    ignored = {tokenize.COMMENT, tokenize.NL, tokenize.ENDMARKER, tokenize.ENCODING}
     result = []
+    statement_has_code = False
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type in ignored or any(start <= token.start and token.end <= end for start, end in spans):
             continue
+        if token.type == tokenize.NEWLINE:
+            if statement_has_code:
+                result.append(['NEWLINE', ''])
+            statement_has_code = False
+            continue
+        if token.type not in {tokenize.INDENT, tokenize.DEDENT}:
+            statement_has_code = True
         value = '' if token.type in {tokenize.INDENT, tokenize.DEDENT} else token.string
         result.append([tokenize.tok_name[token.type], value])
     return result
