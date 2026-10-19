@@ -11,8 +11,13 @@ def normalized_policy_tokens(source):
     source = textwrap.dedent(source)
     lines = source.splitlines(keepends=True)
     spans = []
-    # AST is used only to locate true docstrings; node fields never enter the hash.
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    # f-string tokenization differs across Python minors; reject it explicitly
+    # before constructing a fingerprint rather than silently changing configHash.
+    if any(isinstance(node, ast.JoinedStr) for node in ast.walk(tree)):
+        raise ValueError('POLICY_FSTRING_NOT_SUPPORTED')
+    # AST validates syntax and locates docstrings; node fields never enter the hash.
+    for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.body:
             first = node.body[0]
             if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):

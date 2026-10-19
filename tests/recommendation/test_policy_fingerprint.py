@@ -41,3 +41,17 @@ def test_logical_newlines_preserve_statement_semantics():
     returns_value = 'def policy(x):\n    return x\n'
     returns_none = 'def policy(x):\n    return\n    x\n'
     assert normalized_policy_tokens(returns_value) != normalized_policy_tokens(returns_none)
+
+
+def test_policy_fstring_is_rejected_before_tokenization():
+    import pytest
+    with pytest.raises(ValueError, match='POLICY_FSTRING_NOT_SUPPORTED'):
+        normalized_policy_tokens('def policy(x):\n    return f"value={x}"\n')
+
+
+def test_current_policy_functions_remain_fstring_free():
+    import inspect
+    from src.detail_tagging import classify, _rank
+    from src.subtopic_tags import validate_llm_topics
+    for function in (classify, _rank, validate_llm_topics):
+        normalized_policy_tokens(inspect.getsource(function))
