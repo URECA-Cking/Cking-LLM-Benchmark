@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.detail_tagging import automatic_record
-from src.recommendation.content_worker import ContentWorker, ROOT, input_hash, normalized_intro
+from src.detail_tagging import automatic_record, digest
+from src.recommendation.content_worker import ContentWorker, ROOT, input_hash, normalized_intro, fingerprint
 from src.recommendation.http import BackendRequestError
 from src.recommendation.locking import file_lock, BatchAlreadyRunning
 from src.recommendation.subtopic_taxonomy import subtopic_hash
@@ -20,6 +20,7 @@ class Backend:
 
     def __init__(self, taxonomy):
         self.taxonomy = taxonomy
+        self.model = "mock-model"
         self.rows = [self.row('노래 커버', 1)]
         self.sent, self.acks = [], []
         self.error = None
@@ -30,7 +31,7 @@ class Backend:
 
     def get(self, path):
         return dict(contractVersion='content-tags-v1', taxonomyApproved=True,
-                    taxonomyHash=subtopic_hash(self.taxonomy), items=self.rows, nextCursor=None)
+                    taxonomyHash=subtopic_hash(self.taxonomy), generationConfigHash=digest(fingerprint(self.taxonomy,self.model)), items=self.rows, nextCursor=None)
 
     def put(self, path, payload):
         if path.endswith('/reconcile'):
@@ -76,6 +77,7 @@ def test_model_change_and_empty(tmp_path, taxonomy):
     worker.run()
     other = ContentWorker(be, tmp_path, taxonomy, 'new-model', worker.classify_fn, lambda: 0,
                           approved=True, max_calls=10)
+    be.model = "new-model"
     other.run()
     assert len(calls) == 2
     be.rows = [be.row(None, 2)]
@@ -192,3 +194,12 @@ def test_content_http_allowlist():
         client.put('/api/admin/creators/1', {})
     with pytest.raises(ValueError):
         client.get(ROOT + '/inputs?cursor=../secret')
+
+
+def test_backend_config_mismatch_stops_before_provider(tmp_path, taxonomy):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    be.model = 'unapproved-model'
+    result = worker.run()
+    assert result['stages']['tags']['status'] == 'failed'
+    assert not calls and not be.sent
+    assert not list(tmp_path.glob('budget-*.json'))

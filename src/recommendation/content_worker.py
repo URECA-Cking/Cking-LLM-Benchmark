@@ -90,6 +90,8 @@ class ContentWorker:
             if (page.get('taxonomyHash') != self.identity['taxonomyHash']
                     or page.get('taxonomyApproved') is not True):
                 raise ValueError('BE taxonomy approval/hash mismatch')
+            if page.get('generationConfigHash') != digest(self.identity):
+                raise ValueError('BE generation configuration mismatch')
             for row in page['items']:
                 cid = row['creatorId']
                 if type(cid) is not int or cid < 1 or cid in seen:
