@@ -158,7 +158,11 @@ class ContentTagHttpE2eTest {
                 CreatorSpace space=spaces.findByCreatorIdForUpdate(creatorId).orElseThrow();
                 pending.set(executor.submit(() -> {
                     started.countDown();
-                    try { tags.apply(creatorId,json.convertValue(payload,Map.class)); return false; }
+                    try {
+                        Map<String,Object> stale=json.convertValue(payload,Map.class);
+                        stale.put("automaticRevision","e".repeat(64));stale.put("idempotencyKey","e".repeat(64));
+                        tags.apply(creatorId,stale); return false;
+                    }
                     catch(kr.co.cking.common.exception.BusinessException e) {return e.getErrorCode()==ContentTagErrorCode.CONTENT_INPUT_CONFLICT;}
                 }));
                 confirmation.set(executor.submit(() -> {

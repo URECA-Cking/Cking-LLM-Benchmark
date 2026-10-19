@@ -85,11 +85,11 @@ def main():
             assert request('PUT',path,payload,cfg['apiKey'])['status']=='idempotent'
             changed=copy.deepcopy(payload);changed['createdAt']='2026-01-01T00:00:00+00:00'
             reject('PUT',path,changed,409)
-            invalid=copy.deepcopy(payload);invalid['record']['result']['topics'][0]['code']='FREE_TAG'
+            invalid=copy.deepcopy(payload);invalid['automaticRevision']=invalid['idempotencyKey']='b'*64;invalid['record']['result']['topics'][0]['code']='FREE_TAG'
             reject('PUT',path,invalid,400)
-            invalid=copy.deepcopy(payload);invalid['record']['result']['parents']*=2
+            invalid=copy.deepcopy(payload);invalid['automaticRevision']=invalid['idempotencyKey']='b'*64;invalid['record']['result']['parents']*=2
             reject('PUT',path,invalid,400)
-            invalid=copy.deepcopy(payload);invalid['record']['result']['topics'][0]['evidence']='absent evidence'
+            invalid=copy.deepcopy(payload);invalid['automaticRevision']=invalid['idempotencyKey']='b'*64;invalid['record']['result']['topics'][0]['evidence']='absent evidence'
             reject('PUT',path,invalid,400)
             passed('idempotency_conflicting_payload_and_taxonomy_code_validation')
             confirmation=dict(automaticRevision=mine['automaticRevision'],inputHash=mine['inputHash'],parents=['MUSIC'],topics=['MUSIC_VOCAL'])
@@ -101,7 +101,10 @@ def main():
             # Separate DB transactions prove a competing stale delivery waits for Space edit lock.
             assert control('race',payload=payload)['serialized']
             assert view(True)['status']=='reanalysis_required'
-            reject('PUT',path,payload,409)
+            assert request('PUT',path,payload,cfg['apiKey'])['status']=='idempotent'
+            assert view(True)['status']=='reanalysis_required'
+            stale=copy.deepcopy(payload);stale['automaticRevision']=stale['idempotencyKey']='c'*64
+            reject('PUT',path,stale,409)
             reject('PUT','/api/creator/content-tags/confirmation',confirmation,409,token=cfg['userToken'])
             passed('mysql_space_edit_delivery_race_and_stale_confirmation')
             # Claim, then another committed edit invalidates lease generation; ack cannot consume successor.
@@ -124,7 +127,11 @@ def main():
             assert len(calls)==before
             passed('unapproved_model_config_stops_before_provider')
             control('config',configHash=digest(worker.identity))
-            run();reject('PUT',path,old_payload,409)
+            run();current=view()
+            assert request('PUT',path,old_payload,cfg['apiKey'])['status']=='idempotent'
+            assert view()==current
+            stale=copy.deepcopy(old_payload);stale['automaticRevision']=stale['idempotencyKey']='d'*64
+            reject('PUT',path,stale,409)
             passed('new_model_config_reclassifies_and_fences_previous_config')
             edit('노래 커버 lease 테스트')
             job=client.put(API+'/jobs/claim',dict(leaseSeconds=900));control('expire')
