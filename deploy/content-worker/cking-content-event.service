@@ -1,0 +1,20 @@
+[Unit]
+Description=Cking content and recommendation worker
+After=network-online.target
+Wants=network-online.target
+OnFailure=cking-content-alert@%n.service
+
+[Service]
+Type=oneshot
+User=cking
+Group=cking
+WorkingDirectory=/opt/cking-llm
+EnvironmentFile=/etc/cking/content-worker.env
+UMask=0077
+ExecStart=/opt/cking-llm/.venv/bin/python -m src.recommendation.content_worker --state /var/lib/cking-content --be-base-url ${CKING_BE_URL} --source event --approve-external-transfer --max-daily-calls ${CKING_TAG_DAILY_CALLS} -- apply
+SuccessExitStatus=75
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cking-content
+PrivateTmp=true
+TimeoutStartSec=12h

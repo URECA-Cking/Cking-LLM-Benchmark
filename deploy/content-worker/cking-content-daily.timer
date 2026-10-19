@@ -1,0 +1,10 @@
+[Unit]
+Description=Cking daily reconciliation at 03:00 Asia/Seoul
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Asia/Seoul
+Persistent=true
+Unit=cking-content-daily.service
+
+[Install]
+WantedBy=timers.target

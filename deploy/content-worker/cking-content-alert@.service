@@ -1,0 +1,6 @@
+[Unit]
+Description=Notify content worker failure
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p daemon.err "Cking content worker failed; inspect protected summary and journal"
