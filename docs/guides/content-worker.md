@@ -10,13 +10,14 @@
 기존 추천 API Key의 권한은 확대하지 않는다. 모든 경로는 `/api/internal/content-tags` 아래다.
 
 - `GET /inputs[?cursor=<opaque>]`: `contractVersion=content-tags-v1`, `taxonomyApproved=true`,
-  `taxonomyHash`, `items`, `nextCursor`를 반환한다. items는 전체 활성 크리에이터의
+  `taxonomyHash`, `generationConfigHash`, `items`, `nextCursor`를 반환한다. items는 전체 활성 크리에이터의
   `creatorId`(양의 정수), `introduction`(문자열/null), `inputRevision`(양의 증가 정수),
   `inputHash`다. 페이지 순회는 일관된 snapshot이어야 한다. draft 85개를 자동 승인하지 않는다.
 - 정본은 BE Creator/Space 소개 저장 필드로 합의해야 한다. CRLF/CR→LF 후 NFC를 적용하고
   trim 없이 UTF-8 바이트 SHA-256을 계산한다. null은 빈 문자열이다. 공백만 있으면 모델 없이
   정상 미분류를 저장한다. `fixtures/content-tags-v1.json`을 Java에서도 동일하게 검증한다.
   기존 로컬 분류기의 JSON 문자열 digest는 `record.input_hash`이며 wire `inputHash`와 다르다.
+- 입력의 `generationConfigHash`와 로컬 fingerprint가 다르면 공급자 호출 전에 실패한다.
 - `PUT /creators/{id}/automatic`: 입력 revision/hash, 자동 revision/멱등 키,
   provenance, UTC 생성 시각, 자동 결과와 후보 근거를 전송한다. provenance는 모델,
   프롬프트/스키마/정책/분류체계/기준 해시를 포함한다. 응답은
@@ -33,7 +34,7 @@
 
 ## 변경 이벤트와 정합성
 
-소개 수정 트랜잭션에 outbox 작업을 함께 저장한다. 수정 요청 안에서는 모델을 호출하지 않는다.
+BE의 Space 생성/프로필 수정 Service가 소개와 outbox를 같은 트랜잭션에 저장한다. DB trigger나 SUPER 권한을 쓰지 않는다. 수정 요청 안에서는 모델을 호출하지 않는다.
 작업은 creatorId + inputRevision/inputHash로 식별하며 BE에서 최신 세대로 병합한다.
 
 - `PUT /jobs/claim {leaseSeconds:900}` → 작업 없으면 `{}`, 있으면
@@ -107,3 +108,7 @@ Python 추천·태깅 회귀 518개와 BE 관련 회귀 77개도 통과했다.
 외부 모델 호출 0, Python 시나리오의 비-loopback 연결 시도 0, 전용 컨테이너 정리를 확인했다.
 기존 프로필 API는 공백 소개 저장을 계속 거부하며, 빈 소개 분류는 레거시 DB fixture로 검증했다.
 운영 systemd 설치·모델 의미 품질·사람 검수·독립 holdout·운영 taxonomy 승인은 포함하지 않는다.
+
+
+연동 실행기는 테스트 DB에만 권한이 있는 `cking_e2e` 계정으로 Flyway/HTTP 검증을 수행한다.
+전용 root 계정은 컨테이너 초기화/상태 확인에만 쓰고 Spring datasource에는 전달하지 않는다.
