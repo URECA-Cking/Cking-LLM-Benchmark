@@ -7,6 +7,7 @@
 ## 입력·적재 계약
 
 별도 최소 권한 `CKING_CONTENT_TAG_ACCESS_TOKEN` Bearer 인증을 사용한다.
+원격 BE는 HTTPS만 허용하며, HTTP 예외는 localhost/숫자 loopback 주소에 한정한다.
 기존 추천 API Key의 권한은 확대하지 않는다. 모든 경로는 `/api/internal/content-tags` 아래다.
 
 - `GET /inputs[?cursor=<opaque>]`: `contractVersion=content-tags-v1`, `taxonomyApproved=true`,
@@ -28,7 +29,8 @@
   활성 실행 설정 순서를 검증해야 한다. 이 작업자는 하나의 영속 루트/단일 호스트만 지원한다.
 - 자동 결과는 본인 확인 결과와 별도 보존한다. `creatorConfirmed=false`이며 공개나
   본인 확인 해제를 요청하지 않는다. 공급자 실패는 빈 결과로 적재하지 않는다.
-- 409를 받은 payload는 로컬에서 fence하고 다시 전송하지 않는다. 다음 순회는 입력을
+- 409는 `refresh_required`로 구분해 정상 편집 경합만으로 exit 1을 만들지 않는다.
+409를 받은 payload는 로컬에서 fence하고 다시 전송하지 않는다. 다음 순회는 입력을
   다시 조회한다. 입력이 같은데 충돌하면 BE 계약/실행 설정을 조사하고 새 입력 세대를 발급한다.
   401/403은 해당 순회의 추가 태그 적재를 중단한다. 네트워크/5xx는 저장한 동일 payload로 재개한다.
 
@@ -45,7 +47,8 @@ BE의 Space 생성/프로필 수정 Service가 소개와 outbox를 같은 트랜
   처리 중 수정은 outbox에 남고 만료 lease의 ack는 최신 작업을 완료할 수 없다.
 - 이벤트 실행도 기존 전체 manifest 기반 daily apply를 실행하므로 변경 크리에이터를
   후보로 사용하는 모든 유사 추천과 관심 분야 추천을 재계산한다. 추천 가중치는 바꾸지 않는다.
-- 태그·추천 각각 성공해야 작업을 완료한다. daily는 작업 유무와 관계없이 전체를 재확인한다.
+- claim한 Creator의 태그와 추천 단계가 성공하면 그 작업을 완료한다. 다른 Creator의 실패는
+해당 Creator의 ack를 막지 않는다. daily는 성공한 행만 reconcile로 전송하며 실패 행이 있으면 exit 1을 유지한다. daily는 작업 유무와 관계없이 전체를 재확인한다.
   추천 완료 마커가 있어도 태그는 실행한다. 잠금 경합은 claim 전에 종료하며 작업을 소비하지 않는다.
 
 ## 배포·수동 실행·복구
@@ -53,13 +56,16 @@ BE의 Space 생성/프로필 수정 Service가 소개와 outbox를 같은 트랜
 Linux의 전용 사용자 `cking`, Python 3.11+, 고정 checkout `/opt/cking-llm`을 사용한다.
 `deploy/content-worker`의 unit을 `/etc/systemd/system`에 설치한다. 승인한 운영자가
 환경 예제를 `/etc/cking/content-worker.env`에 복사하고 권한 0640으로 설정한다.
-`/var/lib/cking-content`를 cking 소유 0700 영속 볼륨으로 준비한다.
+`StateDirectory=cking-content`와 `StateDirectoryMode=0700`으로 `/var/lib/cking-content`를 생성한다.
+컨테이너/볼륨 환경에서도 이 경로의 영속성을 보장한다.
 `systemctl daemon-reload` 후 event.timer와 daily.timer를 enable/start한다.
 이 문서 추가만으로 배포나 유료 호출은 실행되지 않는다.
 
 일일 보정은 매일 **03:00 Asia/Seoul**, 이벤트 polling은 이전 실행 종료 후 **60초**다.
 수동 실행은 `systemctl start cking-content-daily.service`를 사용해 같은 환경·잠금·경로를 쓴다.
-성공/무변경은 조용히 종료한다. 실패는 exit 1과 OnFailure의 daemon.err syslog로 알린다.
+성공/무변경은 조용히 종료하며 `last-success.json`에 source/status/completedAt을 원자적으로 기록한다.
+작업 없는 event poll도 마커를 갱신한다. 운영 모니터는 타이머 활성 상태와 이 시각을 함께 감시한다.
+초기 경보 기준은 마지막 성공 20분 초과이며, 부하 측정 후 처리 시간에 맞춰 조정한다. 실패는 exit 1과 OnFailure의 daemon.err syslog로 알린다.
 운영 로그 수집 시스템에서 해당 메시지에 경보를 연결한다. 원문·키·외부 예외 메시지는 알리지 않는다.
 일시 중단은 SIGTERM/서비스 중지 후 재실행한다. host 재시작 시 timer가 다시 시작된다.
 잠금 경합 exit 75는 실패가 아니며 event timer가 재시도한다. daily 경합 때도 후속 event와
@@ -69,7 +75,11 @@ Linux의 전용 사용자 `cking`, Python 3.11+, 고정 checkout `/opt/cking-llm
 백업·복원한다. 임시 runner와 여러 호스트에서 독립 복사본을 실행하지 않는다.
 영속 볼륨을 잃으면 실행을 중지하고 BE 최대 applicationSequence와 결과 세대를 먼저 확인한다.
 적재 직후 중단해도 payload가 먼저 저장되어 있으므로 같은 멱등 키로 재전송한다.
-실패 회수 한도(입력·설정당 3회)에 도달한 입력의 수동 재시도는 운영자가 실패 원인을
+`summary.json`의 행별 creatorId/recordKey/code로 실패 입력과 보호된 artifact 위치를 찾는다.
+`EXTERNAL_TRANSFER_NOT_APPROVED`, `DAILY_BUDGET_EXHAUSTED`, `PROVIDER_FAILURE`,
+`FINAL_PROVIDER_FAILURE`, `CONFIGURATION_MISMATCH`, `BACKEND_AUTHORIZATION_FAILED`를 구분한다.
+외부 예외 메시지나 소개 원문은 summary/stdout에 기록하지 않는다.
+실패 횟수 한도(입력·설정당 3회)에 도달한 입력의 수동 재시도는 운영자가 실패 원인을
 해결한 뒤 해당 records/<key>/attempts.json count를 승인하에 조정한다. payload/ledger는 삭제하지 않는다.
 롤백은 timer 중지→이전 코드 복귀다. 이미 저장한 자동·확인 결과를 삭제하지 않는다.
 
@@ -98,38 +108,39 @@ Python mock 테스트는 입력 변경·모델 변경·빈 입력·성공 재사
 Java fixture와 소개 수정·적재·본인 확인 경쟁, 이벤트/lease/재시작/실패 복구를 합성 provider로 검증한다.
 운영 systemd 설치·유료 모델 품질·사람 검수·독립 holdout 및 운영 taxonomy 승인은 별도다.
 
-## 실제 연동 검증 기록 (2026-10-19)
-
-BE `e39f86e`, LLM `ebb338d`에서 실제 HTTP/MySQL 시나리오 **15/15**가 통과했다.
-공개 집계: [content-tags-http-e2e.json](../../data/summaries/content-tags-http-e2e.json).
-소개 수정·적재·본인 확인의 DB 경합, 변경 세대 보존, 설정 변경, lease 만료/연장,
-적재 후 재시작, 공급자 실패, 빈 소개, 최종 실패의 일일 보정·수동 재등록을 검증했다.
-Python 추천·태깅 회귀 518개와 BE 관련 회귀 77개도 통과했다.
-외부 모델 호출 0, Python 시나리오의 비-loopback 연결 시도 0, 전용 컨테이너 정리를 확인했다.
-기존 프로필 API는 공백 소개 저장을 계속 거부하며, 빈 소개 분류는 레거시 DB fixture로 검증했다.
-운영 systemd 설치·모델 의미 품질·사람 검수·독립 holdout·운영 taxonomy 승인은 포함하지 않는다.
-
-
-연동 실행기는 테스트 DB에만 권한이 있는 `cking_e2e` 계정으로 Flyway/HTTP 검증을 수행한다.
-전용 root 계정은 컨테이너 초기화/상태 확인에만 쓰고 Spring datasource에는 전달하지 않는다.
-
-
-## CI 실패 수정 후 재검증 (2026-10-19)
-
-BE `0c4a433`, LLM `64dcfea`에서 최소 권한 MySQL 계정으로 실제 HTTP/DB **16/16**을 통과했다.
-[재검증 공개 집계](../../data/summaries/content-tags-http-e2e-recheck.json)에 최신 실행 ID와 코드 SHA를 보존한다.
-기존 15개 시나리오에 승인되지 않은 설정을 모델 호출 전에 차단하는 검증을 추가했다.
-BE 관련 94개·제한 계정 DB 11개·bootJar, Python 회귀 519개도 통과했다.
-기존 공개 집계는 당시 코드의 과거 기록으로 보존한다. 실제 모델 의미 품질이나 운영 승인을 뜻하지 않는다.
-
-### BE #655 리뷰 반영 계약
+## BE 재전송 계약
 
 동일 Creator·키·payload의 재전송은 소개/설정 변경 뒤에도 멱등 성공한다. 이 응답은 BE의 최신 포인터를
 되돌리지 않는다. 새 키로 뒤처진 입력/설정을 보내면 기존처럼 409다. HTTP E2E는 두 경우를 구분한다.
 공용 content-tags-v1 fixture에 제어문자 JSON 소문자 hex, 이모지와 짝 없는 surrogate 거부를 추가했다.
 입력은 여전히 전체 일관 snapshot이며 BE가 행당 한 번 정규화한 본문으로 해시를 산출한다.
 
-리뷰 수정 후 BE `fab5c1c`·LLM `60e4f23`의 HTTP/MySQL E2E **16/16**, BE 집중 테스트 **100개**,
-격리 DB 회귀 **22개**(새 리뷰 회귀 11개 포함), Python **519개**, bootJar가 통과했다.
-검증 집계는 `data/summaries/content-tags-http-e2e-review-655.json`에 별도로 보존한다.
-실제 모델 호출은 0이며 의미 품질·사람 검수·운영 배포는 검증 범위에 포함하지 않는다.
+
+## 정책 지문 변경과 운영 갱신
+
+policyHash는 POLICY_VERSION과 classify/_rank/validate_llm_topics 함수의 AST만 포함한다.
+주석·docstring·서식·무관한 실험 코드는 제외하며 실제 순위/상한/검증 정책 변경은 새 hash가 된다.
+promptHash/schemaHash/criteriaHash는 계속 별도로 검증한다. 기존 모듈 전체 hash에서 이 계약으로
+전환하는 **이번 한 번은** configHash가 바뀐다. 운영자는 배포 런타임에서 fingerprint를 산출해
+BE 승인 설정을 갱신해야 한다. 기존 캐시/시도 이력을 새 key로 덮어쓰거나 승인 hash를 추론하지 않는다.
+
+## 추천 재계산 범위와 부하 측정 계획
+
+현재 event 한 건도 전체 manifest 기반 추천을 재계산한다. 한 Creator의 수정이 다른 Creator의
+유사 추천·관심분야 추천 후보에 영향을 주므로 이 범위를 유지했다. 같은 Creator의 연속 변경은
+BE outbox가 최신 세대로 합치지만 서로 다른 Creator N건은 최대 N회 직렬 실행한다.
+여러 Creator 간 coalescing은 이번 변경에서 구현하지 않았다. p95 목표의 부하 충족 여부도 미검증이다.
+
+운영 활성화 전 합성 데이터로 Creator 100/1,000/10,000명 × 수정 burst 1/10/100건을 측정한다.
+초기/캐시 재사용 조건을 분리해 BE committed_at→claimed_at/completed_at p50/p95/p99,
+처리 중 backlog 크기, summary 단계별 durationSeconds, 추천 호출 수·전체 실행 횟수를 기록한다.
+변경→시작 p95 2분 또는 완료 p95 15분을 넘는 규모에서는 활성화하지 않고, 여러 job claim과
+세대별 추천 coalescing을 후속 설계한다. 실제 유료 공급자로 측정하려면 별도 전송·예산 승인이 필요하다.
+
+## 검증 기록 위치
+
+시나리오·실행 ID·실행 시점 SHA는 `data/summaries/content-tags-http-e2e*.json`에 보존한다.
+운영 가이드에는 과거 실행별 숫자를 누적하지 않는다. 최신 검증 링크/범위는 PR #74 본문을 확인한다.
+BE 의존 계약은 [BE PR #655](https://github.com/URECA-Cking/Cking-BE/pull/655)의 diff와 비교한다.
+최신 공개 집계는 PR URL과 소스 파일별 SHA-256도 기록해 squash 이후에도 내용으로 대조할 수 있다.
+합성 taxonomy·모델 검증은 운영 taxonomy 승인이나 모델 의미 품질 검증이 아니다.
