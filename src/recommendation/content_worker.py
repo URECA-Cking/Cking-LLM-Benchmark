@@ -8,8 +8,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import inspect
-import ast
-import textwrap
 import ipaddress
 from urllib.parse import urlsplit
 import io
@@ -32,6 +30,8 @@ from src.recommendation.storage import _write_json_atomic
 from src.recommendation.subtopic_taxonomy import subtopic_hash
 from src.subtopic_tags import load_taxonomy, validate_llm_topics
 from src.recommendation.taxonomy import load_service_categories, DEFAULT_CATEGORIES_CSV
+
+from src.recommendation.policy_fingerprint import normalized_policy_tokens
 
 ROOT = '/api/internal/content-tags'
 
@@ -86,16 +86,9 @@ def diagnostic(error, fallback):
 
 
 def policy_hash():
-    # AST excludes comments/formatting/docstrings and unrelated experiments. Include
-    # the ranking helper and validator, not only classify's delegating call sites.
-    functions = []
-    for function in (classify, _rank, validate_llm_topics):
-        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant) and isinstance(node.body[0].value.value, str):
-                node.body.pop(0)
-        functions.append(ast.dump(tree, include_attributes=False))
-    return digest({'version': POLICY_VERSION, 'functions': functions})
+    functions = [normalized_policy_tokens(inspect.getsource(function))
+                 for function in (classify, _rank, validate_llm_topics)]
+    return digest({'format': 'policy-tokens-v1', 'version': POLICY_VERSION, 'functions': functions})
 
 
 def require_secure_backend(url):
