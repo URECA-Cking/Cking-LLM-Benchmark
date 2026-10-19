@@ -18,4 +18,3 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/cking-content
 PrivateTmp=true
 TimeoutStartSec=12h
-
