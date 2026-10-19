@@ -29,7 +29,12 @@
   활성 실행 설정 순서를 검증해야 한다. 이 작업자는 하나의 영속 루트/단일 호스트만 지원한다.
 - 자동 결과는 본인 확인 결과와 별도 보존한다. `creatorConfirmed=false`이며 공개나
   본인 확인 해제를 요청하지 않는다. 공급자 실패는 빈 결과로 적재하지 않는다.
-- 409는 `refresh_required`로 구분해 정상 편집 경합만으로 exit 1을 만들지 않는다.
+- 최초의 409는 `refresh_required`로 구분해 정상 편집 경합만으로 exit 1을 만들지 않는다.
+  같은 recordKey에서 충돌 관측이 **3회** 또는 최초 관측 후 **300초**에 도달하면
+  `PERSISTENT_INPUT_CONFLICT` 실패로 승격하고 exit 1로 알린다. event/daily가 같은 카운터를 쓴다.
+  `conflict.json`의 관측 횟수·최초/최근 관측 시각·승격 상태는 재시작 뒤에도 유지한다.
+  승격 뒤에는 last-success.json도 갱신하지 않는다. 새 revision/config는 별도 key로 정상 처리한다.
+  과거의 단순 conflict flag는 시간 이력을 추정하지 않고 최초 재관측부터 카운트한다.
 409를 받은 payload는 로컬에서 fence하고 다시 전송하지 않는다. 다음 순회는 입력을
   다시 조회한다. 입력이 같은데 충돌하면 BE 계약/실행 설정을 조사하고 새 입력 세대를 발급한다.
   401/403은 해당 순회의 추가 태그 적재를 중단한다. 네트워크/5xx는 저장한 동일 payload로 재개한다.
@@ -118,10 +123,13 @@ Java fixture와 소개 수정·적재·본인 확인 경쟁, 이벤트/lease/재
 
 ## 정책 지문 변경과 운영 갱신
 
-policyHash는 POLICY_VERSION과 classify/_rank/validate_llm_topics 함수의 AST만 포함한다.
-주석·docstring·서식·무관한 실험 코드는 제외하며 실제 순위/상한/검증 정책 변경은 새 hash가 된다.
+policyHash는 `policy-tokens-v1` 형식, POLICY_VERSION 및 classify/_rank/validate_llm_topics의
+정규화된 토큰을 포함한다. AST는 docstring 위치를 찾는 데만 쓰며 ast.dump나 노드 필드는 해시하지 않는다.
+주석·docstring·공백·무관한 실험 코드는 제외하지만 실제 코드·문자열 리터럴·블록 구조는 보존한다.
+따라서 같은 정책 소스는 지원 Python minor 버전의 AST 필드 차이로 configHash가 바뀌지 않는다.
+실제 순위/상한/검증 정책 변경은 새 hash가 된다.
 promptHash/schemaHash/criteriaHash는 계속 별도로 검증한다. 기존 모듈 전체 hash에서 이 계약으로
-전환하는 **이번 한 번은** configHash가 바뀐다. 운영자는 배포 런타임에서 fingerprint를 산출해
+전환했던 이력과 마찬가지로, AST dump에서 토큰 계약으로 전환하는 **이번 변경도** configHash가 바뀐다. 운영자는 배포 런타임에서 fingerprint를 산출해
 BE 승인 설정을 갱신해야 한다. 기존 캐시/시도 이력을 새 key로 덮어쓰거나 승인 hash를 추론하지 않는다.
 
 ## 추천 재계산 범위와 부하 측정 계획
