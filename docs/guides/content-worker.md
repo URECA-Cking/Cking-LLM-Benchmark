@@ -1,0 +1,96 @@
+# 콘텐츠 태그 작업자 운영 및 BE #654 계약 제안
+
+이 구현은 LLM 쪽 계약 제안 `content-tags-v1`이다. BE #654는 아직 미구현이므로
+BE와의 합의 완료나 HTTP/DB 통합 완료를 의미하지 않는다. 운영 활성화 전에 아래 계약을
+BE에서 구현하고 Python↔Java fixture 및 실제 경쟁 테스트를 통과시켜야 한다.
+
+## 입력·적재 계약
+
+별도 최소 권한 `CKING_CONTENT_TAG_ACCESS_TOKEN` Bearer 인증을 사용한다.
+기존 추천 API Key의 권한은 확대하지 않는다. 모든 경로는 `/api/internal/content-tags` 아래다.
+
+- `GET /inputs[?cursor=<opaque>]`: `contractVersion=content-tags-v1`, `taxonomyApproved=true`,
+  `taxonomyHash`, `items`, `nextCursor`를 반환한다. items는 전체 활성 크리에이터의
+  `creatorId`(양의 정수), `introduction`(문자열/null), `inputRevision`(양의 증가 정수),
+  `inputHash`다. 페이지 순회는 일관된 snapshot이어야 한다. draft 85개를 자동 승인하지 않는다.
+- 정본은 BE Creator/Space 소개 저장 필드로 합의해야 한다. CRLF/CR→LF 후 NFC를 적용하고
+  trim 없이 UTF-8 바이트 SHA-256을 계산한다. null은 빈 문자열이다. 공백만 있으면 모델 없이
+  정상 미분류를 저장한다. `fixtures/content-tags-v1.json`을 Java에서도 동일하게 검증한다.
+  기존 로컬 분류기의 JSON 문자열 digest는 `record.input_hash`이며 wire `inputHash`와 다르다.
+- `PUT /creators/{id}/automatic`: 입력 revision/hash, 자동 revision/멱등 키,
+  provenance, UTC 생성 시각, 자동 결과와 후보 근거를 전송한다. provenance는 모델,
+  프롬프트/스키마/정책/분류체계/기준 해시를 포함한다. 응답은
+  `{status: applied|idempotent, automaticRevision: <요청과 동일>}`다.
+- BE는 소개 수정과 동일 트랜잭션 잠금 하에 현재 revision/hash 및 활성 taxonomy를 대조한다.
+  변경된 입력/오래된 세대는 409, 같은 멱등 키의 다른 payload는 409, 인증은 401/403이다.
+  동일 입력이어도 오래된 실행은 최신 세대를 덮어쓰지 못하도록 BE가 발급한 입력 세대와
+  활성 실행 설정 순서를 검증해야 한다. 이 작업자는 하나의 영속 루트/단일 호스트만 지원한다.
+- 자동 결과는 본인 확인 결과와 별도 보존한다. `creatorConfirmed=false`이며 공개나
+  본인 확인 해제를 요청하지 않는다. 공급자 실패는 빈 결과로 적재하지 않는다.
+- 409를 받은 payload는 로컬에서 fence하고 다시 전송하지 않는다. 다음 순회는 입력을
+  다시 조회한다. 입력이 같은데 충돌하면 BE 계약/실행 설정을 조사하고 새 입력 세대를 발급한다.
+  401/403은 해당 순회의 추가 태그 적재를 중단한다. 네트워크/5xx는 저장한 동일 payload로 재개한다.
+
+## 변경 이벤트와 정합성
+
+소개 수정 트랜잭션에 outbox 작업을 함께 저장한다. 수정 요청 안에서는 모델을 호출하지 않는다.
+작업은 creatorId + inputRevision/inputHash로 식별하며 BE에서 최신 세대로 병합한다.
+
+- `PUT /jobs/claim {leaseSeconds:900}` → 작업 없으면 `{}`, 있으면
+  `{jobId, leaseToken, generation}`. lease는 전달 보호용이고 데이터 쓰기 허가가 아니다.
+- `PUT /jobs/{jobId}/ack {leaseToken,generation,status,summary}`에서 status는
+  `completed|retry`. BE는 토큰과 세대를 원자적으로 비교하며 최신 후속 작업을 지우지 않는다.
+- 프로세스 중단/lease 만료 시 BE가 재전달한다. 중복·역순 이벤트도 현재 전체 입력을 다시 읽는다.
+  처리 중 수정은 outbox에 남고 만료 lease의 ack는 최신 작업을 완료할 수 없다.
+- 이벤트 실행도 기존 전체 manifest 기반 daily apply를 실행하므로 변경 크리에이터를
+  후보로 사용하는 모든 유사 추천과 관심 분야 추천을 재계산한다. 추천 가중치는 바꾸지 않는다.
+- 태그·추천 각각 성공해야 작업을 완료한다. daily는 작업 유무와 관계없이 전체를 재확인한다.
+  추천 완료 마커가 있어도 태그는 실행한다. 잠금 경합은 claim 전에 종료하며 작업을 소비하지 않는다.
+
+## 배포·수동 실행·복구
+
+Linux의 전용 사용자 `cking`, Python 3.11+, 고정 checkout `/opt/cking-llm`을 사용한다.
+`deploy/content-worker`의 unit을 `/etc/systemd/system`에 설치한다. 승인한 운영자가
+환경 예제를 `/etc/cking/content-worker.env`에 복사하고 권한 0640으로 설정한다.
+`/var/lib/cking-content`를 cking 소유 0700 영속 볼륨으로 준비한다.
+`systemctl daemon-reload` 후 event.timer와 daily.timer를 enable/start한다.
+이 문서 추가만으로 배포나 유료 호출은 실행되지 않는다.
+
+일일 보정은 매일 **03:00 Asia/Seoul**, 이벤트 polling은 이전 실행 종료 후 **60초**다.
+수동 실행은 `systemctl start cking-content-daily.service`를 사용해 같은 환경·잠금·경로를 쓴다.
+성공/무변경은 조용히 종료한다. 실패는 exit 1과 OnFailure의 daemon.err syslog로 알린다.
+운영 로그 수집 시스템에서 해당 메시지에 경보를 연결한다. 원문·키·외부 예외 메시지는 알리지 않는다.
+일시 중단은 SIGTERM/서비스 중지 후 재실행한다. host 재시작 시 timer가 다시 시작된다.
+잠금 경합 exit 75는 실패가 아니며 event timer가 재시도한다. daily 경합 때도 후속 event와
+다음 daily가 보정한다. 서비스 자체 강제 중단/timeout도 systemd OnFailure 대상이다.
+
+캐시 models.json, application ledger, recommendations/, records/, budget 파일을 **함께**
+백업·복원한다. 임시 runner와 여러 호스트에서 독립 복사본을 실행하지 않는다.
+영속 볼륨을 잃으면 실행을 중지하고 BE 최대 applicationSequence와 결과 세대를 먼저 확인한다.
+적재 직후 중단해도 payload가 먼저 저장되어 있으므로 같은 멱등 키로 재전송한다.
+실패 회수 한도(입력·설정당 3회)에 도달한 입력의 수동 재시도는 운영자가 실패 원인을
+해결한 뒤 해당 records/<key>/attempts.json count를 승인하에 조정한다. payload/ledger는 삭제하지 않는다.
+롤백은 timer 중지→이전 코드 복귀다. 이미 저장한 자동·확인 결과를 삭제하지 않는다.
+
+## 승인·호출량·측정
+
+외부 전송은 소개 원문과 taxonomy이며 OpenAI 세부 태깅과 기존 추천 OpenAI/DeepInfra를 포함한다.
+운영자는 이 범위와 모델/공급자/프로젝트 지출 한도를 승인한 뒤 unit의 명시적 승인 플래그를 유지한다.
+미승인 CLI 실행은 차단한다. 태그는 UTC 날짜당 `CKING_TAG_DAILY_CALLS`로 영속 선예약한다.
+SDK 재시도는 0, 호출 timeout은 60초다. 중단된 호출도 예산에 포함한다.
+호출 횟수 제한은 토큰 비용 상한이 아니므로 **공급자 프로젝트 지출 한도**를 별도로 설정한다.
+기존 추천 생성 호출은 태그 호출량 카운터에 포함되지 않는다. 추천 모델도 공급자 지출 한도 및
+전용 계정 제한을 적용해야 한다. 테스트에서 유료 호출은 하지 않는다.
+
+운영 목표는 변경→시작 p95 2분, 변경→완료 p95 15분(초기 목표, 부하에 따라 측정 후 조정)이다.
+BE outbox의 committedAt/claimedAt/completedAt와 attemptCount/nextRetryAt/finalFailed를 기록한다.
+작업자 summary의 startedAt/completedAt와 단계 실패, 409 refreshRequired를 연결해
+대기/처리 지연·재시도·최종 실패를 측정한다. BE는 지수 backoff로 재시도하고 최종 실패는
+운영 경보와 수동 재등록을 제공해야 한다. 긴 실행은 lease가 만료될 수 있으며 세대 검사가 필수다.
+
+## 검증 경계
+
+Python mock 테스트는 입력 변경·모델 변경·빈 입력·성공 재사용·네트워크 재전송·409 fence·
+공급자 실패와 영속 예산·독립 단계 실패·공유 잠금·정규화 fixture를 검증한다.
+BE outbox/Java fixture/실제 HTTP·DB 경쟁/운영 systemd 실행/유료 모델 품질·사람 검수·
+독립 holdout은 이 PR에서 수행하지 않았다. BE #654 연동 완료 전에는 운영 활성화하지 않는다.
