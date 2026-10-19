@@ -128,3 +128,8 @@ BE 관련 94개·제한 계정 DB 11개·bootJar, Python 회귀 519개도 통과
 되돌리지 않는다. 새 키로 뒤처진 입력/설정을 보내면 기존처럼 409다. HTTP E2E는 두 경우를 구분한다.
 공용 content-tags-v1 fixture에 제어문자 JSON 소문자 hex, 이모지와 짝 없는 surrogate 거부를 추가했다.
 입력은 여전히 전체 일관 snapshot이며 BE가 행당 한 번 정규화한 본문으로 해시를 산출한다.
+
+리뷰 수정 후 BE `fab5c1c`·LLM `60e4f23`의 HTTP/MySQL E2E **16/16**, BE 집중 테스트 **100개**,
+격리 DB 회귀 **22개**(새 리뷰 회귀 11개 포함), Python **519개**, bootJar가 통과했다.
+검증 집계는 `data/summaries/content-tags-http-e2e-review-655.json`에 별도로 보존한다.
+실제 모델 호출은 0이며 의미 품질·사람 검수·운영 배포는 검증 범위에 포함하지 않는다.
