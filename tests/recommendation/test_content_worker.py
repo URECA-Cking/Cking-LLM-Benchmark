@@ -159,6 +159,13 @@ def test_shared_normalization_fixture():
     for row in fixture['normalization']:
         assert normalized_intro(row['raw']) == row['normalized']
         assert input_hash(row['raw']) == row['sha256']
+        canonical = json.dumps(row['normalized'],ensure_ascii=False,sort_keys=True,separators=(',',':'))
+        assert canonical == row['canonicalJson']
+        import hashlib
+        assert hashlib.sha256(canonical.encode('utf-8')).hexdigest() == row['recordInputHash']
+    for invalid in fixture['invalidUnicode']:
+        with pytest.raises(ValueError):
+            input_hash(invalid)
 
 def test_restart_after_remote_commit_reuses_payload(tmp_path, taxonomy):
     worker, be, calls = setup_worker(tmp_path, taxonomy)

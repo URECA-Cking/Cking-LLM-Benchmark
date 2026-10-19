@@ -4,27 +4,63 @@
     {
       "raw": null,
       "normalized": "",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalJson": "\"\"",
+      "recordInputHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
     },
     {
       "raw": "",
       "normalized": "",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalJson": "\"\"",
+      "recordInputHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
     },
     {
-      "raw": "한글\r\n소개\r끝",
-      "normalized": "한글\n소개\n끝",
-      "sha256": "64fa0b8f2ce12589d3d8a9ffc1ec09796d421f3901a926ed73fc9d3b5ee57006"
+      "raw": "\ud55c\uae00\r\n\uc18c\uac1c\r\ub05d",
+      "normalized": "\ud55c\uae00\n\uc18c\uac1c\n\ub05d",
+      "sha256": "64fa0b8f2ce12589d3d8a9ffc1ec09796d421f3901a926ed73fc9d3b5ee57006",
+      "canonicalJson": "\"\ud55c\uae00\\n\uc18c\uac1c\\n\ub05d\"",
+      "recordInputHash": "8cd268da9f41297e9676d65526778c9ff92acc7c6aad2e2da0607241f6d6c8e5"
     },
     {
-      "raw": "é",
-      "normalized": "é",
-      "sha256": "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c"
+      "raw": "e\u0301",
+      "normalized": "\u00e9",
+      "sha256": "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c",
+      "canonicalJson": "\"\u00e9\"",
+      "recordInputHash": "f2886017e9c7abacf804b54d64787dce2b611c9544ba21f3affdd126a6e50086"
     },
     {
-      "raw": "  노래  ",
-      "normalized": "  노래  ",
-      "sha256": "fd9f9ed76204698656afd8d9da2d27be8214819b24b194abd9764719ba0fda93"
+      "raw": "  \ub178\ub798  ",
+      "normalized": "  \ub178\ub798  ",
+      "sha256": "fd9f9ed76204698656afd8d9da2d27be8214819b24b194abd9764719ba0fda93",
+      "canonicalJson": "\"  \ub178\ub798  \"",
+      "recordInputHash": "3e80e47566c4f072387b0f66f2649125844c2e7ad5597bfb5a3f7b1b2cd30d62"
+    },
+    {
+      "raw": "\u0000\u000b\u001f\b\t\n\f\r",
+      "normalized": "\u0000\u000b\u001f\b\t\n\f\n",
+      "sha256": "b6d32be6e8c354196febcf2da2adfe446306f0b2644983b3c991601da08344d5",
+      "canonicalJson": "\"\\u0000\\u000b\\u001f\\b\\t\\n\\f\\n\"",
+      "recordInputHash": "ce5f9ada0f35ce25dd83054459182f836c2d0420937effceff08f39ed08aff23"
+    },
+    {
+      "raw": "emoji \ud83c\udfa4 / \" \\",
+      "normalized": "emoji \ud83c\udfa4 / \" \\",
+      "sha256": "ac739d9c22bd2a7c0b545cae47818c62ef549b697310ca316c954bc1b297b051",
+      "canonicalJson": "\"emoji \ud83c\udfa4 / \\\" \\\\\"",
+      "recordInputHash": "a33c8539a247707722d061d7abcb37a9bf68ded5c93391eb900b42084a88a10b"
+    },
+    {
+      "raw": "e\u0301\r\n\u000b",
+      "normalized": "\u00e9\n\u000b",
+      "sha256": "86720aad5095c2497193f6935891534e69600d7ef1835696ed4561c7c13a2f22",
+      "canonicalJson": "\"\u00e9\\n\\u000b\"",
+      "recordInputHash": "81dfd401f7034a3c5ecf0adcef7b06bab88a757a1d1a1b0dc61cae416ccdc1d9"
     }
+  ],
+  "invalidUnicode": [
+    "\ud800",
+    "\udc00",
+    "a\ud800z"
   ]
 }
