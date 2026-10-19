@@ -524,3 +524,21 @@ def test_main_persistent_conflict_returns_one(cli, monkeypatch, capsys):
     monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: {'failureCount': 1, 'stages': {'tags': {'rows': [{'code': 'PERSISTENT_INPUT_CONFLICT'}]}}})
     assert module.main(args + ['--', 'apply']) == 1
     assert 'PERSISTENT_INPUT_CONFLICT' in capsys.readouterr().out
+
+
+def test_operator_conflict_recovery_replays_saved_payload_without_model_call(tmp_path, taxonomy):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    be.error = BackendRequestError('conflict', status=409)
+    for _ in range(3):
+        result = worker.run()
+    assert result['failureCount'] == 1
+    payload = be.sent[0]
+    flag = next((tmp_path / 'records').glob('*/conflict.json'))
+    # Operator stops workers, fixes/verifies BE, and archives only the conflict flag.
+    be.error = None
+    flag.rename(flag.with_name('conflict.resolved.json'))
+    assert worker.run()['failureCount'] == 0
+    assert be.sent == [payload, payload]
+    assert len(calls) == 1
+    assert flag.with_name('conflict.resolved.json').exists()
+    assert flag.with_name('receipt.json').exists()
