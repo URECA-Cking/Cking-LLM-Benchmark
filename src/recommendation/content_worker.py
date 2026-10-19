@@ -1,4 +1,4 @@
-"""Durable v2 delivery worker for the proposed BE #654 contract (v1).
+"""Durable v2 delivery worker for the BE #654 contract (v1).
 
 BE owns transactional outbox, latest-input coalescing, leases and stale-write fencing.
 All entrypoints share one persistent worker directory; daily_cli retains its own locks.
@@ -8,6 +8,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import inspect
+import ast
+import textwrap
+import ipaddress
+from urllib.parse import urlsplit
 import io
 from contextlib import redirect_stdout
 import json
@@ -20,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.detail_tagging import (PROMPT_VERSION, POLICY_VERSION, automatic_record,
-                                build_prompt, candidate_schema, classify, classify_with_model, digest)
+                                build_prompt, candidate_schema, classify, _rank, classify_with_model, digest)
 from src.detail_tagging_batch import write_new
 from src.recommendation.http import BackendClientConfig, BackendRequestError, CkingBackendClient
 from src.recommendation.locking import file_lock, BatchAlreadyRunning
@@ -47,6 +51,10 @@ def input_hash(value):
 
 class ContentBackend(CkingBackendClient):
     """Dedicated credential and exact path allowlist; no admin-key expansion."""
+    def __init__(self, config, *args, **kwargs):
+        require_secure_backend(config.base_url)
+        super().__init__(config, *args, **kwargs)
+
     def get(self, path):
         if path != ROOT + '/inputs' and not re.fullmatch(ROOT + r'/inputs\?cursor=[A-Za-z0-9_-]+', path):
             raise ValueError('Unsupported content input path')
@@ -58,25 +66,71 @@ class ContentBackend(CkingBackendClient):
         return self._request('PUT', path, payload, authenticated=True)
 
 
+class WorkerFailure(RuntimeError):
+    """Only application-owned constant codes may enter summaries or stdout."""
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def diagnostic(error, fallback):
+    if isinstance(error, WorkerFailure):
+        return error.code
+    if isinstance(error, BackendRequestError):
+        if error.status == 409:
+            return 'INPUT_REFRESH_REQUIRED'
+        if error.status in {401, 403}:
+            return 'BACKEND_AUTHORIZATION_FAILED'
+        return 'BACKEND_REQUEST_FAILED'
+    return fallback
+
+
+def policy_hash():
+    # AST excludes comments/formatting/docstrings and unrelated experiments. Include
+    # the ranking helper and validator, not only classify's delegating call sites.
+    functions = []
+    for function in (classify, _rank, validate_llm_topics):
+        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant) and isinstance(node.body[0].value.value, str):
+                node.body.pop(0)
+        functions.append(ast.dump(tree, include_attributes=False))
+    return digest({'version': POLICY_VERSION, 'functions': functions})
+
+
+def require_secure_backend(url):
+    parsed = urlsplit(url)
+    if parsed.scheme == 'https':
+        return
+    try:
+        loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        loopback = parsed.hostname == 'localhost'
+    if parsed.scheme != 'http' or not loopback:
+        raise WorkerFailure('HTTPS_REQUIRED')
+
+
 def fingerprint(taxonomy, model):
     return {'contractVersion': 'content-tags-v1', 'modelVersion': model,
             'promptVersion': PROMPT_VERSION, 'promptHash': digest(build_prompt(taxonomy)),
             'schemaHash': digest(candidate_schema(taxonomy)), 'policyVersion': POLICY_VERSION,
-            'policyHash': digest([Path(inspect.getfile(f)).read_text(encoding='utf-8')
-                                  for f in (classify, validate_llm_topics)]),
+            'policyHash': policy_hash(),
             'taxonomyVersion': taxonomy['version'], 'taxonomyHash': subtopic_hash(taxonomy),
             'criteriaHash': digest(taxonomy)}
 
 
 class ContentWorker:
     def __init__(self, backend, directory, taxonomy, model, classify_fn, recommend,
-                 *, approved=False, max_calls=0, max_attempts=3, clock=time.time):
+                 *, approved=False, max_calls=0, max_attempts=3, clock=time.time, heartbeat_interval=60):
         if type(max_calls) is not int or max_calls < 0 or type(max_attempts) is not int or max_attempts < 1:
             raise ValueError('Invalid budget')
         self.backend, self.directory = backend, Path(directory)
         self.taxonomy, self.model = taxonomy, model
         self.classify_fn, self.recommend = classify_fn, recommend
         self.approved, self.max_calls, self.max_attempts = approved, max_calls, max_attempts
+        if heartbeat_interval <= 0:
+            raise ValueError('Invalid heartbeat interval')
+        self.heartbeat_interval = heartbeat_interval
         self.clock = clock
         self.identity = fingerprint(taxonomy, model)
 
@@ -86,27 +140,27 @@ class ContentWorker:
         while True:
             page = self.backend.get(ROOT + '/inputs' + (f'?cursor={cursor}' if cursor else ''))
             if page.get('contractVersion') != 'content-tags-v1':
-                raise ValueError('BE contract is not enabled')
+                raise WorkerFailure('BACKEND_CONTRACT_MISMATCH')
             if (page.get('taxonomyHash') != self.identity['taxonomyHash']
                     or page.get('taxonomyApproved') is not True):
-                raise ValueError('BE taxonomy approval/hash mismatch')
+                raise WorkerFailure('TAXONOMY_NOT_APPROVED')
             if page.get('generationConfigHash') != digest(self.identity):
-                raise ValueError('BE generation configuration mismatch')
+                raise WorkerFailure('CONFIGURATION_MISMATCH')
             for row in page['items']:
                 cid = row['creatorId']
                 if type(cid) is not int or cid < 1 or cid in seen:
-                    raise ValueError('Invalid/duplicate creator')
+                    raise WorkerFailure('INVALID_CREATOR_INPUT')
                 if type(row['inputRevision']) is not int or row['inputRevision'] < 1:
-                    raise ValueError('Invalid input revision')
+                    raise WorkerFailure('INVALID_INPUT_REVISION')
                 if input_hash(row['introduction']) != row['inputHash']:
-                    raise ValueError('Introduction hash mismatch')
+                    raise WorkerFailure('INPUT_HASH_MISMATCH')
                 seen.add(cid)
                 rows.append(row)
             next_cursor = page.get('nextCursor')
             if next_cursor is None:
                 return rows
             if not isinstance(next_cursor, str) or not re.fullmatch('[A-Za-z0-9_-]+', next_cursor) or next_cursor in cursors:
-                raise ValueError('Invalid cursor')
+                raise WorkerFailure('INVALID_CURSOR')
             cursors.add(next_cursor)
             cursor = next_cursor
 
@@ -119,19 +173,22 @@ class ContentWorker:
         if not result_path.exists():
             if text.strip():
                 if not self.approved:
-                    raise RuntimeError('External transfer approval required')
+                    raise WorkerFailure('EXTERNAL_TRANSFER_NOT_APPROVED')
                 attempts = folder / 'attempts.json'
                 count = json.loads(attempts.read_text())['count'] if attempts.exists() else 0
                 if count >= self.max_attempts:
-                    raise RuntimeError('Final provider failure; manual retry required')
+                    raise WorkerFailure('FINAL_PROVIDER_FAILURE')
                 budget_path = self.directory / ('budget-' + datetime.fromtimestamp(self.clock(), timezone.utc).date().isoformat() + '.json')
                 budget = json.loads(budget_path.read_text())['calls'] if budget_path.exists() else 0
                 if budget >= self.max_calls:
-                    raise RuntimeError('Daily call budget exhausted')
+                    raise WorkerFailure('DAILY_BUDGET_EXHAUSTED')
                 # Reserve before invocation: crash must not reset paid-call budget.
                 _write_json_atomic(budget_path, {'calls': budget + 1})
                 _write_json_atomic(attempts, {'count': count + 1})
-                record = self.classify_fn(str(row['creatorId']), text, self.taxonomy, self.model)
+                try:
+                    record = self.classify_fn(str(row['creatorId']), text, self.taxonomy, self.model)
+                except Exception:
+                    raise WorkerFailure('PROVIDER_FAILURE') from None
             else:
                 record = automatic_record(str(row['creatorId']), text, {'parents': [], 'topics': []},
                                           self.taxonomy, self.model)
@@ -153,7 +210,7 @@ class ContentWorker:
                 _write_json_atomic(folder / 'conflict.json', {'refreshRequired': True})
             raise
         if response.get('automaticRevision') != key or response.get('status') not in {'applied', 'idempotent'}:
-            raise ValueError('Invalid delivery receipt')
+            raise WorkerFailure('INVALID_DELIVERY_RECEIPT')
         _write_json_atomic(receipt, response)
         return response['status']
 
@@ -162,7 +219,7 @@ class ContentWorker:
             stopped = threading.Event()
             self._active_job = None
             def heartbeat():
-                while not stopped.wait(60):
+                while not stopped.wait(self.heartbeat_interval):
                     job = self._active_job
                     if job:
                         try:
@@ -171,7 +228,7 @@ class ContentWorker:
                         except Exception:
                             # Expired/superseded generation cannot be acknowledged; BE retains it.
                             pass
-            thread = threading.Thread(target=heartbeat, daemon=True)
+            thread = threading.Thread(target=heartbeat, daemon=True, name='content-heartbeat')
             thread.start()
             try:
                 return self._run(source)
@@ -181,57 +238,92 @@ class ContentWorker:
 
     def _run(self, source):
         started = self.clock()
-        # Event claim stays pending in BE until both independent stages succeed.
         job = self.backend.put(ROOT + '/jobs/claim', {'leaseSeconds': 900}) if source == 'event' else None
         if source == 'event' and not job.get('jobId'):
-            return {'status': 'idle', 'failureCount': 0}
-        if job and (not re.fullmatch('[A-Za-z0-9_-]+', str(job.get('jobId', '')))
-                    or not isinstance(job.get('leaseToken'), str)):
-            raise ValueError('Invalid lease')
+            result = {'status': 'idle', 'failureCount': 0, 'source': source,
+                      'startedAt': started, 'completedAt': self.clock()}
+            self._save_summary(result)
+            return result
+        if job and (not re.fullmatch('[1-9][0-9]*', str(job.get('jobId', '')))
+                    or not isinstance(job.get('leaseToken'), str)
+                    or type(job.get('generation')) is not int or job['generation'] < 1):
+            raise WorkerFailure('INVALID_LEASE')
         self._active_job = job
-        stages = {}
+        rows, outcomes, stages = [], {}, {}
+        tag_started = self.clock()
         try:
             rows = self.inputs()
-            failures, refresh = 0, False
             for row in rows:
+                key = digest([self.backend.target_identity, row['creatorId'], row['inputRevision'], row['inputHash'], self.identity])
+                outcome = {'creatorId': row['creatorId'], 'recordKey': key, 'status': 'success'}
                 try:
-                    folder = self.directory / 'records' / digest([self.backend.target_identity, row['creatorId'],
-                        row['inputRevision'], row['inputHash'], self.identity])
-                    if (folder / 'conflict.json').exists():
-                        raise RuntimeError('Fenced input requires new revision')
+                    if (self.directory / 'records' / key / 'conflict.json').exists():
+                        raise WorkerFailure('INPUT_REFRESH_REQUIRED')
                     self.deliver(row)
                 except Exception as error:
-                    failures += 1
-                    refresh |= isinstance(error, BackendRequestError) and error.status == 409
+                    code = diagnostic(error, 'TAG_EXECUTION_FAILED')
+                    outcome.update(status='refresh_required' if code == 'INPUT_REFRESH_REQUIRED' else 'failed', code=code)
+                    outcomes[row['creatorId']] = outcome
                     if isinstance(error, BackendRequestError) and error.status in {401, 403}:
                         break
+                outcomes[row['creatorId']] = outcome
+            failures = sum(r['status'] == 'failed' for r in outcomes.values())
+            refresh = any(r['status'] == 'refresh_required' for r in outcomes.values())
             stages['tags'] = {'status': 'failed' if failures else 'success',
-                              'failureCount': failures, 'refreshRequired': refresh}
+                              'failureCount': failures, 'refreshRequired': refresh,
+                              'rows': list(outcomes.values())}
         except Exception as error:
-            stages['tags'] = {'status': 'failed', 'failureCount': 1, 'errorType': type(error).__name__}
+            stages['tags'] = {'status': 'failed', 'failureCount': 1,
+                              'code': diagnostic(error, 'INPUT_COLLECTION_FAILED'), 'rows': []}
+        stages['tags']['durationSeconds'] = self.clock() - tag_started
+        rec_started = self.clock()
         try:
             with redirect_stdout(io.StringIO()):
                 code = self.recommend()
             stages['recommendations'] = {'status': 'success' if code == 0 else 'failed', 'exitCode': code}
-        except Exception as error:
-            stages['recommendations'] = {'status': 'failed', 'errorType': type(error).__name__}
+            if code:
+                stages['recommendations']['code'] = 'RECOMMENDATION_FAILED'
+        except Exception:
+            stages['recommendations'] = {'status': 'failed', 'code': 'RECOMMENDATION_FAILED'}
+        stages['recommendations']['durationSeconds'] = self.clock() - rec_started
         failed = sum(s['status'] != 'success' for s in stages.values())
-        summary = {'status': 'partial' if failed else 'completed', 'failureCount': failed,
-                   'source': source, 'startedAt': started, 'completedAt': self.clock(), 'stages': stages}
+        refresh = stages['tags'].get('refreshRequired', False)
+        summary = {'status': 'partial' if failed else 'refresh_required' if refresh else 'completed',
+                   'failureCount': failed, 'source': source, 'startedAt': started,
+                   'completedAt': self.clock(), 'stages': stages}
         try:
-            if not failed and source != 'event':
-                self.backend.put(ROOT + '/jobs/reconcile', {'inputs': [
-                    {key: row[key] for key in ('creatorId', 'inputRevision', 'inputHash')} for row in rows]})
+            rec_ok = stages['recommendations']['status'] == 'success'
+            if rec_ok and source != 'event':
+                successful = sorted((row for row in rows if outcomes.get(row['creatorId'], {}).get('status') == 'success'), key=lambda row: row['creatorId'])
+                if successful:
+                    self.backend.put(ROOT + '/jobs/reconcile', {'inputs': [
+                        {key: row[key] for key in ('creatorId', 'inputRevision', 'inputHash')} for row in successful]})
             if job:
-                # BE atomically acks only claimed generation; newer edits stay queued.
+                # An unrelated permanent failure must not consume this Creator's retry budget.
+                claimed_ok = outcomes.get(int(job['jobId']), {}).get('status') == 'success'
+                current = any(row['creatorId'] == int(job['jobId']) and row['inputRevision'] == job['generation'] for row in rows)
                 self.backend.put(f'{ROOT}/jobs/{job["jobId"]}/ack', {
-                    'leaseToken': job['leaseToken'], 'status': 'retry' if failed else 'completed',
+                    'leaseToken': job['leaseToken'], 'status': 'completed' if claimed_ok and current and rec_ok else 'retry',
                     'generation': job['generation'], 'summary': summary})
         except Exception as error:
-            summary.update(status='partial', failureCount=failed + 1,
-                           coordination={'status': 'failed', 'errorType': type(error).__name__})
-        _write_json_atomic(self.directory / 'summary.json', summary)
+            code = diagnostic(error, 'COORDINATION_FAILED')
+            if code == 'INPUT_REFRESH_REQUIRED':
+                summary['coordination'] = {'status': 'refresh_required', 'code': code}
+                if not failed:
+                    summary['status'] = 'refresh_required'
+            else:
+                summary.update(status='partial', failureCount=failed + 1,
+                               coordination={'status': 'failed', 'code': code})
+        summary['completedAt'] = self.clock()
+        self._save_summary(summary)
         return summary
+
+    def _save_summary(self, summary):
+        _write_json_atomic(self.directory / 'summary.json', summary)
+        if not summary['failureCount']:
+            # Includes successful idle polls, so operators can distinguish a stopped timer.
+            _write_json_atomic(self.directory / 'last-success.json', {
+                'completedAt': summary['completedAt'], 'source': summary['source'], 'status': summary['status']})
 
 
 def main(argv=None):
@@ -252,15 +344,15 @@ def main(argv=None):
         backend = ContentBackend(BackendClientConfig(args.be_base_url), access_token=token)
         taxonomy = load_taxonomy(args.taxonomy, [c.code for c in load_service_categories(DEFAULT_CATEGORIES_CSV)])
         if not args.approve_external_transfer:
-            raise ValueError('Recommendation and tagging external transfer must be approved')
+            raise WorkerFailure('EXTERNAL_TRANSFER_NOT_APPROVED')
         if args.max_daily_calls <= 0:
-            raise ValueError('Positive tagging budget required')
+            raise WorkerFailure('INVALID_BUDGET')
         daily_args = args.daily_args[1:] if args.daily_args[:1] == ['--'] else args.daily_args
         if daily_args[:1] != ['apply']:
-            raise ValueError('Worker requires daily apply arguments')
+            raise WorkerFailure('INVALID_DAILY_ARGUMENTS')
         # Pin all operational state beneath a single persistent root.
         if any(v.split('=')[0] in {'--output-dir', '--cache', '--be-base-url'} for v in daily_args):
-            raise ValueError('Worker controls shared output, cache and backend')
+            raise WorkerFailure('FORBIDDEN_DAILY_ARGUMENTS')
         client = OpenAI(timeout=60, max_retries=0)
         worker = ContentWorker(backend, args.state, taxonomy, args.model,
             lambda cid, text, tax, model: classify_with_model(client, cid, text, tax, model),
@@ -269,13 +361,21 @@ def main(argv=None):
             approved=True, max_calls=args.max_daily_calls)
         result = worker.run(args.source)
         if result['failureCount']:
-            print('content-worker: partial failure; inspect protected summary.json')
+            codes = {row.get('code') for stage in result.get('stages', {}).values() for row in stage.get('rows', []) if row.get('code')}
+            codes.update(stage['code'] for stage in result.get('stages', {}).values() if 'code' in stage)
+            if result.get('coordination', {}).get('code'):
+                codes.add(result['coordination']['code'])
+            codes = codes or {'WORKER_PARTIAL_FAILURE'}
+            print('content-worker: partial failure (' + ','.join(sorted(codes)) + '); inspect protected summary.json')
         return 1 if result['failureCount'] else 0
     except BatchAlreadyRunning:
         # No claim occurred; durable BE job remains available.
         return 75
     except Exception as error:
-        print('content-worker: failed (' + type(error).__name__ + ')')
+        code = diagnostic(error, 'WORKER_STARTUP_FAILED')
+        print('content-worker: failed (' + code + ')')
+        _write_json_atomic(args.state / 'summary.json', {'status': 'failed', 'failureCount': 1,
+            'source': args.source, 'completedAt': time.time(), 'code': code})
         return 1
 
 
