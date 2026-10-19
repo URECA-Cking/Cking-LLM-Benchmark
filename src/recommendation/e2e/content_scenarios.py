@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import threading
 from unittest.mock import patch
 os.environ['PYTHON_DOTENV_DISABLED'] = '1'
 from src.detail_tagging import automatic_record, digest
@@ -166,6 +167,55 @@ def main():
             client.put(f'{API}/jobs/{cid}/retry',{})
             run('event')
             passed('final_failure_daily_reconciliation_and_manual_retry')
+            # Verify the real background thread renews through HTTP while work is active.
+            client.put(f'{API}/jobs/{cid}/retry',{})
+            renewed=threading.Event()
+            original_put=client.put
+            original_recommend=worker.recommend
+            def observed_put(path,payload):
+                response=original_put(path,payload)
+                if path.endswith('/renew'):
+                    assert response['status']=='RUNNING'
+                    renewed.set()
+                return response
+            def wait_for_heartbeat():
+                assert renewed.wait(5)
+                return original_recommend()
+            worker.recommend=wait_for_heartbeat
+            worker.heartbeat_interval=0.02
+            try:
+                with patch.object(client,'put',observed_put):
+                    run('event')
+                assert renewed.is_set()
+            finally:
+                worker.recommend=original_recommend
+                worker.heartbeat_interval=60
+            passed('background_heartbeat_renews_actual_http_lease')
+            # A permanent provider refusal for Creator 2 must not exhaust Creator 1's job.
+            edit('노래 정상 Creator 격리 검증')
+            other=cfg['creatorIds']['2']
+            request('PATCH','/api/creator/space',dict(introText='노래 영구 refusal fixture',profileImageUrl='profile',bannerImageUrl='banner'),cfg['otherToken'])
+            original_model=worker.classify_fn
+            refused=[]
+            def refuse_other(creator,*args):
+                if creator==str(other):
+                    refused.append(creator)
+                    raise ValueError('synthetic deterministic refusal')
+                return original_model(creator,*args)
+            worker.classify_fn=refuse_other
+            for _ in range(3):
+                assert worker.run('daily')['failureCount']==1
+            for _ in range(4):
+                client.put(f'{API}/jobs/{cid}/retry',{})
+                assert worker.run('event')['failureCount']==1
+                jobs=control('snapshot')['jobs']
+                assert next(j for j in jobs if j['creator_id']==cid)['status']=='COMPLETED'
+                assert next(j for j in jobs if j['creator_id']==other)['status']=='PENDING'
+            result=worker.run('daily')
+            assert next(r for r in result['stages']['tags']['rows'] if r['creatorId']==other)['code']=='FINAL_PROVIDER_FAILURE'
+            assert len(refused)==3
+            worker.classify_fn=original_model
+            passed('permanent_provider_failure_isolated_from_other_creator_ack_and_daily_reconcile')
             control('disable');assert view(True)['status']=='disabled'
             reject('PUT','/api/creator/content-tags/confirmation',confirmation,409,token=cfg['userToken'])
             passed('taxonomy_revocation_hides_confirmation')
