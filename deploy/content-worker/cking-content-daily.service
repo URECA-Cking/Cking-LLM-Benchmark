@@ -1,5 +1,5 @@
 [Unit]
-Description=Cking content and recommendation worker
+Description=Cking daily content reconciliation
 After=network-online.target
 Wants=network-online.target
 OnFailure=cking-content-alert@%n.service
@@ -11,6 +11,8 @@ Group=cking
 WorkingDirectory=/opt/cking-llm
 EnvironmentFile=/etc/cking/content-worker.env
 UMask=0077
+StateDirectory=cking-content
+StateDirectoryMode=0700
 ExecStart=/opt/cking-llm/.venv/bin/python -m src.recommendation.content_worker --state /var/lib/cking-content --be-base-url ${CKING_BE_URL} --source daily --approve-external-transfer --max-daily-calls ${CKING_TAG_DAILY_CALLS} -- apply
 SuccessExitStatus=75
 NoNewPrivileges=true
