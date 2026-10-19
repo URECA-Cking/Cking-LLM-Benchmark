@@ -1,0 +1,30 @@
+{
+  "contractVersion": "content-tags-v1",
+  "normalization": [
+    {
+      "raw": null,
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw": "",
+      "normalized": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw": "한글\r\n소개\r끝",
+      "normalized": "한글\n소개\n끝",
+      "sha256": "64fa0b8f2ce12589d3d8a9ffc1ec09796d421f3901a926ed73fc9d3b5ee57006"
+    },
+    {
+      "raw": "é",
+      "normalized": "é",
+      "sha256": "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c"
+    },
+    {
+      "raw": "  노래  ",
+      "normalized": "  노래  ",
+      "sha256": "fd9f9ed76204698656afd8d9da2d27be8214819b24b194abd9764719ba0fda93"
+    }
+  ]
+}
