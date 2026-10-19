@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "completed": true,
+  "checks": [
+    {
+      "name": "unapproved_taxonomy_fails_closed",
+      "status": "passed"
+    },
+    {
+      "name": "dedicated_credential_and_owner_routes",
+      "status": "passed"
+    },
+    {
+      "name": "initial_v2_delivery_and_all_recommendation_targets",
+      "status": "passed"
+    },
+    {
+      "name": "daily_unchanged_no_model_calls",
+      "status": "passed"
+    },
+    {
+      "name": "idempotency_conflicting_payload_and_taxonomy_code_validation",
+      "status": "passed"
+    },
+    {
+      "name": "owner_confirmation_public_projection_and_same_result_preserves_confirmation",
+      "status": "passed"
+    },
+    {
+      "name": "mysql_space_edit_delivery_race_and_stale_confirmation",
+      "status": "passed"
+    },
+    {
+      "name": "edit_during_claim_keeps_successor_and_event_refreshes_results",
+      "status": "passed"
+    },
+    {
+      "name": "restart_after_commit_uses_saved_payload",
+      "status": "passed"
+    },
+    {
+      "name": "unapproved_model_config_stops_before_provider",
+      "status": "passed"
+    },
+    {
+      "name": "new_model_config_reclassifies_and_fences_previous_config",
+      "status": "passed"
+    },
+    {
+      "name": "expired_lease_redelivery_and_retry",
+      "status": "passed"
+    },
+    {
+      "name": "provider_failure_preserves_success_and_retries_independent_stage",
+      "status": "passed"
+    },
+    {
+      "name": "empty_input_without_provider_call",
+      "status": "passed"
+    },
+    {
+      "name": "final_failure_daily_reconciliation_and_manual_retry",
+      "status": "passed"
+    },
+    {
+      "name": "taxonomy_revocation_hides_confirmation",
+      "status": "passed"
+    }
+  ],
+  "externalConnectionAttempts": 0,
+  "externalModelCalls": 0,
+  "llmCommitSha": "60e4f231ddba104371f812d25065841a39a92674",
+  "beCommitSha": "fab5c1ce641a09d6337dc5adcad910d3365cadbb",
+  "syntheticModelCalls": 8,
+  "cleanupVerified": true,
+  "runId": "606b793ee50a4e2dbf3e7084723f1cf5",
+  "sourceReportSha256": "24b966eb1e103d501de07fa13e574d40ef7a84b65255182d982a82038ae86522",
+  "databaseAccountScope": "test database only; no SUPER privilege",
+  "backendFocusedTests": 100,
+  "backendRestrictedDatabaseTests": 22,
+  "pythonRegressionTests": 519,
+  "reviewComment": "https://github.com/URECA-Cking/Cking-BE/pull/655#issuecomment-6260759188"
+}

@@ -113,6 +113,7 @@ def main(argv=None):
     parser.add_argument("--be-dir", type=Path, default=ROOT.parent / "Cking-BE")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "results" / "recommendation" / "e2e")
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--suite", choices=("recommendation", "content"), default="recommendation")
     args = parser.parse_args(argv)
     be = args.be_dir.resolve()
     output = args.output_dir.resolve() / uuid.uuid4().hex
@@ -133,17 +134,20 @@ def main(argv=None):
         require_local_docker(env)
         command(["docker", "version", "--format", "{{.Server.Version}}"], env=env)
         password, key = secrets.token_hex(32), secrets.token_hex(32)
-        env.update(MYSQL_ROOT_PASSWORD=password, MYSQL_DATABASE=f"cking_e2e_{suffix}",
+        env.update(MYSQL_USER="cking_e2e", MYSQL_PASSWORD=password, CKING_E2E_DB_USERNAME="cking_e2e",
+                   MYSQL_ROOT_PASSWORD=password, MYSQL_DATABASE=f"cking_e2e_{suffix}",
                    CKING_E2E_DB_PASSWORD=password, CKING_E2E_API_KEY=key,
                    CKING_E2E_KEY_HASH=hashlib.sha256(key.encode()).hexdigest(),
                    CKING_E2E_JWT_SECRET=base64.b64encode(secrets.token_bytes(32)).decode(),
                    CKING_E2E_PYTHON=sys.executable, CKING_E2E_LLM_ROOT=str(ROOT), CKING_E2E_BE_ROOT=str(be),
-                   CKING_E2E_JAVA_SOURCE=str(ASSETS / "java"), CKING_E2E_OUTPUT=str(output))
+                   CKING_E2E_JAVA_SOURCE=str(ASSETS / ("content-java" if args.suite == "content" else "java")), CKING_E2E_OUTPUT=str(output),
+                   CKING_E2E_TEST_CLASS="kr.co.cking.e2e.ContentTagHttpE2eTest" if args.suite == "content" else "kr.co.cking.e2e.RecommendationHttpE2eTest")
         phase = "containers"
         # 고유 이름은 생성 전에 정해 둔다. 명령이 timeout되어도 finally에서 이 이름만 제거한다.
         owned.append(names[0])
         command(["docker", "run", "-d", "--name", names[0], "--label", f"cking.e2e={suffix}",
                  "-p", "127.0.0.1::3306", "-e", "MYSQL_ROOT_PASSWORD", "-e", "MYSQL_DATABASE",
+                 "-e", "MYSQL_USER", "-e", "MYSQL_PASSWORD",
                  "--health-cmd", 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 --silent',
                  "--health-interval", "2s", "--health-retries", "60", "mysql:8.4",
                  "--default-time-zone=+00:00", "--character-set-server=utf8mb4"], env=env, timeout=300)

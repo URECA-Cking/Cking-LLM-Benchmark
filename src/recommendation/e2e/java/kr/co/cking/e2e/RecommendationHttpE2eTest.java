@@ -34,7 +34,7 @@ class RecommendationHttpE2eTest {
         Map<String, String> properties = Map.ofEntries(
             Map.entry("spring.profiles.active", "test"),
             Map.entry("spring.datasource.url", url),
-            Map.entry("spring.datasource.username", "root"),
+            Map.entry("spring.datasource.username", required("CKING_E2E_DB_USERNAME")),
             Map.entry("spring.datasource.password", required("CKING_E2E_DB_PASSWORD")),
             Map.entry("spring.data.redis.host", "127.0.0.1"),
             Map.entry("spring.data.redis.port", required("CKING_E2E_REDIS_PORT")),

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "completed": true,
+  "checks": [
+    {
+      "name": "unapproved_taxonomy_fails_closed",
+      "status": "passed"
+    },
+    {
+      "name": "dedicated_credential_and_owner_routes",
+      "status": "passed"
+    },
+    {
+      "name": "initial_v2_delivery_and_all_recommendation_targets",
+      "status": "passed"
+    },
+    {
+      "name": "daily_unchanged_no_model_calls",
+      "status": "passed"
+    },
+    {
+      "name": "idempotency_conflicting_payload_and_taxonomy_code_validation",
+      "status": "passed"
+    },
+    {
+      "name": "owner_confirmation_public_projection_and_same_result_preserves_confirmation",
+      "status": "passed"
+    },
+    {
+      "name": "mysql_space_edit_delivery_race_and_stale_confirmation",
+      "status": "passed"
+    },
+    {
+      "name": "edit_during_claim_keeps_successor_and_event_refreshes_results",
+      "status": "passed"
+    },
+    {
+      "name": "restart_after_commit_uses_saved_payload",
+      "status": "passed"
+    },
+    {
+      "name": "unapproved_model_config_stops_before_provider",
+      "status": "passed"
+    },
+    {
+      "name": "new_model_config_reclassifies_and_fences_previous_config",
+      "status": "passed"
+    },
+    {
+      "name": "expired_lease_redelivery_and_retry",
+      "status": "passed"
+    },
+    {
+      "name": "provider_failure_preserves_success_and_retries_independent_stage",
+      "status": "passed"
+    },
+    {
+      "name": "empty_input_without_provider_call",
+      "status": "passed"
+    },
+    {
+      "name": "final_failure_daily_reconciliation_and_manual_retry",
+      "status": "passed"
+    },
+    {
+      "name": "taxonomy_revocation_hides_confirmation",
+      "status": "passed"
+    }
+  ],
+  "externalConnectionAttempts": 0,
+  "externalModelCalls": 0,
+  "llmCommitSha": "64dcfea15ff83f6a8e332fd0b2ca182f064f2c71",
+  "beCommitSha": "0c4a433067879f591adb953ccfb45a4bf7b29cfc",
+  "syntheticModelCalls": 8,
+  "cleanupVerified": true,
+  "runId": "3662d7f0e9b045d09dc25dce94c4e0fb",
+  "sourceReportSha256": "66b2b49ca41d5b52503ac4c409e9790085445f805ee2a666908df72e2378dc7e",
+  "databaseAccountScope": "test database only; no SUPER privilege",
+  "backendFocusedTests": 94,
+  "backendRestrictedDatabaseTests": 11,
+  "pythonRegressionTests": 519
+}

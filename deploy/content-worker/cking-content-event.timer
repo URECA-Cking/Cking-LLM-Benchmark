@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll durable creator changes every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+Unit=cking-content-event.service
+
+[Install]
+WantedBy=timers.target
