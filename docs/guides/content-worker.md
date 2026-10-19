@@ -84,6 +84,13 @@ Linux의 전용 사용자 `cking`, Python 3.11+, 고정 checkout `/opt/cking-llm
 `EXTERNAL_TRANSFER_NOT_APPROVED`, `DAILY_BUDGET_EXHAUSTED`, `PROVIDER_FAILURE`,
 `FINAL_PROVIDER_FAILURE`, `CONFIGURATION_MISMATCH`, `BACKEND_AUTHORIZATION_FAILED`를 구분한다.
 외부 예외 메시지나 소개 원문은 summary/stdout에 기록하지 않는다.
+승격된 409를 **같은 입력으로** 복구해야 한다면 두 timer/worker를 중지하고 실행 종료·잠금 해제를
+확인한다. BE의 충돌 원인이 해결되어 저장 payload/멱등 키를 수용할 수 있는지 확인한 뒤, 해당
+`records/<recordKey>/conflict.json`만 고유한 `conflict.resolved.<UTC시각>.json`으로 이동해 보존하고
+수동 실행한다. 저장 payload를 그대로 재전송하므로 모델 재호출은 없다. BE 작업이 FAILED라면
+`/jobs/{id}/retry`도 수행하고 검증 후 timer를 재개한다. payload/receipt/attempts/budget/ledger는
+삭제·변경하지 않는다. BE의 payload 불일치가 남아 있다면 flag만 해제하지 말고 먼저 원인을 해결한다.
+
 실패 횟수 한도(입력·설정당 3회)에 도달한 입력의 수동 재시도는 운영자가 실패 원인을
 해결한 뒤 해당 records/<key>/attempts.json count를 승인하에 조정한다. payload/ledger는 삭제하지 않는다.
 롤백은 timer 중지→이전 코드 복귀다. 이미 저장한 자동·확인 결과를 삭제하지 않는다.
@@ -124,7 +131,9 @@ Java fixture와 소개 수정·적재·본인 확인 경쟁, 이벤트/lease/재
 ## 정책 지문 변경과 운영 갱신
 
 policyHash는 `policy-tokens-v1` 형식, POLICY_VERSION 및 classify/_rank/validate_llm_topics의
-정규화된 토큰을 포함한다. AST는 docstring 위치를 찾는 데만 쓰며 ast.dump나 노드 필드는 해시하지 않는다.
+정규화된 토큰을 포함한다. AST는 f-string 금지 검사와 docstring 위치 확인에만 쓰며 ast.dump나 노드 필드는 해시하지 않는다.
+정책 함수 세 개에는 f-string을 허용하지 않는다. 발견 시 `POLICY_FSTRING_NOT_SUPPORTED`로
+지문 생성을 중단한다. f-string을 도입하려면 minor 간 정규화 계약과 검증을 먼저 보완해야 한다.
 주석·docstring·공백·무관한 실험 코드는 제외하지만 실제 코드·문자열 리터럴·블록 구조는 보존한다.
 따라서 같은 정책 소스는 지원 Python minor 버전의 AST 필드 차이로 configHash가 바뀌지 않는다.
 실제 순위/상한/검증 정책 변경은 새 hash가 된다.
