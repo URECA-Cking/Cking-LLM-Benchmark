@@ -131,7 +131,7 @@ def generate(snapshot, embedder, cache, model_version):
     return {'snapshotHash': snapshot['snapshotHash'], 'method': METHOD, 'modelVersion': model_version, 'scores': scores}
 
 
-def recommend(snapshot, payload, parents=(), topics=(), top_n=20):
+def recommend(snapshot, payload, parents=(), topics=(), top_n=20, excluded_ids=()):
     """오프라인 검증용: 실태그 OR → 점수 정렬 → Top-N. 후보 보충은 없다."""
     catalog = validate_snapshot(snapshot)
     if type(top_n) is not int or not 1 <= top_n <= 20:
@@ -146,8 +146,36 @@ def recommend(snapshot, payload, parents=(), topics=(), top_n=20):
             cid = row['creatorId']
             scores[cid] = max(scores.get(cid, -2), row['score'])
             matched.setdefault(cid, []).append(catalog[key])
+    excluded = set(excluded_ids)
     return [{'creatorId': cid, 'score': scores[cid], 'matchedTags': sorted(matched[cid], key=lambda t: (t['type'], t['code']))}
-            for cid in sorted(scores, key=lambda cid: (-scores[cid], cid))[:top_n]]
+            for cid in sorted((cid for cid in scores if cid not in excluded), key=lambda cid: (-scores[cid], cid))[:top_n]]
+
+
+def recommend_for_member(snapshot, payload, *, source, interest_codes=(), followed_ids=(), self_id=None, top_n=20):
+    """BE 화면 정책의 오프라인 기준: 관심 분야/전체 팔로우를 분리한다.
+
+    유사는 확인된 동일 상위 안의 서로 다른 세부까지다. 승인되지 않은 분야 간 유사 관계를 만들지 않는다.
+    생성 배치는 전체 적격 쌍을 보관하고 조회에서 제외/태그 일치 뒤 Top-N을 적용한다.
+    """
+    catalog = validate_snapshot(snapshot)
+    if source not in {'INTEREST', 'FOLLOW'}:
+        raise ValueError('INVALID_RECOMMENDATION_SOURCE')
+    parents, topics, seeds = set(), set(), []
+    if source == 'INTEREST':
+        parents = {code for code in interest_codes if ('PARENT', code) in catalog}
+    else:
+        seeds = [row for row in snapshot['items'] if row['creatorId'] in followed_ids]
+        for seed in seeds:
+            parents.update(seed['parents'])
+            topics.update(seed['topics'])
+    excluded = set(followed_ids) | ({self_id} if self_id is not None else set())
+    rows = recommend(snapshot, payload, parents=parents, topics=topics, top_n=top_n, excluded_ids=excluded)
+    for row in rows:
+        keys = {(tag['type'], tag['code']) for tag in row['matchedTags']}
+        row['interestCodes'] = [code for code in interest_codes if source == 'INTEREST' and ('PARENT', code) in keys]
+        row['seedCreatorIds'] = sorted(seed['creatorId'] for seed in seeds if
+            any(('PARENT', code) in keys for code in seed['parents']) or any(('TOPIC', code) in keys for code in seed['topics']))
+    return rows
 
 
 def run(backend, directory: Path, cache_path: Path, embedder, model_version, *, apply=False):
