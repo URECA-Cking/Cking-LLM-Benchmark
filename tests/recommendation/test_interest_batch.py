@@ -42,10 +42,10 @@ def test_dry_run_saves_all_payloads_baselines_summary_and_config_without_be_writ
     backend = FakeBackend()
     summary = InterestRecommendationBatch(service, paths, backend=backend, sequence_ledger=tmp_path / "applications.json").run("dry-run")
     assert summary["interestCount"] == 17
-    assert summary["nonEmptyGenerationCount"] == 2
-    assert summary["emptyGenerationCount"] == 15
+    assert summary["nonEmptyGenerationCount"] == 1
+    assert summary["emptyGenerationCount"] == 16
     assert summary["eligibleCreatorCount"] == 3
-    assert summary["generationConfig"]["zeroShotTau"] == .4296248555
+    assert summary["generationConfig"]["classificationSource"] == "LLM_CONFIRMED_V1"
     assert summary["failureCount"] == 0
     assert backend.puts == []
     for row in categories():
@@ -119,7 +119,7 @@ def test_failed_generation_is_retried_and_other_interests_complete(tmp_path, mon
     monkeypatch.setattr(service, "recommend", broken)
     first = InterestRecommendationBatch(service, paths).run("dry-run")
     assert first["generationFailureCount"] == 1
-    assert first["nonEmptyGenerationCount"] == 1
+    assert first["nonEmptyGenerationCount"] == 0
     assert first["evaluation"]["status"] == "pending"
     assert not paths.evaluation_dir.exists()
     second = InterestRecommendationBatch(recommender(tmp_path), paths).run("dry-run")

@@ -5,7 +5,7 @@ from src.recommendation.cache import text_hash
 from src.recommendation.eligibility import validate
 from src.recommendation.interest import M2_METHOD, M3_METHOD
 from src.recommendation.models import CreatorProfile
-from tests.recommendation.test_interest import categories, recommender, vector
+from tests.recommendation.test_interest import categories, recommender, vector, FakeTagger
 from tests.recommendation.test_service import FakeEmbeddingClient, FakeTaggingClient, build_service
 
 
@@ -13,7 +13,8 @@ from tests.recommendation.test_service import FakeEmbeddingClient, FakeTaggingCl
 @pytest.mark.parametrize("method", [M2_METHOD, M3_METHOD])
 def test_only_qualified_candidates_before_top_n_without_padding(tmp_path, size, method):
     profiles = [CreatorProfile(i + 1, "relevant" if i < 2 else "other") for i in range(size)]
-    service = recommender(tmp_path, profiles, {"relevant": vector(1), "other": vector(0, 1)})
+    service = recommender(tmp_path, profiles, {"relevant": vector(1), "other": vector(0, 1)},
+                          tagger=FakeTagger({"relevant": ["FITNESS"], "other": ["FOOD"]}))
     payload = service.recommend(categories()[0].code, method).to_backend_payload()
     assert [c["creatorId"] for c in payload["candidates"]] == list(range(1, min(size, 2) + 1))
     assert all(p["tags"] == [categories()[0].code] for p in payload["eligibility"]["profiles"])
@@ -21,9 +22,10 @@ def test_only_qualified_candidates_before_top_n_without_padding(tmp_path, size, 
 
 
 @pytest.mark.parametrize("count", [0, 1, 2, 3])
-def test_zero_shot_tag_count_is_an_upper_bound_not_three_required(tmp_path, count):
+def test_llm_tag_count_is_an_upper_bound_not_three_required(tmp_path, count):
     values = [1] * count if count else [-1] * 17
-    service = recommender(tmp_path, [CreatorProfile(1, "sample")], {"sample": vector(*values)})
+    service = recommender(tmp_path, [CreatorProfile(1, "sample")], {"sample": vector(*values)},
+                          tagger=FakeTagger({"sample": [c.code for c in categories()[:count]]}))
     found = [r.code for r in categories() if service.recommend(r.code).candidates]
     assert len(found) == count
 

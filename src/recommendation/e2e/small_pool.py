@@ -71,7 +71,7 @@ def main():
             assert len(manifest.creators) == 11
             similar = SimilarCreatorRecommender(models, models, cache, RecommendationConfig(
                 allowed_tags=frozenset(c.code for c in categories)))
-            interest = InterestRecommender(manifest, categories, models, cache)
+            interest = InterestRecommender(manifest, categories, models, cache, tagging_client=models)
             seed = next(p for p in manifest.creators if p.creator_id == ids[2])
             similar_payload = similar.recommend(seed, manifest.creators).to_backend_payload()
             assert [c['similarCreatorId'] for c in similar_payload['candidates']] == [ids[3], ids[4]]

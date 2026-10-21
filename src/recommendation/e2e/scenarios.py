@@ -129,7 +129,8 @@ class Suite:
             return RecommendationBatch(manifest, recommender, BatchPaths(directory), similar_config,
                                        top_n=20, backend=self.backend)
         def interests(manifest, directory):
-            recommender = InterestRecommender(manifest, self.categories, self.models, cache, interest_config)
+            recommender = InterestRecommender(manifest, self.categories, self.models, cache, interest_config,
+                                             tagging_client=self.models)
             return InterestRecommendationBatch(recommender, InterestBatchPaths(directory), backend=self.backend,
                                                selected_method=M2_METHOD)
         self.paths = DailyPaths(output / "daily")

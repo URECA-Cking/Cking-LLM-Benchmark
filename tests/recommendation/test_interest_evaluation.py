@@ -7,7 +7,7 @@ import pytest
 from src.recommendation.batch import _json_hash
 from src.recommendation.interest import METHODS
 from src.recommendation.interest_evaluation import write_interest_evaluation
-from tests.recommendation.test_interest import categories, recommender
+from tests.recommendation.test_interest import categories, recommender, FakeTagger
 
 
 def bundles(service):
@@ -23,8 +23,8 @@ def test_same_manifest_top10_rankings_and_union_are_blind_and_reproducible(tmp_p
     judge_text = (output / "judge-input.json").read_text(encoding="utf-8")
     judge = json.loads(judge_text)
     provenance = json.loads((output / "provenance.json").read_text(encoding="utf-8"))
-    assert result["pairCount"] == 6
-    assert len({pair["pairId"] for pair in judge["pairs"]}) == 6
+    assert result["pairCount"] == 3
+    assert len({pair["pairId"] for pair in judge["pairs"]}) == 3
     assert provenance["manifestHash"] == service.manifest.manifest_hash
     assert provenance["judgeInputHash"] == _json_hash(judge)
     assert provenance["evaluationTopN"] == 10
@@ -35,7 +35,7 @@ def test_same_manifest_top10_rankings_and_union_are_blind_and_reproducible(tmp_p
     for code, by_method in provenance["rankings"].items():
         for method, ranking in by_method.items():
             assert ranking["candidates"] == generated[code][method]["candidates"][:10]
-            count = 3 if code in {r.code for r in categories()[:2]} else 0
+            count = 3 if code == categories()[0].code else 0
             assert ranking["candidateCount"] == count
             assert ranking["shortageCount"] == 10 - count
     before = {file.name: (file.read_bytes(), file.stat().st_mtime_ns) for file in output.iterdir()}
@@ -93,7 +93,8 @@ def test_blind_union_does_not_reintroduce_unqualified_neighbor(tmp_path):
     from tests.recommendation.test_interest import vector
 
     service = recommender(tmp_path, [CreatorProfile(1, "broad"), CreatorProfile(2, "focused")],
-                          {"broad": vector(.45, .51, .51, .51), "focused": vector(.44, .9)})
+                          {"broad": vector(.45, .51, .51, .51), "focused": vector(.44, .9)},
+                          tagger=FakeTagger({"broad": ["FOOD"], "focused": ["FITNESS"]}))
     output = tmp_path / "evaluation"
     write_interest_evaluation(output, service, bundles(service), top_n=1)
     pairs = json.loads((output / "judge-input.json").read_text(encoding="utf-8"))["pairs"]

@@ -19,7 +19,7 @@ def arguments(tmp_path):
             "--cache", str(tmp_path / "cache.json")]
 
 
-def test_defaults_and_dry_run_use_local_bge_without_backend_or_tagger(tmp_path, monkeypatch):
+def test_defaults_and_dry_run_use_local_bge_and_injected_tagger_without_backend(tmp_path, monkeypatch):
     args = arguments(tmp_path)
     parsed = interest_cli.build_parser().parse_args(["dry-run", *args])
     assert parsed.top_n == 20 and parsed.evaluation_top_n == 10
@@ -93,3 +93,9 @@ def test_model_cache_is_shared_with_existing_recommendation_generation(tmp_path,
     monkeypatch.setattr(interest_cli, "create_interest_embedding_client", lambda provider: client)
     assert interest_cli.main(["dry-run", *args, "--embedding-provider", "deepinfra"]) == 0
     assert "creator" not in client.calls[0]
+
+
+@pytest.fixture(autouse=True)
+def fake_interest_tagger(monkeypatch):
+    from tests.recommendation.test_interest import FakeTagger
+    monkeypatch.setattr(interest_cli, "LazyOpenAITagger", lambda *a: FakeTagger())
