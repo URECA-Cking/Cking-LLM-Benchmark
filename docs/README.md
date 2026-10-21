@@ -1,5 +1,7 @@
 # 문서 안내
 
+[실제 저장 태그 추천](guides/saved-tag-recommendation.md): 확인 태그 선별 후 임베딩 정렬, 부족 후보 허용과 BE #736 연동.
+
 ## 결론을 먼저 읽기
 
 [세부 태그 v2 채택 결정](results/detail-tagging-v2-adoption.md): 2026-10-15 사용자 결정,

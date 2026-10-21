@@ -1,5 +1,8 @@
 # 콘텐츠 태그 작업자 운영 및 BE #654 연동 계약
 
+BE #736 배포 후 `--saved-tag-recommendations`를 명시하면 [확인 태그 추천](saved-tag-recommendation.md)의 점수 갱신도 실행한다.
+기존 개인화와 별개이며, 확인 태그 변경만 있을 때는 idle 이벤트가 아닌 일일 보정/별도 명령에서 반영한다.
+
 이 구현은 BE #654의 `feat/654-creator-ai-tag-api` 구현과 공유하는 `content-tags-v1` 계약이다.
 운영 활성화 전 승인 taxonomy/configHash 등록과 전용 토큰·공급자 지출 한도 설정이 필요하다.
 운영 초안 taxonomy를 자동 승인하거나 시드로 넣지 않는다.
