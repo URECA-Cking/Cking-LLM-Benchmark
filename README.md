@@ -1,6 +1,6 @@
 # Cking LLM Benchmark
 
-[실제 저장 태그 추천](docs/guides/saved-tag-recommendation.md)은 기존 개인화와 별도 경로로, 관련 태그 후보만 생성하고 부족분을 채우지 않습니다.
+[실제 저장 태그 추천](docs/guides/saved-tag-recommendation.md)은 기존 추천 화면의 관심 분야·전체 팔로우 두 영역에서 관련 확인 태그 후보만 추천하며 부족분을 채우지 않습니다.
 
 크리에이터 소개글로 비슷한 크리에이터를 추천하는 방식을 비교하는 Python 3.11+ 실험 저장소입니다.
 
