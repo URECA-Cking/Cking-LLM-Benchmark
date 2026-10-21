@@ -4,6 +4,9 @@
 
 ## 지금 결론
 
+**서비스 관심 분야 추천은 LLM 확정 태그로 후보를 제한하고 BGE-M3 코사인 점수로 정렬합니다.**
+[후보 자격·캐시·기존 실행 옵션 호환 정책](docs/interest-llm-eligibility.md)을 확인합니다.
+
 **세부 태그 분류 프롬프트는 `grounded-detail-candidates-v2`를 표준 채택했습니다(2026-10-15, 사용자 결정).**
 [채택 범위·지문·실험 한계](docs/results/detail-tagging-v2-adoption.md)와
 [바로 실행하는 v2 명령](docs/guides/detail-tagging.md#표준-v2-실행)을 확인합니다.
