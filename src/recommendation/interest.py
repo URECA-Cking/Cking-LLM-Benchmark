@@ -13,6 +13,7 @@ from src.recommendation.batch import _json_hash
 from src.recommendation.cache import ModelCache, text_hash
 from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION, validated_embeddings
 from src.recommendation.manifest import CreatorManifest, build_manifest
+from src.recommendation.eligibility import POLICY, proof
 from src.recommendation.taxonomy import (
     DEFAULT_TAXONOMY_VERSION, ServiceCategory, default_taxonomy_hash, taxonomy_hash,
 )
@@ -42,7 +43,7 @@ class InterestRecommendationConfig:
 
     def __post_init__(self) -> None:
         _integer("top_n", self.top_n, 1, 100)
-        _integer("zero_shot_max_tags", self.zero_shot_max_tags, 1, 17)
+        _integer("zero_shot_max_tags", self.zero_shot_max_tags, 1, 3)
         _integer("score_decimals", self.score_decimals, 0, 15)
         _integer("embedding_batch_size", self.embedding_batch_size, 1, 10000)
         for name, value, minimum in (
@@ -66,6 +67,7 @@ class InterestRecommendationConfig:
         """점수·태그·정렬 계약과 결과에 영향을 주는 설정을 모두 해시에 넣는다."""
         return {
             "embeddingContract": EMBEDDING_CONTRACT_VERSION,
+            "eligibilityPolicy": POLICY,
             "schemaVersion": 1, "taxonomyVersion": self.taxonomy_version,
             "taxonomyHash": self.taxonomy_hash, "topN": self.top_n,
             "embeddingModelVersion": self.embedding_model_version,
@@ -86,6 +88,7 @@ class InterestRecommendationResult:
     config: InterestRecommendationConfig
     # (creatorId, 반올림된 점수) 순서 자체가 1부터 시작하는 rank를 결정한다.
     candidates: tuple[tuple[int, float], ...]
+    eligibility: dict | None = None
 
     def to_backend_payload(self) -> dict[str, object]:
         metadata = {
@@ -95,6 +98,7 @@ class InterestRecommendationResult:
         }
         return {
             **metadata,
+            **({"eligibility": self.eligibility} if self.eligibility is not None else {}),
             "candidates": [
                 {"creatorId": creator_id, "rank": rank, "score": score, **metadata}
                 for rank, (creator_id, score) in enumerate(self.candidates, 1)
@@ -151,14 +155,20 @@ class InterestRecommender:
             self._prepare()
         scored = []
         for position, profile in enumerate(self._pool):
+            if index not in self._tags[position]:
+                continue
             score = float(self._scores[position, index])
             if method == M3_METHOD and index in self._tags[position]:
                 score += self.config.m3_bonus
             scored.append((profile.creator_id, round(score, self.config.score_decimals)))
         scored.sort(key=lambda row: (-row[1], row[0]))
+        selected = tuple(scored[:self.config.top_n])
+        tags = {p.creator_id: {self.categories[i].code for i in self._tags[n]} for n,p in enumerate(self._pool)}
+        evidence = proof([p for p in self._pool if p.creator_id in dict(selected)], tags,
+                         self.config.taxonomy_version, self.config.taxonomy_hash)
         return InterestRecommendationResult(
             interest_code, method, self.config.embedding_model_version, input_hash,
-            self.config, tuple(scored[:self.config.top_n]),
+            self.config, selected, evidence,
         )
 
     def _prepare(self) -> None:

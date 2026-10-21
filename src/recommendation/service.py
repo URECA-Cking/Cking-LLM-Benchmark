@@ -12,6 +12,8 @@ import numpy as np
 from src.clients.base import EmbeddingClient
 from src.clients.openai_tagger import TagResult
 from src.recommendation.cache import ModelCache, text_hash
+from src.recommendation.eligibility import POLICY, proof
+from src.recommendation.taxonomy import load_service_categories, DEFAULT_CATEGORIES_CSV
 from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION, validated_embeddings
 from src.recommendation.models import (
     MAX_BACKEND_CANDIDATES,
@@ -37,6 +39,7 @@ class TaggingClient(Protocol):
 class RecommendationConfig:
     """서비스 적용 방식과 캐시 무효화 버전을 한곳에 고정한다."""
 
+    eligibility_tau: float = 0.4296248555
     short_introduction_chars: int = 15
     top_n: int = 5
     m4_bonus: float = 0.2
@@ -52,6 +55,8 @@ class RecommendationConfig:
     allowed_tags: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
+        if not np.isfinite(self.eligibility_tau) or not -1 <= self.eligibility_tau <= 1:
+            raise ValueError("eligibility_tau must be finite in [-1,1]")
         if self.short_introduction_chars <= 0:
             raise ValueError("short_introduction_chars는 양수여야 합니다.")
         if isinstance(self.top_n, bool) or not isinstance(self.top_n, int) or not 1 <= self.top_n <= MAX_BACKEND_CANDIDATES:
@@ -134,6 +139,7 @@ class SimilarCreatorRecommender:
                 model_version=model_version,
                 input_hash=self._generation_input_hash(seed, pool, limit, method, model_version),
                 candidates=(),
+                eligibility=proof([seed], {}, self.config.taxonomy_version, self.config.taxonomy_hash),
             )
 
         request_profiles = [seed, *pool]
@@ -148,10 +154,22 @@ class SimilarCreatorRecommender:
                 for candidate in pool:
                     tags_by_id[candidate.creator_id] = candidate_tags[candidate.text]
 
+        if method == "M2":
+            # 짧은 소개의 M2 점수는 그대로 두고 같은 BGE-M3의 기존 tau 분류로 후보 자격만 정한다.
+            categories = load_service_categories(DEFAULT_CATEGORIES_CSV)
+            query_profiles = [CreatorProfile(max(p.creator_id for p in request_profiles) + 1 + i, c.description) for i,c in enumerate(categories)]
+            classified = self._embeddings([*request_profiles, *query_profiles])
+            for profile in request_profiles:
+                scores = [float(np.clip(classified[profile.creator_id] @ classified[q.creator_id], -1, 1)) for q in query_profiles]
+                order = sorted(range(len(categories)), key=lambda i:(-scores[i], i))
+                tags_by_id[profile.creator_id] = frozenset(categories[i].code for i in order[:3] if scores[i] >= self.config.eligibility_tau)
+
         vectors = self._embeddings(request_profiles)
         seed_vector = vectors[seed.creator_id]
         scored: list[tuple[int, float]] = []
         for candidate in pool:
+            if not tags_by_id[seed.creator_id] & tags_by_id[candidate.creator_id]:
+                continue
             score = float(np.clip(seed_vector @ vectors[candidate.creator_id], -1.0, 1.0))
             if method == "M4" and tags_by_id[seed.creator_id] & tags_by_id[candidate.creator_id]:
                 score += self.config.m4_bonus
@@ -179,6 +197,8 @@ class SimilarCreatorRecommender:
             model_version=model_version,
             input_hash=input_hash,
             candidates=result,
+            eligibility=proof([seed, *[p for p in pool if p.creator_id in dict(selected)]], tags_by_id,
+                              self.config.taxonomy_version, self.config.taxonomy_hash),
         )
 
     def _deduplicate(self, seed: CreatorProfile, candidates: Iterable[CreatorProfile]) -> list[CreatorProfile]:
@@ -244,7 +264,7 @@ class SimilarCreatorRecommender:
                 self.config.tag_model_version,
                 self.config.tag_cache_version,
             )
-            if cached is None:
+            if cached is None or len(cached) > 3 or len(set(cached)) != len(cached) or (self.config.allowed_tags and not set(cached) <= self.config.allowed_tags):
                 missing.append(text)
             else:
                 by_text[text] = frozenset(cached)
@@ -253,7 +273,9 @@ class SimilarCreatorRecommender:
         try:
             for text in missing:
                 result = self.tagging_client.tag(text)
-                tags = tuple(sorted(set(result.tags)))
+                if len(result.tags) > 3 or len(set(result.tags)) != len(result.tags):
+                    raise ValueError("태그는 중복 없는 0~3개여야 합니다.")
+                tags = tuple(sorted(result.tags))
                 if self.config.allowed_tags and not set(tags) <= self.config.allowed_tags:
                     unknown = sorted(set(tags) - self.config.allowed_tags)
                     raise ValueError(f"분류체계에 없는 태그가 반환됐습니다: {unknown}")
@@ -285,6 +307,7 @@ class SimilarCreatorRecommender:
     ) -> str:
         manifest = {
             "embeddingContract": EMBEDDING_CONTRACT_VERSION,
+            "eligibilityPolicy": POLICY, "eligibilityTau": self.config.eligibility_tau,
             "creatorId": seed.creator_id,
             "introduction": seed.text,
             "candidates": [
