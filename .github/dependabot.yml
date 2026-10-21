@@ -1,0 +1,13 @@
+# 배포·테스트 의존성은 고정 버전이라 다시 빌드해도 바뀌지 않는다. 라이브러리 보안 패치와 액션 갱신은 PR로 받는다.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: monthly
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: monthly

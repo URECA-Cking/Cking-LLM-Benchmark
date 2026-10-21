@@ -58,7 +58,8 @@ BE의 Space 생성/프로필 수정 Service가 소개와 outbox를 같은 트랜
 
 ## 배포·수동 실행·복구
 
-Linux의 전용 사용자 `cking`, Python 3.11+, 고정 checkout `/opt/cking-llm`을 사용한다.
+Linux의 전용 사용자 `cking`과 배포 패키지를 푼 `/opt/cking-llm`을 사용한다. 패키지는 CI가 만들며 Python 3.12와 가상환경을
+함께 담아 서버 Python과 관계없이 돈다([README 배포](../../README.md#배포)).
 `deploy/content-worker`의 unit을 `/etc/systemd/system`에 설치한다. 승인한 운영자가
 환경 예제를 `/etc/cking/content-worker.env`에 복사하고 권한 0640으로 설정한다.
 `StateDirectory=cking-content`와 `StateDirectoryMode=0700`으로 `/var/lib/cking-content`를 생성한다.

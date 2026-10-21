@@ -1,0 +1,168 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop]
+  # 배포 패키지에 들어가는 파일이 바뀔 때만 개발에 배포한다.
+  push:
+    branches: [develop]
+    paths:
+      - "src/**"
+      - "data/**"
+      - "deploy/**"
+      - "requirements-deploy.txt"
+      - "scripts/build-package.sh"
+      - "scripts/check-package.sh"
+      - ".github/workflows/ci.yml"
+  # 매월 1일 10:00(KST)에 Python 3.12 최신 패치로 다시 빌드해 배포한다. 03:00 일일 작업과 겹치지 않게 한다.
+  # 라이브러리 패치는 고정 버전이라 다시 빌드해도 바뀌지 않으므로 Dependabot PR로 받는다.
+  schedule:
+    - cron: "0 1 1 * *"
+  workflow_dispatch:
+
+# develop 실행은 푸시 순서대로 하나씩 돌린다. PR은 새 커밋이 오면 이전 실행을 취소한다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  AWS_ROLE_ARN: arn:aws:iam::551372961758:role/dev-cking-recommendation-github-actions-role
+  RELEASE_PREFIX: s3://dev-cking-deploy-551372961758/recommendation/releases
+  RELEASE_PARAMETER: /cking/dev-recommendation/RELEASE
+  ASG_NAME: dev-cking-recommendation
+  TORCH_VERSION: "2.14.1+cpu"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      # 실험 코드 테스트에 sentence-transformers가 필요하다. 기본 PyPI의 linux/arm64 torch는 CUDA 패키지를 함께 받아 CPU 빌드를 먼저 설치한다.
+      - name: 의존성 설치
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==${TORCH_VERSION}"
+          python -m pip install -r requirements-test.txt
+      - name: 테스트
+        run: python -m pytest -q
+      - name: 워크플로 검사
+        run: >
+          docker run --rm -v "$PWD:/repo:ro" -w /repo
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          -no-color
+
+  # 배포 역할은 develop에서만 맡을 수 있어 PR에서는 패키지를 만들지 않는다.
+  deploy-dev:
+    name: Deploy to dev
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # 배포된 커밋이 이 커밋의 조상인지 보려면 이력이 모두 있어야 한다.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.4"
+
+      # 실행마다 새 패키지를 만든다. 같은 커밋을 다시 실행해도 이번에 확인한 패키지를 배포한다.
+      - name: 패키지 빌드
+        id: build
+        run: |
+          RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::12}"
+          sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/cking-llm
+          scripts/build-package.sh "$RELEASE" "$RUNNER_TEMP/package"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: 패키지 확인
+        run: |
+          scripts/check-package.sh "$RUNNER_TEMP/package/cking-llm.tar.gz" | tee "$RUNNER_TEMP/check.log"
+          sed -n 's/^configHash=/생성 설정 해시(taxonomy 승인 등록용): /p' "$RUNNER_TEMP/check.log" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 패키지 업로드
+        env:
+          RELEASE: ${{ steps.build.outputs.release }}
+        run: |
+          for f in cking-llm.tar.gz cking-llm.tar.gz.sha256; do
+            aws s3 cp "$RUNNER_TEMP/package/$f" "$RELEASE_PREFIX/$RELEASE/$f" --only-show-errors
+          done
+          echo "패키지: $RELEASE_PREFIX/$RELEASE/" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # 배포된 커밋이 이 커밋의 조상이거나 같으면 바꾸고, 이 커밋이 더 오래됐으면(지난 실행의 재시도) 건너뛴다.
+      # 둘 다 아니면 이력이 갈라진 것이라 멈춘다. 배포 버전 값이 없으면 첫 배포다.
+      - name: 배포 버전 갱신
+        id: release
+        env:
+          RELEASE: ${{ steps.build.outputs.release }}
+        run: |
+          CURRENT=""
+          if CURRENT=$(aws ssm get-parameter --name "$RELEASE_PARAMETER" --query Parameter.Value --output text 2>"$RUNNER_TEMP/ssm.err"); then
+            DEPLOYED=${CURRENT##*-}
+            if ! git rev-parse -q --verify "$DEPLOYED^{commit}" >/dev/null; then
+              echo "::error::배포된 버전 $CURRENT 의 커밋을 확인할 수 없다"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$DEPLOYED" "$GITHUB_SHA"; then
+              if git merge-base --is-ancestor "$GITHUB_SHA" "$DEPLOYED"; then
+                echo "::warning::더 새 커밋의 버전 $CURRENT 이 배포되어 있어 배포 버전을 바꾸지 않는다"
+                echo "더 새 커밋의 버전 $CURRENT 이 배포되어 있어 배포 버전을 바꾸지 않는다" >> "$GITHUB_STEP_SUMMARY"
+                echo "updated=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "::error::배포된 버전 $CURRENT 과 이 커밋의 이력이 갈라졌다"
+              exit 1
+            fi
+          elif ! grep -q ParameterNotFound "$RUNNER_TEMP/ssm.err"; then
+            cat "$RUNNER_TEMP/ssm.err"
+            exit 1
+          fi
+          aws ssm put-parameter --name "$RELEASE_PARAMETER" --type String --value "$RELEASE" --overwrite >/dev/null
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+          echo "배포 버전: ${CURRENT:-없음} -> $RELEASE" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # 서버 1대가 상태 디스크 하나를 붙여 쓰므로 기존 서버를 먼저 내리고(최소 정상 0%) 새 서버를 띄운다.
+      # 새 서버는 부팅하며 배포 버전의 패키지를 받는다. 서버 그룹은 URECA-Cking/Cking-Infra#136에서 만들며, 그 전에는 건너뛴다.
+      - name: 개발 추천 배치 서버 교체
+        if: steps.release.outputs.updated == 'true'
+        run: |
+          COUNT=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG_NAME" \
+            --query 'length(AutoScalingGroups)' --output text)
+          if [ "$COUNT" = 0 ]; then
+            echo "개발 추천 배치 서버 그룹이 아직 없어 교체를 건너뛴다" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$ASG_NAME" \
+            --preferences '{"MinHealthyPercentage":0}' --query InstanceRefreshId --output text)
+          for _ in $(seq 1 80); do
+            STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$ASG_NAME" \
+              --instance-refresh-ids "$ID" --query 'InstanceRefreshes[0].Status' --output text)
+            case "$STATUS" in
+              Successful)
+                echo "서버 교체 완료: $ID" | tee -a "$GITHUB_STEP_SUMMARY"
+                exit 0 ;;
+              Failed|Cancelled|RollbackSuccessful|RollbackFailed)
+                echo "::error::서버 교체 $STATUS: $ID"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::서버 교체가 20분 안에 끝나지 않았다: $ID"
+          exit 1

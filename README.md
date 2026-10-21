@@ -59,6 +59,27 @@ python -m pytest -q
 테스트는 유료 API를 호출하지 않습니다. 결과 재집계에는 각 보고서에 명시된 로컬 원본이 필요합니다.
 임베딩·태깅·자동 채점 명령은 외부 전송 및 비용이 발생할 수 있으므로 실행 안내를 먼저 읽으세요.
 
+## 배포
+
+콘텐츠 작업자는 CI(`.github/workflows/ci.yml`)가 만든 배포 패키지로 서버에 올립니다. 서버 운영은 [콘텐츠 작업자 운영](docs/guides/content-worker.md)을 따릅니다.
+
+- 패키지: `scripts/build-package.sh`가 독립 실행형 Python 3.12와 가상환경, `src`·`data`·`deploy`를 `/opt/cking-llm`에 묶습니다. 서버(Ubuntu 26.04, Python 3.14)의 Python과 관계없이 검증된 3.12로 돕니다
+- 의존성: 배포는 `requirements-deploy.txt`(고정 버전)입니다. 서비스 경로는 임베딩을 DeepInfra API로 받아 torch·sentence-transformers를 넣지 않으므로, 배포 패키지에서는 `--embedding-provider local`을 쓸 수 없습니다. 테스트는 `requirements-test.txt`(배포 버전 + sentence-transformers, pytest)입니다
+- 확인: `scripts/check-package.sh`가 서버와 같은 Ubuntu 26.04에서 읽기 전용·root가 아닌 사용자로 Python 버전, 서비스 모듈 import(torch 없음), systemd 실행 경로, BE 없이 기동해 BE 요청 단계까지 가는지를 보고 생성 설정 해시(`configHash`)를 출력합니다. taxonomy 승인 등록에 이 값을 씁니다
+- CI
+  - PR: 테스트(Python 3.12, CPU torch), 워크플로 검사
+  - develop 푸시(패키지에 들어가는 파일이 바뀔 때), 매월 1일 10:00(KST) 재빌드, 수동 실행: 패키지 빌드 → 확인 → 개발 배포 버킷 `recommendation/releases/<빌드 시각>-<커밋 12자리>/` 업로드 → 배포 버전 값 `/cking/dev-recommendation/RELEASE` 갱신 → 개발 추천 배치 서버 교체(새 서버가 부팅하며 그 버전을 받음)
+  - 실행은 푸시 순서대로 하나씩 돕니다. 배포된 커밋이 이 커밋보다 새로우면 배포 버전을 바꾸지 않고, 이력이 갈라졌으면 실패합니다
+  - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`)로 올립니다
+
+로컬에서 패키지를 만들고 확인하려면 다음을 실행합니다(Docker 필요).
+
+```bash
+docker run --rm --platform linux/arm64 -v "$PWD:/repo:ro" -v "$PWD/build:/out" -w /repo python:3.12-slim bash -c \
+  'apt-get update -qq && apt-get install -y -qq git >/dev/null && pip install -q uv==0.13.4 && git config --global --add safe.directory /repo && scripts/build-package.sh local-$(git rev-parse --short=12 HEAD) /out'
+scripts/check-package.sh build/cking-llm.tar.gz
+```
+
 ## 폴더
 
 ```text
