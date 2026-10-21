@@ -389,6 +389,28 @@ def test_main_remainder_and_pinned_operational_arguments(cli, monkeypatch, separ
     assert '--output-dir' in calls[0] and '--cache' in calls[0] and '--be-base-url' in calls[0]
 
 
+def test_main_opt_in_runs_strict_ranking_with_same_state_and_dedicated_token(cli, monkeypatch):
+    module, daily, args = cli
+    import src.recommendation.saved_tags as saved
+    import src.recommendation.interest_runtime as runtime
+    calls=[]
+    monkeypatch.setattr(daily, 'main', lambda argv: calls.append('personalized') or 0)
+    monkeypatch.setattr(saved, 'SavedTagBackend', lambda config,token: ('dedicated',token))
+    monkeypatch.setattr(runtime, 'create_interest_embedding_client', lambda provider: ('model',provider))
+    def rank(backend,state,cache,model,version,apply):
+        assert backend==('dedicated','private-token')
+        assert state.name=='saved-tags' and cache.name=='models.json'
+        assert model==('model','deepinfra') and apply
+        calls.append('strict')
+    monkeypatch.setattr(saved,'run',rank)
+    def run(self,source):
+        assert self.recommend()==0
+        return {'failureCount':0}
+    monkeypatch.setattr(module.ContentWorker,'run',run)
+    assert module.main(args+['--saved-tag-recommendations','--','apply'])==0
+    assert calls==['personalized','strict']
+
+
 @pytest.mark.parametrize('option', ['--output-dir=x', '--cache=x', '--be-base-url=x', '--cache'])
 def test_main_forbidden_arguments_fail_before_worker(cli, monkeypatch, capsys, option):
     module, daily, args = cli

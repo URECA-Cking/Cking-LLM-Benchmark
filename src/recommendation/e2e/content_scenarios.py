@@ -99,9 +99,43 @@ def main():
             assert view(True)==dict(status='creator_confirmed',parents=['MUSIC'],topics=['MUSIC_VOCAL'])
             request('PUT',path,payload,cfg['apiKey']);assert view(True)['status']=='creator_confirmed'
             passed('owner_confirmation_public_projection_and_same_result_preserves_confirmation')
+            # #82: 모델만 합성 응답이며 snapshot/확정 태그/조회 자격/순위 적재는 실제 BE다.
+            from src.recommendation.saved_tags import SavedTagBackend, ROOT as SAVED_API, run as saved_run
+            from src.recommendation.e2e.scenarios import FixedModels
+            saved_client=SavedTagBackend(BackendClientConfig(cfg['baseUrl'],max_retries=0),cfg['apiKey'])
+            saved_model=FixedModels()
+            saved_args=(saved_client,output/'saved-tags',output/'saved-models.json',saved_model,'synthetic-v1')
+            import urllib.parse
+            def tag_query(**params):
+                query={'taxonomyVersion':taxonomy['version'],'size':20,**params}
+                return request('GET','/api/me/creator-recommendations/by-tags?'+urllib.parse.urlencode(query),token=cfg['otherToken'])
+            reject('GET','/api/me/creator-recommendations/by-tags',None,401,token=None)
+            pending=tag_query(topicCodes='MUSIC_VOCAL')
+            assert pending['rankingStatus']=='PENDING' and not pending['items']
+            assert saved_run(*saved_args,apply=True)['status']=='completed'
+            assert saved_run(*saved_args,apply=True)['status']=='skipped'
+            exact=tag_query(parentCodes='MUSIC',topicCodes='MUSIC_VOCAL')
+            assert exact['rankingStatus']=='READY' and len(exact['items'])==1
+            assert exact['items'][0]['creatorId']==cid and len(exact['items'][0]['matchedTags'])==2
+            assert exact['recommendationRequestId'] is None
+            assert not tag_query(parentCodes='GAME')['items']
+            assert not request('GET','/api/me/creator-recommendations/by-tags',token=cfg['otherToken'])['items']
+            request('PUT',f'/api/creators/{cid}/follow',{},cfg['otherToken'])
+            assert not tag_query(parentCodes='MUSIC')['items']
+            request('DELETE',f'/api/creators/{cid}/follow',token=cfg['otherToken'])
+            wire=json.loads((output/'saved-tags/current.json').read_text(encoding='utf-8'))
+            stale_ranking={**wire['payload'],'applicationSequence':wire['sequence']+1}
+            passed('saved_tags_exact_or_short_result_and_no_fallback')
             # Separate DB transactions prove a competing stale delivery waits for Space edit lock.
             assert control('race',payload=payload)['serialized']
             assert view(True)['status']=='reanalysis_required'
+            assert not tag_query(parentCodes='MUSIC')['items']
+            reject('PUT',SAVED_API+'/rankings',stale_ranking,409)
+            # 현재 미확정 snapshot은 정상 빈 점수로 교체한다. 이전 확인 태그는 부활하지 않는다.
+            assert saved_run(*saved_args,apply=True)['count']==0
+            assert not tag_query(parentCodes='MUSIC')['items']
+            report['savedTagSyntheticEmbeddingInputs']=saved_model.calls
+            passed('saved_tags_intro_change_invalidates_and_stale_snapshot_rejected')
             assert request('PUT',path,payload,cfg['apiKey'])['status']=='idempotent'
             assert view(True)['status']=='reanalysis_required'
             stale=copy.deepcopy(payload);stale['automaticRevision']=stale['idempotencyKey']='c'*64
