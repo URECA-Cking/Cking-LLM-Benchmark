@@ -96,7 +96,7 @@ class RecommendationHttpE2eTest {
         config.put("creatorIds", fixtureCreators);
         config.put("taxonomyHash", jdbc.queryForObject(
                 "select taxonomy_hash from interest_taxonomy where taxonomy_version = 'v0.2'", String.class));
-        ProcessBuilder builder = new ProcessBuilder(required("CKING_E2E_PYTHON"), "-m", "src.recommendation.e2e.scenarios");
+        ProcessBuilder builder = new ProcessBuilder(required("CKING_E2E_PYTHON"), "-m", System.getenv().getOrDefault("CKING_E2E_SCENARIO", "src.recommendation.e2e.scenarios"));
         builder.directory(new File(required("CKING_E2E_LLM_ROOT")));
         // 원문·토큰은 Gradle 로그로 전달하지 않는다. 결과는 비밀값 없는 report.json에만 남긴다.
         builder.redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -144,6 +144,33 @@ class RecommendationHttpE2eTest {
 
     private Object control(JsonNode request) {
         return switch (request.path("op").asText()) {
+            case "smallPoolSetup" -> {
+                jdbc.update("delete from member_interest where member_id=?",fanId);
+                jdbc.update("delete from creator_follow where member_id=?",fanId);
+                for(var entry:fixtureCreators.entrySet()) {
+                    String intro = switch(entry.getKey().intValue()) {
+                        case 2,3,4 -> "요리 레시피 베이킹 전문 채널 " + entry.getKey();
+                        case 5 -> "운동 홈트레이닝 근력 전문 채널";
+                        case 6 -> "안녕하세요 반갑습니다";
+                        default -> "";
+                    };
+                    jdbc.update("update creator_space set intro_text=? where creator_id=?",intro,entry.getValue());
+                }
+                jdbc.update("insert into member_interest values (?,'v0.2','FOOD',UTC_TIMESTAMP(6))",fanId);
+                jdbc.update("insert into creator_follow(member_id,creator_id,created_at) values (?,?,UTC_TIMESTAMP(6))",fanId,fixtureCreators.get(2L));
+                yield Map.of("ok",true);
+            }
+            case "smallPoolInterest" -> {
+                jdbc.update("delete from member_interest where member_id=?",fanId);
+                jdbc.update("insert into member_interest values (?,'v0.2',?,UTC_TIMESTAMP(6))",fanId,request.path("code").asText());
+                yield Map.of("ok",true);
+            }
+            case "profile" -> {
+                long logical=request.path("logical").asLong();
+                if(!fixtureCreators.containsKey(logical)) throw new IllegalArgumentException("fixture profile required");
+                jdbc.update("update creator_space set intro_text=? where creator_id=?",request.path("intro").asText(),fixtureCreators.get(logical));
+                yield Map.of("ok",true);
+            }
             case "snapshot" -> Map.of(
                 "similar", jdbc.queryForList("""
                     select g.creator_id, g.application_sequence, g.input_hash, g.generation_id,
@@ -203,6 +230,7 @@ class RecommendationHttpE2eTest {
                         jdbc.update("insert into interest_recommendation_candidate (generation_id, creator_id, score, rank_no) "
                             + "values (?, ?, 0.5, ?)", generation, candidate.path("creatorId").asLong(), candidate.path("rank").asInt());
                     }
+                    markProof("INTEREST",generation,null,source.path("activeGeneration").path("candidates"),List.of(code));
                 }
                 for (JsonNode source : data.path("followSources")) {
                     long seed = source.path("seedCreatorId").asLong();
@@ -213,6 +241,12 @@ class RecommendationHttpE2eTest {
                         jdbc.update("insert into creator_similarity_candidate (generation_id, similar_creator_id, score, rank_no) "
                             + "values (?, ?, 0.5, ?)", generation, candidate.path("creatorId").asLong(), candidate.path("rank").asInt());
                     }
+                    var tags=new TreeSet<String>();
+                    data.path("selectedInterestCodes").forEach(t->tags.add(t.asText()));
+                    if(tags.isEmpty()) tags.add("FOOD");
+                    // 집계 fixture에는 UI 상한을 넘는 관심 분야도 있다. 분류 근거는 그중 한 분야만 명시한다.
+                    while(tags.size()>1) tags.pollLast();
+                    markProof("SIMILAR",generation,seed,source.path("activeGeneration").path("candidates"),new ArrayList<>(tags));
                 }
                 yield Map.of("ok", true);
             }
@@ -230,7 +264,9 @@ class RecommendationHttpE2eTest {
                 // Space 없는 후보를 재현하도록 이 실행 fixture의 Space만 제거/복원한다.
                 for (var entry : fixtureCreators.entrySet()) {
                     long id = entry.getValue();
+                    // 순수 집계 fixture에서 생략한 seed의 소개는 명시적으로 유지한다.
                     boolean exists = false;
+                    for(JsonNode followed:request.path("followed")) if(followed.asLong()==id) exists=true;
                     for (JsonNode space : request.path("spaces")) {
                         if (space.path("creatorId").asLong() == id && space.path("hasCreatorSpace").asBoolean()) exists = true;
                     }
@@ -246,4 +282,16 @@ class RecommendationHttpE2eTest {
             default -> throw new IllegalArgumentException("Unknown E2E control operation");
         };
     }
+    private void markProof(String kind,long generation,Long seed,JsonNode candidates,List<String> tags) {
+        var ids=new TreeSet<Long>(); if(seed!=null) ids.add(seed);
+        candidates.forEach(c->ids.add(c.path("creatorId").asLong()));
+        var profiles=ids.stream().map(id->{
+            var texts=jdbc.queryForList("select intro_text from creator_space where creator_id=?",String.class,id);
+            return Map.of("creatorId",id,"introductionHash",kr.co.cking.creator.application.RecommendationEligibilityService.introductionHash(texts.isEmpty()?"":texts.getFirst()),"tags",tags);
+        }).toList();
+        var proof=Map.of("policyVersion","RELATED_V1","taxonomyVersion","v0.2","taxonomyHash",jdbc.queryForObject("select taxonomy_hash from interest_taxonomy where taxonomy_version='v0.2'",String.class),"profiles",profiles);
+        try { jdbc.update("insert into recommendation_eligibility(source_kind,generation_id,proof) values(?,?,?)",kind,generation,json.writeValueAsString(proof)); }
+        catch(java.io.IOException e) { throw new IllegalStateException(e); }
+    }
+
 }

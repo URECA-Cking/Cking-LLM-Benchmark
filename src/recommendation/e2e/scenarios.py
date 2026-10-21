@@ -60,15 +60,17 @@ def control(op, **values):
 class FixedModels:
     """제공자 SDK 없이 텍스트 해시별 고정 벡터·고정 태그를 반환한다."""
     name = "cking-e2e-fixed"
-    dim = 8
+    dim = 17
 
     def __init__(self):
         self.calls = 0
 
     def embed(self, texts):
         self.calls += len(texts)
-        return np.asarray([[value + 1 for value in hashlib.sha256(text.encode()).digest()[:8]]
-                           for text in texts], dtype=np.float64)
+        categories = load_service_categories(DEFAULT_CATEGORIES_CSV)
+        positions = {row.description: i for i,row in enumerate(categories)}
+        food = next(i for i,row in enumerate(categories) if row.code == "FOOD")
+        return np.asarray([np.eye(17)[positions.get(text,food)] for text in texts])
 
     def tag(self, text):
         self.calls += 1
@@ -320,14 +322,8 @@ class Suite:
                 assert actual == expected["items"]
                 assert len(actual) < 20  # 후보 부족 시 인기순을 섞어 채우지 않는다.
             else:
-                # 공용 fixture의 빈 개인화 결과는 최신 BE 계약에서 인기순으로 대체된다.
-                assert response["policyVersion"] == "POPULAR_FALLBACK_V1"
-                excluded = set(data["followedCreatorIds"]) | {self.ids[1]}
-                eligible = sorted(space["creatorId"] for space in data["creatorSpaces"]
-                                  if space["hasCreatorSpace"] and space["creatorId"] not in excluded)
-                assert [item["creatorId"] for item in actual] == eligible
-                assert all(item["aggregateScore"] == 0 and item["interestCodes"] == []
-                           and item["seedCreatorIds"] == [] for item in actual)
+                assert response["policyVersion"] == "FOLLOW_PERSONALIZED_V2"
+                assert actual == []
             self.passed("shared_fixture:" + case["id"])
 
     def popular_fallback(self):
@@ -339,11 +335,9 @@ class Suite:
         control("popularity")
         client = CkingBackendClient(self.backend.config, access_token=self.config["userToken"])
         response = client._request("GET", "/api/me/creator-recommendations?size=3", None, authenticated=True)
-        assert response["policyVersion"] == "POPULAR_FALLBACK_V1"
-        assert [item["creatorId"] for item in response["items"]] == [self.ids[101], self.ids[102], self.ids[3]]
-        assert [item["aggregateScore"] for item in response["items"]] == [2, 1, 0]
-        assert all(item["interestCodes"] == [] and item["seedCreatorIds"] == [] for item in response["items"])
-        self.passed("popular_fallback_follower_counts_order_and_size")
+        assert response["policyVersion"] == "FOLLOW_PERSONALIZED_V2"
+        assert response["items"] == []
+        self.passed("no_popular_padding_when_personalized_sources_are_empty")
 
     def authentication(self):
         sequence = 1000
