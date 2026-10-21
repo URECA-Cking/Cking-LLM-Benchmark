@@ -624,3 +624,24 @@ def test_saved_tag_success_does_not_mask_personalized_failure(tmp_path, taxonomy
     assert not be.reconciles
     if source == 'event':
         assert be.acks[-1]['status'] == 'retry'
+
+
+@pytest.mark.parametrize('options', [
+    ['--embedding-provider', 'private-invalid-provider'],
+    ['--embedding-provider'],
+    ['--unknown-private-option'],
+])
+def test_main_saved_tags_invalid_daily_arguments_use_worker_diagnostic(cli, monkeypatch, capsys, tmp_path, options):
+    module, daily, args = cli
+    monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: pytest.fail('worker must not start'))
+    monkeypatch.setattr(daily, 'main', lambda *args: pytest.fail('daily must not start'))
+    assert module.main(args + ['--saved-tag-recommendations', '--', 'apply'] + options) == 1
+    captured = capsys.readouterr()
+    assert captured.out == 'content-worker: failed (INVALID_DAILY_ARGUMENTS)\n'
+    assert captured.err == ''
+    summary = json.loads((tmp_path / 'summary.json').read_text())
+    assert summary['status'] == 'failed' and summary['failureCount'] == 1
+    assert summary['code'] == 'INVALID_DAILY_ARGUMENTS'
+    assert summary['source'] == 'daily'
+    assert 'private' not in json.dumps(summary)
+    assert not (tmp_path / 'last-success.json').exists()

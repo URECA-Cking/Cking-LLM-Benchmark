@@ -11,7 +11,7 @@ import inspect
 import ipaddress
 from urllib.parse import urlsplit
 import io
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 import json
 import os
 import re
@@ -387,7 +387,11 @@ def main(argv=None):
         if args.saved_tag_recommendations:
             from src.recommendation.daily_cli import build_parser
             from src.recommendation.interest_runtime import embedding_model_version
-            embedding_args = build_parser().parse_args(daily_args + ['--be-base-url', args.be_base_url])
+            try:
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    embedding_args = build_parser().parse_args(daily_args + ['--be-base-url', args.be_base_url])
+            except SystemExit:
+                raise WorkerFailure('INVALID_DAILY_ARGUMENTS') from None
             def saved_tag_recommend():
                 from src.recommendation.saved_tags import SavedTagBackend, run
                 from src.recommendation.interest_runtime import create_interest_embedding_client
