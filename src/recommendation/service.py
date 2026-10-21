@@ -256,6 +256,10 @@ class SimilarCreatorRecommender:
         return validated_embeddings(values, expected_rows, self.embedding_client.dim)[1]
 
     def _tags_many(self, texts: list[str]) -> dict[str, frozenset[str]]:
+        return self.classify_texts(texts)
+
+    def classify_texts(self, texts: list[str]) -> dict[str, frozenset[str]]:
+        """유사 추천과 관심 분야 추천에서 같은 검증·캐시 계약을 사용한다."""
         by_text: dict[str, frozenset[str]] = {}
         missing: list[str] = []
         for text in dict.fromkeys(texts):

@@ -1,4 +1,4 @@
-"""v0.2 관심 분야 설명을 쿼리로 M3 후보와 M2 비교 기준선을 생성한다."""
+"""v0.2 LLM 확정 분야로 후보를 제한하고 BGE-M3 코사인 점수로 정렬한다."""
 
 from __future__ import annotations
 
@@ -14,8 +14,11 @@ from src.recommendation.cache import ModelCache, text_hash
 from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION, validated_embeddings
 from src.recommendation.manifest import CreatorManifest, build_manifest
 from src.recommendation.eligibility import POLICY, proof
+from src.recommendation.runtime import DEFAULT_TAG_MODEL, LazyOpenAITagger, build_service_tag_prompt
+from src.recommendation.service import RecommendationConfig, SimilarCreatorRecommender, TaggingClient
 from src.recommendation.taxonomy import (
-    DEFAULT_TAXONOMY_VERSION, ServiceCategory, default_taxonomy_hash, taxonomy_hash,
+    DEFAULT_TAXONOMY_VERSION, DEFAULT_TAG_PROMPT_VERSION, DEFAULT_CATEGORIES_CSV,
+    ServiceCategory, default_taxonomy_hash, taxonomy_hash, load_service_categories,
 )
 
 
@@ -32,6 +35,7 @@ def _integer(name: str, value: int, minimum: int, maximum: int) -> None:
 @dataclass(frozen=True)
 class InterestRecommendationConfig:
     top_n: int = 20
+    # 이전 실행 인자 호환용. 후보 자격이나 순위에는 더 이상 사용하지 않는다.
     zero_shot_tau: float = 0.4296248555
     zero_shot_max_tags: int = 3
     m3_bonus: float = 0.1
@@ -40,6 +44,9 @@ class InterestRecommendationConfig:
     embedding_model_version: str = "BAAI/bge-m3@local-v1"
     taxonomy_version: str = DEFAULT_TAXONOMY_VERSION
     taxonomy_hash: str = field(default_factory=default_taxonomy_hash)
+    tag_model_version: str = DEFAULT_TAG_MODEL
+    tag_prompt_version: str = DEFAULT_TAG_PROMPT_VERSION
+    tag_prompt: str = field(default_factory=lambda: build_service_tag_prompt(load_service_categories(DEFAULT_CATEGORIES_CSV)))
 
     def __post_init__(self) -> None:
         _integer("top_n", self.top_n, 1, 100)
@@ -62,18 +69,25 @@ class InterestRecommendationConfig:
             raise ValueError("관심 분야 생성기는 taxonomyVersion=v0.2만 지원합니다.")
         if self.taxonomy_hash != default_taxonomy_hash():
             raise ValueError("taxonomyHash가 v0.2 정본과 다릅니다.")
+        if any(not isinstance(value, str) or not value.strip() for value in
+               (self.tag_model_version, self.tag_prompt_version, self.tag_prompt)):
+            raise ValueError("태깅 모델과 프롬프트 버전·본문이 필요합니다.")
 
     def identity(self) -> dict[str, object]:
         """점수·태그·정렬 계약과 결과에 영향을 주는 설정을 모두 해시에 넣는다."""
         return {
             "embeddingContract": EMBEDDING_CONTRACT_VERSION,
             "eligibilityPolicy": POLICY,
+            "classificationSource": "LLM_CONFIRMED_V1",
+            "tagModelVersion": self.tag_model_version,
+            "tagPromptVersion": self.tag_prompt_version,
+            "tagPromptHash": text_hash(self.tag_prompt),
+            "scoring": "embedding cosine only; no tag bonus",
             "schemaVersion": 1, "taxonomyVersion": self.taxonomy_version,
             "taxonomyHash": self.taxonomy_hash, "topN": self.top_n,
             "embeddingModelVersion": self.embedding_model_version,
-            "zeroShotTau": float(self.zero_shot_tau), "zeroShotMaxTags": self.zero_shot_max_tags,
-            "m3Bonus": float(self.m3_bonus), "scoreDecimals": self.score_decimals,
-            "zeroShotTieBreak": "taxonomy display order ASC",
+            "legacyZeroShotTau": float(self.zero_shot_tau), "legacyZeroShotMaxTags": self.zero_shot_max_tags,
+            "legacyM3Bonus": float(self.m3_bonus), "scoreDecimals": self.score_decimals,
             "ranking": "rounded score DESC, creatorId ASC",
             "rounding": "python round, ties to even", "emptyIntroduction": "exclude",
         }
@@ -107,12 +121,13 @@ class InterestRecommendationResult:
 
 
 class InterestRecommender:
-    """소개·설명 임베딩 하나를 공유해 17개 독립 쿼리와 zero-shot 태그를 계산한다."""
+    """LLM 확정 태그로 후보를 제한하고 소개·분야 설명 임베딩으로 정렬한다."""
 
     def __init__(
         self, manifest: CreatorManifest, categories: Iterable[ServiceCategory],
         embedding_client: EmbeddingClient, cache: ModelCache,
         config: InterestRecommendationConfig | None = None,
+        *, tagging_client: TaggingClient | None = None,
     ) -> None:
         self.config = config or InterestRecommendationConfig()
         self.categories = tuple(categories)
@@ -127,6 +142,12 @@ class InterestRecommender:
         self.manifest = manifest
         self.embedding_client = embedding_client
         self.cache = cache
+        self.tagging_client = tagging_client or LazyOpenAITagger(
+            [c.code for c in self.categories], self.config.tag_prompt, self.config.tag_model_version)
+        self._classifier = SimilarCreatorRecommender(embedding_client, self.tagging_client, cache,
+            RecommendationConfig(embedding_model_version=self.config.embedding_model_version,
+                tag_model_version=self.config.tag_model_version, tag_prompt_version=self.config.tag_prompt_version,
+                tag_prompt=self.config.tag_prompt, allowed_tags=frozenset(c.code for c in self.categories)))
         self._pool = tuple(profile for profile in manifest.creators if profile.text)
         self._scores: np.ndarray | None = None
         self._tags: list[frozenset[int]] = []
@@ -158,8 +179,6 @@ class InterestRecommender:
             if index not in self._tags[position]:
                 continue
             score = float(self._scores[position, index])
-            if method == M3_METHOD and index in self._tags[position]:
-                score += self.config.m3_bonus
             scored.append((profile.creator_id, round(score, self.config.score_decimals)))
         scored.sort(key=lambda row: (-row[1], row[0]))
         selected = tuple(scored[:self.config.top_n])
@@ -178,9 +197,10 @@ class InterestRecommender:
             raise self._preparation_error
         texts = [row.description for row in self.categories] + [profile.text for profile in self._pool]
         try:
+            classified = self._classifier.classify_texts([p.text for p in self._pool])
             vectors = self._embeddings(texts)
         except Exception as error:
-            # 같은 manifest의 공통 임베딩 실패를 17번 유료 재호출하지 않는다.
+            # 같은 manifest의 공통 태깅/임베딩 실패를 17번 유료 재호출하지 않는다.
             # 체크포인트 재실행의 새 생성기에서 미완료 임베딩만 다시 시도한다.
             self._preparation_error = error
             raise
@@ -190,13 +210,8 @@ class InterestRecommender:
             [float(np.clip(vectors[profile.text] @ vector, -1, 1)) for vector in category_vectors]
             for profile in self._pool
         ])
-        tags = []
-        for row in scores:
-            order = sorted(range(len(self.categories)), key=lambda index: (-row[index], index))
-            tags.append(frozenset(
-                index for index in order[:self.config.zero_shot_max_tags]
-                if row[index] >= self.config.zero_shot_tau
-            ))
+        tags = [frozenset(i for i,c in enumerate(self.categories) if c.code in classified[p.text])
+                for p in self._pool]
         self._tags = tags
         self._scores = scores
 
