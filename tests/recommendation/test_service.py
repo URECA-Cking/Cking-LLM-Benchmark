@@ -16,7 +16,9 @@ class FakeEmbeddingClient:
     dim = 2
 
     def __init__(self, vectors: dict[str, list[float]]) -> None:
-        self.vectors = vectors
+        from src.recommendation.taxonomy import load_service_categories, DEFAULT_CATEGORIES_CSV
+        self.vectors = {r.description: ([1, 0] if r.code == "FITNESS" else [0, 1] if r.code == "FOOD" else [-1, 0]) for r in load_service_categories(DEFAULT_CATEGORIES_CSV)}
+        self.vectors.update(vectors)
         self.calls: list[list[str]] = []
 
     def embed(self, texts: list[str]) -> np.ndarray:
@@ -75,9 +77,9 @@ def test_regular_introduction_uses_m4_and_stable_creator_id_tie_break(tmp_path) 
 
     result = service.recommend(seed, candidates)
 
-    assert [item.similar_creator_id for item in result.candidates] == [30, 20]
-    assert [item.score for item in result.candidates] == [1.2, 1.0]
-    assert [item.rank for item in result.candidates] == [1, 2]
+    assert [item.similar_creator_id for item in result.candidates] == [30]
+    assert [item.score for item in result.candidates] == [1.2]
+    assert [item.rank for item in result.candidates] == [1]
     assert {item.method for item in result.candidates} == {"M4"}
     assert all(item.model_version == "embed-v1+tag-v1@prompt-v1" for item in result.candidates)
     assert len({item.input_hash for item in result.candidates}) == 1
@@ -154,6 +156,7 @@ def test_empty_seed_and_empty_candidates_do_not_call_models(tmp_path) -> None:
         "modelVersion": "embed-v1",
         "inputHash": empty_seed.input_hash,
         "candidates": [],
+        "eligibility": empty_seed.eligibility,
     }
     assert no_valid_candidate.to_backend_payload()["candidates"] == []
     assert embedder.calls == []
@@ -249,7 +252,7 @@ def test_embeddings_are_requested_in_configured_batches(tmp_path) -> None:
         config(embedding_batch_size=2),
     ).recommend(seed, candidates)
 
-    assert [len(batch) for batch in embedder.calls] == [2, 2, 2]
+    assert [len(batch) for batch in embedder.calls] == [2] * 11 + [1]
 
 
 def test_dimension_error_does_not_poison_retry_with_valid_embedder(tmp_path) -> None:
@@ -276,7 +279,8 @@ def test_dimension_error_does_not_poison_retry_with_valid_embedder(tmp_path) -> 
     result = build_service(tmp_path, valid_embedder, FakeTaggingClient({}), settings).recommend(seed, candidates)
 
     assert [item.similar_creator_id for item in result.candidates] == [20, 30, 40]
-    assert valid_embedder.calls == [[candidates[1].text, candidates[2].text]]
+    assert valid_embedder.calls[0] == [candidates[1].text, candidates[2].text]
+    assert sum(map(len, valid_embedder.calls)) == 19
 
 
 def test_zero_vector_is_rejected_before_cache_write(tmp_path) -> None:
@@ -290,7 +294,8 @@ def test_zero_vector_is_rejected_before_cache_write(tmp_path) -> None:
     valid_embedder = FakeEmbeddingClient({seed.text: [1, 0], candidate.text: [1, 0]})
     build_service(tmp_path, valid_embedder, FakeTaggingClient({})).recommend(seed, [candidate])
 
-    assert valid_embedder.calls == [[seed.text, candidate.text]]
+    assert valid_embedder.calls[0][:2] == [seed.text, candidate.text]
+    assert sum(map(len, valid_embedder.calls)) == 19
 
 
 def test_invalid_cached_embedding_is_regenerated(tmp_path) -> None:
@@ -302,7 +307,8 @@ def test_invalid_cached_embedding_is_regenerated(tmp_path) -> None:
 
     build_service(tmp_path, embedder, FakeTaggingClient({})).recommend(seed, [candidate])
 
-    assert embedder.calls == [[seed.text, candidate.text]]
+    assert embedder.calls[0][:2] == [seed.text, candidate.text]
+    assert sum(map(len, embedder.calls)) == 19
 
 
 def test_tagger_failure_aborts_without_partial_result(tmp_path) -> None:

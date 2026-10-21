@@ -23,8 +23,8 @@ def test_same_manifest_top10_rankings_and_union_are_blind_and_reproducible(tmp_p
     judge_text = (output / "judge-input.json").read_text(encoding="utf-8")
     judge = json.loads(judge_text)
     provenance = json.loads((output / "provenance.json").read_text(encoding="utf-8"))
-    assert result["pairCount"] == 51
-    assert len({pair["pairId"] for pair in judge["pairs"]}) == 51
+    assert result["pairCount"] == 6
+    assert len({pair["pairId"] for pair in judge["pairs"]}) == 6
     assert provenance["manifestHash"] == service.manifest.manifest_hash
     assert provenance["judgeInputHash"] == _json_hash(judge)
     assert provenance["evaluationTopN"] == 10
@@ -35,8 +35,9 @@ def test_same_manifest_top10_rankings_and_union_are_blind_and_reproducible(tmp_p
     for code, by_method in provenance["rankings"].items():
         for method, ranking in by_method.items():
             assert ranking["candidates"] == generated[code][method]["candidates"][:10]
-            assert ranking["candidateCount"] == 3
-            assert ranking["shortageCount"] == 7
+            count = 3 if code in {r.code for r in categories()[:2]} else 0
+            assert ranking["candidateCount"] == count
+            assert ranking["shortageCount"] == 10 - count
     before = {file.name: (file.read_bytes(), file.stat().st_mtime_ns) for file in output.iterdir()}
     write_interest_evaluation(output, service, generated)
     assert before == {file.name: (file.read_bytes(), file.stat().st_mtime_ns) for file in output.iterdir()}
@@ -77,16 +78,17 @@ def test_full_top20_generations_produce_exact_top10_evaluation(tmp_path):
     data = bundles(service)
     output = tmp_path / "evaluation"
     result = write_interest_evaluation(output, service, data)
-    assert result["pairCount"] == 170
+    assert result["pairCount"] == 10
     plan = json.loads((output / "provenance.json").read_text(encoding="utf-8"))
     for code in plan["rankings"]:
         for method, ranking in plan["rankings"][code].items():
-            assert len(data[code][method]["candidates"]) == 20
-            assert [row["creatorId"] for row in ranking["candidates"]] == list(range(1, 11))
-            assert ranking["shortageCount"] == 0
+            expected = list(range(1, 11)) if code == categories()[0].code else []
+            assert len(data[code][method]["candidates"]) == (20 if expected else 0)
+            assert [row["creatorId"] for row in ranking["candidates"]] == expected
+            assert ranking["shortageCount"] == 10 - len(expected)
 
 
-def test_different_m2_m3_winners_are_both_in_blind_union(tmp_path):
+def test_blind_union_does_not_reintroduce_unqualified_neighbor(tmp_path):
     from src.recommendation.models import CreatorProfile
     from tests.recommendation.test_interest import vector
 
@@ -95,4 +97,4 @@ def test_different_m2_m3_winners_are_both_in_blind_union(tmp_path):
     output = tmp_path / "evaluation"
     write_interest_evaluation(output, service, bundles(service), top_n=1)
     pairs = json.loads((output / "judge-input.json").read_text(encoding="utf-8"))["pairs"]
-    assert {row["creatorId"] for row in pairs if row["interestCode"] == categories()[0].code} == {1, 2}
+    assert {row["creatorId"] for row in pairs if row["interestCode"] == categories()[0].code} == {2}

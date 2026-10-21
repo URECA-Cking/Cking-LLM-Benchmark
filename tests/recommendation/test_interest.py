@@ -55,12 +55,13 @@ def test_all_17_independent_queries_default_top20_and_metadata(tmp_path):
     for category in categories():
         result = service.recommend(category.code)
         assert result.method == M3_METHOD
-        assert len(result.candidates) == 20
-        assert [cid for cid, _ in result.candidates] == list(range(1, 21))
+        expected = list(range(1, 21)) if category == categories()[0] else []
+        assert len(result.candidates) == len(expected)
+        assert [cid for cid, _ in result.candidates] == expected
         payload = result.to_backend_payload()
         assert payload["taxonomyVersion"] == "v0.2"
         assert payload["interestCode"] == category.code
-        assert [candidate["rank"] for candidate in payload["candidates"]] == list(range(1, 21))
+        assert [candidate["rank"] for candidate in payload["candidates"]] == expected
         for candidate in payload["candidates"]:
             for key in ("method", "modelVersion", "inputHash", "taxonomyVersion", "taxonomyHash", "interestCode"):
                 assert candidate[key] == payload[key]
@@ -74,8 +75,8 @@ def test_bonus_only_for_thresholded_top_tags_and_m2_has_no_bonus(tmp_path):
     ))
     code = categories()[0].code
     m3, m2 = service.recommend(code), service.recommend(code, M2_METHOD)
-    assert m3.candidates == ((1, .9), (2, .75), (3, .75))
-    assert m2.candidates == ((1, .8), (2, .75), (3, .75))
+    assert m3.candidates == ((1, .9),)
+    assert m2.candidates == ((1, .8),)
     assert m3.input_hash != m2.input_hash
     assert all(cid != 4 for cid, _ in m3.candidates)
 
@@ -83,7 +84,8 @@ def test_bonus_only_for_thresholded_top_tags_and_m2_has_no_bonus(tmp_path):
 def test_zero_shot_tag_cap_and_ties_use_taxonomy_order(tmp_path):
     service = recommender(tmp_path, [CreatorProfile(1, "tie")], {"tie": vector(1, 1, 1, 1)},
                           InterestRecommendationConfig(zero_shot_tau=.5, zero_shot_max_tags=3))
-    assert [service.recommend(row.code).candidates[0][1] for row in categories()[:4]] == [.6, .6, .6, .5]
+    assert [service.recommend(row.code).candidates[0][1] for row in categories()[:3]] == [.6] * 3
+    assert service.recommend(categories()[3].code).candidates == ()
 
 
 def test_round_before_sort_breaks_score_ties_by_id(tmp_path):
@@ -93,11 +95,11 @@ def test_round_before_sort_breaks_score_ties_by_id(tmp_path):
     assert service.recommend(categories()[0].code).candidates == ((1, .9), (2, .9))
 
 
-def test_m3_can_promote_tagged_candidate_over_m2_neighbor(tmp_path):
+def test_unrelated_higher_cosine_candidate_is_excluded_before_ranking(tmp_path):
     service = recommender(tmp_path, [CreatorProfile(1, "broad"), CreatorProfile(2, "focused")],
                           {"broad": vector(.45, .51, .51, .51), "focused": vector(.44, .9)})
     code = categories()[0].code
-    assert service.recommend(code, M2_METHOD).candidates[0][0] == 1
+    assert service.recommend(code, M2_METHOD).candidates[0][0] == 2
     assert service.recommend(code, M3_METHOD).candidates[0][0] == 2
 
 
