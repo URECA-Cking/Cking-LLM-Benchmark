@@ -15,6 +15,8 @@ from src.recommendation.manifest import CreatorManifest
 from src.recommendation.models import CreatorProfile, RecommendationResult
 from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION
 from src.recommendation.service import RecommendationConfig
+from src.recommendation.eligibility import validate
+from src.recommendation.taxonomy import load_service_categories, DEFAULT_CATEGORIES_CSV
 
 
 CHECKPOINT_SCHEMA_VERSION = 2
@@ -54,6 +56,7 @@ def generation_config_hash(config: RecommendationConfig, top_n: int) -> str:
     """체크포인트 재사용 여부를 결정하는 생성 설정 SHA-256이다."""
     identity = {
         "embeddingContract": EMBEDDING_CONTRACT_VERSION,
+        "eligibilityPolicy": "RELATED_V1", "eligibilityTau": config.eligibility_tau,
         "topN": top_n,
         "shortIntroductionChars": config.short_introduction_chars,
         "m4Bonus": config.m4_bonus,
@@ -226,6 +229,18 @@ class RecommendationBatch:
             or record.get("payloadSha256") != _json_hash(payload)
         ):
             return None
+        if 'eligibility' not in payload:
+            return None
+        if 'eligibility' in payload:
+            try:
+                if (payload['eligibility'].get('taxonomyVersion') != self.config.taxonomy_version
+                        or payload['eligibility'].get('taxonomyHash') != self.config.taxonomy_hash):
+                    return None
+                validate(payload['eligibility'], {p.creator_id:p for p in self.manifest.creators},
+                         {c['similarCreatorId'] for c in payload['candidates']}, seed=seed.creator_id,
+                         allowed=self.config.allowed_tags or frozenset(row.code for row in load_service_categories(DEFAULT_CATEGORIES_CSV)))
+            except (ValueError, KeyError, TypeError, AttributeError):
+                return None
         return payload
 
     @staticmethod

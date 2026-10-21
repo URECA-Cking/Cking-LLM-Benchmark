@@ -13,6 +13,7 @@ from src.recommendation.storage import _write_json_atomic
 from src.recommendation.application import bind_application, resolve_sequence
 from src.recommendation.http import JsonBackend
 from src.recommendation.interest import METHODS, M3_METHOD, InterestRecommender, _integer
+from src.recommendation.eligibility import validate
 from src.recommendation.interest_evaluation import write_interest_evaluation
 
 
@@ -217,7 +218,7 @@ class InterestRecommendationBatch:
             raise ValueError("관심 분야 payload의 세대 메타데이터가 일치하지 않습니다.")
         candidates = payload.get("candidates")
         eligible = {profile.creator_id for profile in self.recommender.manifest.creators if profile.text}
-        if not isinstance(candidates, list) or len(candidates) != min(config.top_n, len(eligible)):
+        if not isinstance(candidates, list) or len(candidates) > config.top_n:
             raise ValueError("관심 분야 후보 수가 입력 계약과 다릅니다.")
         seen = set()
         order = []
@@ -236,6 +237,12 @@ class InterestRecommendationBatch:
             order.append((-score, creator_id))
         if order != sorted(order):
             raise ValueError("후보는 score DESC, creatorId ASC 순서여야 합니다.")
+        evidence = payload.get('eligibility')
+        if (not isinstance(evidence, dict) or evidence.get('taxonomyVersion') != config.taxonomy_version
+                or evidence.get('taxonomyHash') != config.taxonomy_hash):
+            raise ValueError('Eligibility taxonomy mismatch')
+        validate(evidence, {p.creator_id:p for p in self.recommender.manifest.creators}, seen,
+                 interest=code, allowed=[c.code for c in self.recommender.categories])
 
     @staticmethod
     def _validate_response(payload: dict[str, object], response: dict[str, object]) -> None:
