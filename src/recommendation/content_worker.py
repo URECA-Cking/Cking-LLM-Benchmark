@@ -347,6 +347,8 @@ def main(argv=None):
     parser.add_argument('--source', choices=['daily', 'event', 'manual'], default='daily')
     parser.add_argument('--approve-external-transfer', action='store_true')
     parser.add_argument('--max-daily-calls', type=int, default=0)
+    parser.add_argument('--saved-tag-recommendations', action='store_true',
+                        help='BE #736 배포 후 공개 확인 태그의 엄격 추천 점수도 갱신')
     parser.add_argument('daily_args', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
@@ -366,10 +368,20 @@ def main(argv=None):
         if any(v.split('=')[0] in {'--output-dir', '--cache', '--be-base-url'} for v in daily_args):
             raise WorkerFailure('FORBIDDEN_DAILY_ARGUMENTS')
         client = OpenAI(timeout=60, max_retries=0)
+        def recommend_all():
+            # 기존 개인화 정책은 그대로 실행한다. 새 경로는 BE 계약 배포 뒤 명시적으로 활성화한다.
+            code = daily(daily_args + ['--output-dir', str(args.state / 'recommendations'),
+                '--cache', str(args.state / 'models.json'), '--be-base-url', args.be_base_url])
+            if args.saved_tag_recommendations:
+                from src.recommendation.saved_tags import SavedTagBackend, run
+                from src.recommendation.interest_runtime import create_interest_embedding_client
+                client = SavedTagBackend(BackendClientConfig(args.be_base_url), token)
+                run(client, args.state / 'saved-tags', args.state / 'models.json',
+                    create_interest_embedding_client('deepinfra'), 'BAAI/bge-m3@deepinfra-v1', apply=True)
+            return code
         worker = ContentWorker(backend, args.state, taxonomy, args.model,
             lambda cid, text, tax, model: classify_with_model(client, cid, text, tax, model),
-            lambda: daily(daily_args + ['--output-dir', str(args.state / 'recommendations'),
-                '--cache', str(args.state / 'models.json'), '--be-base-url', args.be_base_url]),
+            recommend_all,
             approved=True, max_calls=args.max_daily_calls)
         result = worker.run(args.source)
         if result['failureCount']:
