@@ -9,6 +9,7 @@ from typing import Iterable, Protocol
 
 import numpy as np
 
+from src.recommendation.interest_runtime import embedding_model_version
 from src.clients.base import EmbeddingClient
 from src.clients.openai_tagger import TagResult
 from src.recommendation.cache import ModelCache, text_hash
@@ -43,7 +44,7 @@ class RecommendationConfig:
     score_decimals: int = 8
     embedding_batch_size: int = 96
     tag_cache_flush_size: int = 100
-    embedding_model_version: str = "BAAI/bge-m3@deepinfra-v1"
+    embedding_model_version: str = embedding_model_version("deepinfra")
     tag_model_version: str = "gpt-5.4-nano-2026-03-17"
     tag_prompt_version: str = DEFAULT_TAG_PROMPT_VERSION
     tag_prompt: str = DEFAULT_TAG_PROMPT_VERSION

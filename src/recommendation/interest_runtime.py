@@ -30,3 +30,9 @@ def create_interest_embedding_client(provider: str) -> EmbeddingClient:
 
         return LazyDeepInfraEmbeddingClient()
     raise ValueError(f"지원하지 않는 BGE-M3 제공자입니다: {provider}")
+
+
+def embedding_model_version(provider: str, override: str | None = None) -> str:
+    if provider not in {'local', 'deepinfra'}:
+        raise ValueError('Unsupported embedding provider')
+    return override or f'BAAI/bge-m3@{provider}-v1'

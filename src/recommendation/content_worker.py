@@ -114,13 +114,14 @@ def fingerprint(taxonomy, model):
 
 class ContentWorker:
     def __init__(self, backend, directory, taxonomy, model, classify_fn, recommend,
-                 *, approved=False, max_calls=0, max_attempts=3, clock=time.time, heartbeat_interval=60,
+                 *, saved_tag_recommend=None, approved=False, max_calls=0, max_attempts=3, clock=time.time, heartbeat_interval=60,
                  max_conflict_observations=3, conflict_timeout_seconds=300):
         if type(max_calls) is not int or max_calls < 0 or type(max_attempts) is not int or max_attempts < 1:
             raise ValueError('Invalid budget')
         self.backend, self.directory = backend, Path(directory)
         self.taxonomy, self.model = taxonomy, model
         self.classify_fn, self.recommend = classify_fn, recommend
+        self.saved_tag_recommend = saved_tag_recommend
         self.approved, self.max_calls, self.max_attempts = approved, max_calls, max_attempts
         if heartbeat_interval <= 0:
             raise ValueError('Invalid heartbeat interval')
@@ -286,6 +287,16 @@ class ContentWorker:
         except Exception:
             stages['recommendations'] = {'status': 'failed', 'code': 'RECOMMENDATION_FAILED'}
         stages['recommendations']['durationSeconds'] = self.clock() - rec_started
+        if self.saved_tag_recommend is not None:
+            saved_started = self.clock()
+            try:
+                with redirect_stdout(io.StringIO()):
+                    self.saved_tag_recommend()
+                stages['savedTags'] = {'status': 'success'}
+            except Exception as error:
+                stages['savedTags'] = {'status': 'failed',
+                    'code': diagnostic(error, 'SAVED_TAG_RECOMMENDATION_FAILED')}
+            stages['savedTags']['durationSeconds'] = self.clock() - saved_started
         failed = sum(s['status'] != 'success' for s in stages.values())
         refresh = stages['tags'].get('refreshRequired', False)
         summary = {'status': 'partial' if failed else 'refresh_required' if refresh else 'completed',
@@ -368,20 +379,26 @@ def main(argv=None):
         if any(v.split('=')[0] in {'--output-dir', '--cache', '--be-base-url'} for v in daily_args):
             raise WorkerFailure('FORBIDDEN_DAILY_ARGUMENTS')
         client = OpenAI(timeout=60, max_retries=0)
-        def recommend_all():
-            # 기존 개인화 정책은 그대로 실행한다. 새 경로는 BE 계약 배포 뒤 명시적으로 활성화한다.
-            code = daily(daily_args + ['--output-dir', str(args.state / 'recommendations'),
+        def recommend():
+            return daily(daily_args + ['--output-dir', str(args.state / 'recommendations'),
                 '--cache', str(args.state / 'models.json'), '--be-base-url', args.be_base_url])
-            if args.saved_tag_recommendations:
+
+        saved_tag_recommend = None
+        if args.saved_tag_recommendations:
+            from src.recommendation.daily_cli import build_parser
+            from src.recommendation.interest_runtime import embedding_model_version
+            embedding_args = build_parser().parse_args(daily_args + ['--be-base-url', args.be_base_url])
+            def saved_tag_recommend():
                 from src.recommendation.saved_tags import SavedTagBackend, run
                 from src.recommendation.interest_runtime import create_interest_embedding_client
-                client = SavedTagBackend(BackendClientConfig(args.be_base_url), token)
-                run(client, args.state / 'saved-tags', args.state / 'models.json',
-                    create_interest_embedding_client('deepinfra'), 'BAAI/bge-m3@deepinfra-v1', apply=True)
-            return code
+                saved_backend = SavedTagBackend(BackendClientConfig(args.be_base_url), token)
+                run(saved_backend, args.state / 'saved-tags', args.state / 'models.json',
+                    create_interest_embedding_client(embedding_args.embedding_provider),
+                    embedding_model_version(embedding_args.embedding_provider, embedding_args.embedding_model_version),
+                    apply=True)
         worker = ContentWorker(backend, args.state, taxonomy, args.model,
             lambda cid, text, tax, model: classify_with_model(client, cid, text, tax, model),
-            recommend_all,
+            recommend, saved_tag_recommend=saved_tag_recommend,
             approved=True, max_calls=args.max_daily_calls)
         result = worker.run(args.source)
         if result['failureCount']:

@@ -16,7 +16,7 @@ from src.recommendation.daily import DailyPaths, DailyRecommendationBatch
 from src.recommendation.http import CkingBackendClient
 from src.recommendation.interest import M2_METHOD, M3_METHOD, InterestRecommendationConfig, InterestRecommender
 from src.recommendation.interest_batch import InterestBatchPaths, InterestRecommendationBatch
-from src.recommendation.interest_runtime import create_interest_embedding_client
+from src.recommendation.interest_runtime import create_interest_embedding_client, embedding_model_version
 from src.recommendation.runtime import DEFAULT_TAG_MODEL, DEFAULT_TAG_PROMPT_VERSION, DEFAULT_CATEGORIES_CSV, LazyOpenAITagger
 from src.recommendation.taxonomy import load_service_categories, taxonomy_hash
 from src.recommendation.service import SimilarCreatorRecommender
@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _interest_selection(args, categories):
-    version = args.embedding_model_version or f"BAAI/bge-m3@{args.embedding_provider}-v1"
+    version = embedding_model_version(args.embedding_provider, args.embedding_model_version)
     selected = {"method": M2_METHOD, "tau": .4296248555, "bonus": 0., "maxTags": 3,
                 "modelVersion": version, "taxonomyVersion": "v0.2", "taxonomyHash": taxonomy_hash(categories),
                 "decisionVersion": "interest-decision-v1"}

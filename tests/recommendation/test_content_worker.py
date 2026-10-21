@@ -405,6 +405,7 @@ def test_main_opt_in_runs_strict_ranking_with_same_state_and_dedicated_token(cli
     monkeypatch.setattr(saved,'run',rank)
     def run(self,source):
         assert self.recommend()==0
+        self.saved_tag_recommend()
         return {'failureCount':0}
     monkeypatch.setattr(module.ContentWorker,'run',run)
     assert module.main(args+['--saved-tag-recommendations','--','apply'])==0
@@ -564,3 +565,62 @@ def test_operator_conflict_recovery_replays_saved_payload_without_model_call(tmp
     assert len(calls) == 1
     assert flag.with_name('conflict.resolved.json').exists()
     assert flag.with_name('receipt.json').exists()
+
+
+@pytest.mark.parametrize('source', ['daily', 'event'])
+@pytest.mark.parametrize('error', [BackendRequestError('private token', status=404), RuntimeError('private token')])
+def test_saved_tag_failure_preserves_personalized_coordination(tmp_path, taxonomy, source, error):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    def fail():
+        print('private token')
+        raise error
+    worker.saved_tag_recommend = fail
+    result = worker.run(source)
+    assert result['failureCount'] == 1 and result['status'] == 'partial'
+    assert result['stages']['recommendations']['status'] == 'success'
+    assert result['stages']['savedTags']['status'] == 'failed'
+    assert result['stages']['savedTags']['code'] == (
+        'BACKEND_REQUEST_FAILED' if isinstance(error, BackendRequestError) else 'SAVED_TAG_RECOMMENDATION_FAILED')
+    if source == 'event':
+        assert be.acks[-1]['status'] == 'completed'
+    else:
+        assert len(be.reconciles) == 1
+    assert not (tmp_path / 'last-success.json').exists()
+    assert 'private' not in (tmp_path / 'summary.json').read_text()
+    worker.saved_tag_recommend = lambda: None
+    assert worker.run(source)['failureCount'] == 0
+
+
+@pytest.mark.parametrize('provider,override', [('local', None), ('deepinfra', 'custom-v2')])
+def test_main_saved_tags_uses_daily_embedding_settings(cli, monkeypatch, provider, override):
+    module, daily, args = cli
+    import src.recommendation.saved_tags as saved
+    import src.recommendation.interest_runtime as runtime
+    monkeypatch.setattr(daily, 'main', lambda argv: 0)
+    monkeypatch.setattr(saved, 'SavedTagBackend', lambda *args: None)
+    monkeypatch.setattr(runtime, 'create_interest_embedding_client', lambda value: value)
+    received = []
+    monkeypatch.setattr(saved, 'run', lambda backend, state, cache, model, version, **kw: received.append((model, version)))
+    def run(self, source):
+        self.saved_tag_recommend()
+        return {'failureCount': 0}
+    monkeypatch.setattr(module.ContentWorker, 'run', run)
+    options = ['--embedding-provider', provider]
+    if override:
+        options += ['--embedding-model-version', override]
+    assert module.main(args + ['--saved-tag-recommendations', '--', 'apply'] + options) == 0
+    assert received == [(provider, override or f'BAAI/bge-m3@{provider}-v1')]
+
+
+@pytest.mark.parametrize('source', ['daily', 'event'])
+def test_saved_tag_success_does_not_mask_personalized_failure(tmp_path, taxonomy, source):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    worker.recommend = lambda: 1
+    worker.saved_tag_recommend = lambda: None
+    result = worker.run(source)
+    assert result['failureCount'] == 1
+    assert result['stages']['savedTags']['status'] == 'success'
+    assert result['stages']['recommendations']['status'] == 'failed'
+    assert not be.reconciles
+    if source == 'event':
+        assert be.acks[-1]['status'] == 'retry'

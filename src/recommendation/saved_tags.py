@@ -195,7 +195,7 @@ def run(backend, directory: Path, cache_path: Path, embedder, model_version, *, 
 def main(argv=None):
     import argparse
     import os
-    from src.recommendation.interest_runtime import create_interest_embedding_client
+    from src.recommendation.interest_runtime import create_interest_embedding_client, embedding_model_version
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=['dry-run', 'apply'])
     parser.add_argument('--be-base-url', required=True)
@@ -208,7 +208,7 @@ def main(argv=None):
             raise ValueError('EXTERNAL_TRANSFER_NOT_APPROVED')
         backend = SavedTagBackend(BackendClientConfig(args.be_base_url), os.environ.get('CKING_CONTENT_TAG_ACCESS_TOKEN'))
         result = run(backend, args.output_dir, args.cache, create_interest_embedding_client('deepinfra'),
-                     'BAAI/bge-m3@deepinfra-v1', apply=args.mode == 'apply')
+                     embedding_model_version('deepinfra'), apply=args.mode == 'apply')
         print(f"saved-tags: {result['status']} count={result['count']}")
         return 0
     except Exception as error:
