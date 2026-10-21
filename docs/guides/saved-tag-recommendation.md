@@ -50,6 +50,12 @@ HTTP 응답이 유실되면 저장 payload와 번호를 그대로 재전송한�
 공급자 실패는 빈 점수로 바꾸지 않는다. 실패 전에 성공한 임베딩만 캐시에 남으며 기존 BE 점수는 유지된다.
 
 콘텐츠 작업자에 `--saved-tag-recommendations`를 추가하면 기존 추천 다음 엄격 경로도 실행한다.
+`daily_args`의 `--embedding-provider`와 `--embedding-model-version`을 두 경로에 동일하게 적용한다.
+`savedTags`는 `recommendations`와 별도 스테이지다. saved-tags 실패는 summary의 failureCount와
+CLI 종료 코드 1로 알리지만, 성공한 기존 추천의 reconcile 및 콘텐츠 job completed ack를 막지 않는다.
+따라서 saved-tags 장애 때문에 콘텐츠 job을 retry하여 기존 개인화를 반복하지 않는다.
+실패한 saved-tags는 별도 apply 명령 또는 다음 일일 보정으로 재시도한다. 이벤트 idle poll은 이를 재시도하지 않는다.
+전체 스테이지가 성공하기 전에는 last-success.json을 갱신하지 않는다.
 BE가 없는 환경에서 자동 활성화하지 않는다. 본인 확인만 변경되고 새 소개 작업이 없으면 이벤트 poll은 idle이므로
 별도 명령이나 일일 보정에서 반영한다. PENDING 안내가 그 공백을 명시한다.
 
