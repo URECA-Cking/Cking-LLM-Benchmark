@@ -8,6 +8,7 @@ from src import pipeline
 from src.api_parity import compare_decisions, compare_embeddings
 from src.clients import OpenAIEmbeddingClient
 from src.clients.base import normalize_rows
+from src.similarity import cosine_matrix
 
 
 def _random_unit(rows: int, dim: int, seed: int) -> np.ndarray:
@@ -73,8 +74,9 @@ def test_identical_vectors_make_identical_decisions() -> None:
 
 def test_tag_flip_at_tau_is_caught_even_though_similarity_is_equivalent() -> None:
     creators, categories = _random_unit(10, 8, 14), _random_unit(3, 8, 15)
-    top = int(np.argmax(categories @ creators[0]))
-    tau = float(categories[top] @ creators[0])  # tau가 어떤 크리에이터의 실제 점수와 같다 → 그 크리에이터는 경계에 있다
+    scores = categories @ creators[0]  # 태그 판정(rank_categories)과 같은 계산
+    top = int(np.argmax(scores))
+    tau = float(scores[top])  # tau가 어떤 크리에이터의 실제 점수와 같다 → 그 크리에이터는 경계에 있다
     api_creators = creators.copy()
     api_creators[0] = normalize_rows((creators[0] - 1e-3 * categories[top])[None, :])[0]  # 유사도는 0.001만 낮아진다
 
@@ -88,8 +90,8 @@ def test_tag_flip_at_tau_is_caught_even_though_similarity_is_equivalent() -> Non
 
 def test_candidate_dropped_at_cutoff_is_caught() -> None:
     creators, categories = _random_unit(10, 8, 16), _random_unit(3, 8, 17)
-    scores = creators @ creators[0]
-    neighbor = int(np.argsort(-np.where(np.arange(10) == 0, -np.inf, scores))[2])  # 로컬에서 3위 후보
+    scores = cosine_matrix(creators)[0]  # 후보 판정과 같은 행렬. 자기 자신은 -inf로 가려져 있다
+    neighbor = int(np.argsort(-scores)[2])  # 로컬에서 3위 후보
     cutoff = float(scores[neighbor])  # 컷오프가 그 후보의 점수와 같다 → 로컬은 통과, API는 미세하게 낮아져 탈락
     api_creators = creators.copy()
     api_creators[neighbor] = normalize_rows((creators[neighbor] - 1e-3 * creators[0])[None, :])[0]
