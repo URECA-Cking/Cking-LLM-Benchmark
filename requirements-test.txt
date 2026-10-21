@@ -1,4 +1,4 @@
 # PR 테스트: 배포 버전 위에 실험 코드가 쓰는 sentence-transformers와 pytest를 더한다. torch는 CI가 CPU 인덱스에서 먼저 설치한다.
 -r requirements-deploy.txt
-sentence-transformers==5.7.0
+sentence-transformers==6.1.0
 pytest==9.1.1
