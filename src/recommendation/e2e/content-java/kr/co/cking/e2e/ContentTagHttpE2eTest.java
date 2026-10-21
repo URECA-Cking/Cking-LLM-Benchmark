@@ -79,6 +79,7 @@ class ContentTagHttpE2eTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM creator",Long.class)).isZero();
         Member owner = members.saveAndFlush(new Member("content-owner",null,null,MemberRole.USER));
         Member other = members.saveAndFlush(new Member("content-other",null,null,MemberRole.USER));
+        Member fan = members.saveAndFlush(new Member("content-fan",null,null,MemberRole.USER));
         List<Long> ids = new ArrayList<>();
         for (Member member : List.of(owner,other)) {
             Creator c = creators.saveAndFlush(new Creator(member.getMemberId(),member.getName()));
@@ -92,6 +93,7 @@ class ContentTagHttpE2eTest {
         creatorId=ids.getFirst(); ownerId=owner.getMemberId();
         Map<String,Object> config = Map.of("baseUrl","http://127.0.0.1:"+port,"apiKey",required("CKING_E2E_API_KEY"),
                 "userToken",issuer.issue(owner.getMemberId(),MemberRole.USER).accessToken(),
+                "fanToken",issuer.issue(fan.getMemberId(),MemberRole.USER).accessToken(),"fanId",fan.getMemberId(),
                 "otherToken",issuer.issue(other.getMemberId(),MemberRole.USER).accessToken(),"creatorIds",Map.of("1",ids.get(0),"2",ids.get(1)));
         ProcessBuilder builder = new ProcessBuilder(required("CKING_E2E_PYTHON"),"-m","src.recommendation.e2e.content_scenarios");
         builder.directory(new File(required("CKING_E2E_LLM_ROOT")));

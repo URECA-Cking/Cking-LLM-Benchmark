@@ -111,6 +111,7 @@ def require_local_docker(env):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="전용 MySQL·Redis와 실제 BE를 실행하는 추천 E2E")
     parser.add_argument("--be-dir", type=Path, default=ROOT.parent / "Cking-BE")
+    parser.add_argument("--fe-dir", type=Path, help="content suite에서 실제 FE Chromium 연동도 검증할 체크아웃")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "results" / "recommendation" / "e2e")
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--suite", choices=("recommendation", "content"), default="recommendation")
@@ -122,6 +123,8 @@ def main(argv=None):
     report = {"schemaVersion": 1, "status": "environment_failure", "checks": [],
               "cleanupVerified": False}
     env = clean_environment()
+    if args.fe_dir:
+        env['CKING_E2E_FE_ROOT'] = str(args.fe_dir.resolve())
     suffix = uuid.uuid4().hex
     names = [f"cking-e2e-mysql-{suffix}", f"cking-e2e-redis-{suffix}"]
     owned = []

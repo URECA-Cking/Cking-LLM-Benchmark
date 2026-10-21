@@ -7,6 +7,7 @@ from src.detail_tagging import digest, classify
 from src.recommendation.cache import JsonModelCache
 from src.recommendation.http import BackendRequestError, BackendClientConfig
 from src.recommendation.saved_tags import (METHOD, ROOT, SavedTagBackend, generate, recommend, run, validate_snapshot)
+from src.recommendation.saved_tags import recommend_for_member
 
 
 def snapshot(count=2):
@@ -49,6 +50,35 @@ def test_or_intersection_and_deduplication(tmp_path):
     result = recommend(value, payload(tmp_path), parents=['FOOD','GAME'], topics=['FOOD_BAKING'])
     assert [row['creatorId'] for row in result] == [1,2]
     assert [t['code'] for t in result[0]['matchedTags']] == ['FOOD','FOOD_BAKING']
+
+
+def test_member_interest_never_mixes_follow_or_popularity_and_excludes_before_limit(tmp_path):
+    value = snapshot(25)
+    result = payload(tmp_path, value)
+    assert recommend_for_member(value, result, source='INTEREST', followed_ids=[1]) == []
+    assert recommend_for_member(value, result, source='INTEREST', interest_codes=['UNKNOWN']) == []
+    assert recommend_for_member(value, result, source='INTEREST', interest_codes=['GAME']) == []
+    rows = recommend_for_member(value, result, source='INTEREST', interest_codes=['FOOD'], followed_ids=list(range(1, 24)), self_id=24)
+    assert [r['creatorId'] for r in rows] == [25]
+    assert rows[0]['interestCodes'] == ['FOOD'] and rows[0]['seedCreatorIds'] == []
+
+
+def test_follow_all_seeds_and_same_parent_sibling_are_related_without_inventing_tags(tmp_path):
+    value = snapshot(5)
+    value['items'][1].update(parents=['GAME'], topics=[])
+    value['items'][2].update(topics=['FOOD_EATING'])
+    value['items'][3].update(parents=['GAME'], topics=[])
+    value['items'][4].update(parents=[], topics=[])
+    value['items'].pop()  # 미확인/태그 없는 후보는 BE snapshot부터 제외한다.
+    value['snapshotHash'] = digest({k:v for k,v in value.items() if k not in {'snapshotHash','lastApplicationSequence'}})
+    result = payload(tmp_path, value)
+    rows = recommend_for_member(value, result, source='FOLLOW', followed_ids=[1,2,999])
+    assert [r['creatorId'] for r in rows] == [3,4]
+    assert [r['seedCreatorIds'] for r in rows] == [[1],[2]]
+    assert rows[0]['interestCodes'] == []
+    assert [t['code'] for t in rows[0]['matchedTags']] == ['FOOD']
+    assert recommend_for_member(value, result, source='FOLLOW', followed_ids=[999]) == []
+    assert recommend_for_member(value, result, source='FOLLOW', followed_ids=[1,2,3,4]) == []
 
 
 def test_full_eligible_pool_survives_global_twenty_limit(tmp_path):

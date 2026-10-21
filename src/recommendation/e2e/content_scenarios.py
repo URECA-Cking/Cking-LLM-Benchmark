@@ -126,13 +126,51 @@ def main():
             wire=json.loads((output/'saved-tags/current.json').read_text(encoding='utf-8'))
             stale_ranking={**wire['payload'],'applicationSequence':wire['sequence']+1}
             passed('saved_tags_exact_or_short_result_and_no_fallback')
+            # 기존 추천 화면의 두 영역을 실제 회원 관심 분야·팔로우와 연결한다.
+            fan=cfg['fanToken']
+            def member_query(source):
+                return request('GET','/api/me/creator-recommendations/by-tags?source='+source+'&size=20',token=fan)
+            assert not member_query('INTEREST')['items'] and not member_query('FOLLOW')['items']
+            request('PUT','/api/me/interests',dict(taxonomyVersion='v0.2',interestCodes=['MUSIC']),fan)
+            assert len(member_query('INTEREST')['items'])==1
+            second=request('GET','/api/creator/content-tags',token=cfg['otherToken'])
+            request('PUT','/api/creator/content-tags/confirmation',dict(automaticRevision=second['automaticRevision'],
+                inputHash=second['inputHash'],parents=['MUSIC'],topics=['MUSIC_VOCAL']),cfg['otherToken'])
+            saved_run(*saved_args,apply=True)
+            assert len(member_query('INTEREST')['items'])==2
+            request('PUT',f'/api/creators/{cid}/follow',{},fan)
+            follow=member_query('FOLLOW')
+            assert len(follow['items'])==1 and follow['items'][0]['seedCreatorIds']==[cid]
+            request('PUT',f'/api/creators/{cfg["creatorIds"]["2"]}/follow',{},fan)
+            assert not member_query('FOLLOW')['items'] and not member_query('INTEREST')['items']
+            for creator in cfg['creatorIds'].values():
+                request('DELETE',f'/api/creators/{creator}/follow',token=fan)
+            request('PUT','/api/me/interests',dict(taxonomyVersion='v0.2',interestCodes=['FOOD']),fan)
+            assert not member_query('INTEREST')['items']
+            request('PUT','/api/me/interests',dict(taxonomyVersion='v0.2',interestCodes=['MUSIC']),fan)
+            passed('member_interest_and_all_follow_tags_strict_two_zero_and_no_padding')
+            if os.environ.get('CKING_E2E_FE_ROOT'):
+                import subprocess
+                fe=Path(os.environ['CKING_E2E_FE_ROOT'])
+                probe=subprocess.run(['node',str(fe/'scripts/verify-saved-tag-recommendations.mjs')],cwd=fe,
+                    input=json.dumps(dict(baseUrl=cfg['baseUrl'],token=fan,memberId=cfg['fanId'],
+                        creatorIds=[cfg['creatorIds']['1'],cfg['creatorIds']['2']],screenshot=str(output/'frontend.png'))),
+                    text=True,encoding='utf-8',capture_output=True,timeout=120)
+                (output/'frontend-private.log').write_text((probe.stdout+'\n'+probe.stderr).replace(fan,'[REDACTED]'),encoding='utf-8')
+                assert probe.returncode==0, 'FE_INTEGRATION_FAILED'
+                report['frontend']=json.loads(probe.stdout)
+                report['feCommitSha']=git_sha(fe)
+                passed('actual_fe_chromium_be_mysql_llm_batch_existing_ui')
+            # 이후 변경 충돌 검증은 현재 새 순위를 기준으로 한다.
+            wire=json.loads((output/'saved-tags/current.json').read_text(encoding='utf-8'))
+            stale_ranking={**wire['payload'],'applicationSequence':wire['sequence']+1}
             # Separate DB transactions prove a competing stale delivery waits for Space edit lock.
             assert control('race',payload=payload)['serialized']
             assert view(True)['status']=='reanalysis_required'
             assert not tag_query(parentCodes='MUSIC')['items']
             reject('PUT',SAVED_API+'/rankings',stale_ranking,409)
-            # 현재 미확정 snapshot은 정상 빈 점수로 교체한다. 이전 확인 태그는 부활하지 않는다.
-            assert saved_run(*saved_args,apply=True)['count']==0
+            # 변경된 첫 Creator의 과거 태그는 숨기고, 정상인 두 번째 Creator의 두 점수는 유지한다.
+            assert saved_run(*saved_args,apply=True)['count']==2
             assert not tag_query(parentCodes='MUSIC')['items']
             report['savedTagSyntheticEmbeddingInputs']=saved_model.calls
             passed('saved_tags_intro_change_invalidates_and_stale_snapshot_rejected')
