@@ -103,7 +103,9 @@ def test_first_apply_top20_then_same_manifest_skips_models_and_puts(setup):
     backend, embedding, tagger, credentials, models, args, paths = setup
     assert daily_cli.main(["apply", *args, "--page-size", "10"]) == 0
     assert len(backend.gets) == 3 and len(backend.puts) == 25 + 17
-    assert all(len(payload["candidates"]) == 20 for _, payload in backend.puts)
+    assert all(0 <= len(payload["candidates"]) <= 20 for _, payload in backend.puts)
+    assert any(not payload["candidates"] for _, payload in backend.puts)
+    assert any(len(payload["candidates"]) == 20 for _, payload in backend.puts)
     assert all(payload["method"] == M2_METHOD for _, payload in backend.puts if "interestCode" in payload)
     assert credentials == [{"recommendation_api_key": "fake-key"}]
     assert paths.completed.exists() and not paths.active.exists()
@@ -248,8 +250,8 @@ def test_quality_report_applies_selected_method_and_settings(setup, tmp_path):
     assert daily_cli.main(["apply", *args, "--decision-report", str(path)]) == 0
     assert all(payload["method"] == M3_METHOD for _, payload in backend.puts if "interestCode" in payload)
     summary_path = paths.output_dir / read(paths.summary)["runDirectory"] / "interests" / "summary.json"
-    assert read(summary_path)["generationConfig"]["m3Bonus"] == .2
-    assert read(summary_path)["generationConfig"]["zeroShotTau"] == .5
+    assert read(summary_path)["generationConfig"]["legacyM3Bonus"] == .2
+    assert read(summary_path)["generationConfig"]["legacyZeroShotTau"] == .5
 
 
 @pytest.mark.parametrize("change", [{"method": "INVALID"}, {"taxonomyHash": "a" * 64},

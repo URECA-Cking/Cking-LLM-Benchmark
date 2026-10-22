@@ -27,6 +27,7 @@ def standalone(request, tmp_path, monkeypatch):
     monkeypatch.setattr(module, "CkingBackendClient", lambda *a, **k: backend)
     monkeypatch.setattr(batch_cli, "create_external_clients", lambda *a: (embedding, tagger))
     monkeypatch.setattr(interest_cli, "create_interest_embedding_client", lambda *a: embedding)
+    monkeypatch.setattr(interest_cli, "LazyOpenAITagger", lambda *a: tagger)
     output = tmp_path / "batch"
     args = ["apply", "--manifest", str(manifest_path), "--output-dir", str(output),
             "--cache", str(tmp_path / "cache.json"), "--be-base-url", "https://be.example"]

@@ -16,6 +16,7 @@ from src.recommendation.interest_runtime import create_interest_embedding_client
 from src.recommendation.manifest import load_manifest
 from src.recommendation.locking import batch_locks
 from src.recommendation.taxonomy import DEFAULT_CATEGORIES_CSV, load_service_categories, taxonomy_hash
+from src.recommendation.runtime import DEFAULT_TAG_MODEL, DEFAULT_TAG_PROMPT_VERSION, LazyOpenAITagger, build_service_tag_prompt
 
 
 DEFAULT_INTEREST_DIR = RESULTS_DIR / "recommendation" / "interests"
@@ -40,7 +41,7 @@ def _validate_paths(paths: dict[str, Path]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="v0.2 관심 분야별 M3 Top-20 생성 및 BE 적재")
+    parser = argparse.ArgumentParser(description="v0.2 LLM 태그 후보 제한·임베딩 순위 Top-20 생성 및 BE 적재")
     commands = parser.add_subparsers(dest="command", required=True)
     for command in ("dry-run", "apply"):
         sub = commands.add_parser(command)
@@ -50,14 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
         sub.add_argument("--top-n", type=int, default=20)
         sub.add_argument("--evaluation-top-n", type=int, default=10)
-        sub.add_argument("--zero-shot-tau", type=float, default=.4296248555)
-        sub.add_argument("--zero-shot-max-tags", type=int, default=3)
-        sub.add_argument("--m3-bonus", type=float, default=.1)
+        sub.add_argument("--zero-shot-tau", type=float, default=.4296248555, help="이전 인자 호환용; 후보 판정에 사용하지 않음")
+        sub.add_argument("--zero-shot-max-tags", type=int, default=3, help="이전 인자 호환용; 후보 판정에 사용하지 않음")
+        sub.add_argument("--m3-bonus", type=float, default=.1, help="이전 인자 호환용; 점수에 가산하지 않음")
         sub.add_argument("--score-decimals", type=int, default=8)
         sub.add_argument("--embedding-batch-size", type=int, default=96)
         sub.add_argument("--embedding-provider", choices=("local", "deepinfra"), default="local")
         sub.add_argument("--embedding-model-version", help="BGE-M3 모델/런타임 변경 시 새 버전 사용")
         sub.add_argument("--taxonomy-version", default="v0.2")
+        sub.add_argument("--tag-model", default=DEFAULT_TAG_MODEL)
+        sub.add_argument("--tag-prompt-version", default=DEFAULT_TAG_PROMPT_VERSION)
         sub.add_argument("--taxonomy-hash", help="BE와 합의한 v0.2 해시를 명시적으로 검증")
         if command == "apply":
             _add_backend_options(sub)
@@ -73,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
         score_decimals=args.score_decimals, embedding_batch_size=args.embedding_batch_size,
         embedding_model_version=args.embedding_model_version or f"BAAI/bge-m3@{args.embedding_provider}-v1",
         taxonomy_version=args.taxonomy_version, taxonomy_hash=args.taxonomy_hash or taxonomy_hash(categories),
+        tag_model_version=args.tag_model, tag_prompt_version=args.tag_prompt_version,
+        tag_prompt=build_service_tag_prompt(categories),
     )
     if taxonomy_hash(categories) != config.taxonomy_hash:
         raise ValueError("분야 CSV의 taxonomyHash가 지정 설정과 다릅니다.")
@@ -102,6 +107,7 @@ def _run_locked_batch(args, categories, config, paths):
     recommender = InterestRecommender(
         manifest, categories, create_interest_embedding_client(args.embedding_provider),
         JsonModelCache(args.cache), config,
+        tagging_client=LazyOpenAITagger([c.code for c in categories], config.tag_prompt, config.tag_model_version),
     )
     batch = InterestRecommendationBatch(
         recommender, paths, backend=backend, evaluation_top_n=args.evaluation_top_n,

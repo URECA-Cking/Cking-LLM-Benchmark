@@ -17,7 +17,7 @@ from src.recommendation.http import CkingBackendClient
 from src.recommendation.interest import M2_METHOD, M3_METHOD, InterestRecommendationConfig, InterestRecommender
 from src.recommendation.interest_batch import InterestBatchPaths, InterestRecommendationBatch
 from src.recommendation.interest_runtime import create_interest_embedding_client
-from src.recommendation.runtime import DEFAULT_TAG_MODEL, DEFAULT_TAG_PROMPT_VERSION, DEFAULT_CATEGORIES_CSV, LazyOpenAITagger
+from src.recommendation.runtime import DEFAULT_TAG_MODEL, DEFAULT_TAG_PROMPT_VERSION, DEFAULT_CATEGORIES_CSV, LazyOpenAITagger, build_service_tag_prompt
 from src.recommendation.taxonomy import load_service_categories, taxonomy_hash
 from src.recommendation.service import SimilarCreatorRecommender
 
@@ -64,6 +64,8 @@ def _interest_selection(args, categories):
         top_n=args.top_n, zero_shot_tau=selected["tau"], m3_bonus=selected["bonus"],
         zero_shot_max_tags=selected["maxTags"], embedding_model_version=selected["modelVersion"],
         taxonomy_version=selected["taxonomyVersion"], taxonomy_hash=selected["taxonomyHash"],
+        tag_model_version=args.tag_model, tag_prompt_version=args.tag_prompt_version,
+        tag_prompt=build_service_tag_prompt(categories),
     )
     return selected, config
 
@@ -108,7 +110,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def interest_factory(manifest, directory):
         model_cache, client = shared_models()
-        recommender = InterestRecommender(manifest, categories, client, model_cache, interest_config)
+        recommender = InterestRecommender(manifest, categories, client, model_cache, interest_config,
+            tagging_client=LazyOpenAITagger([c.code for c in categories], interest_config.tag_prompt, interest_config.tag_model_version))
         return InterestRecommendationBatch(recommender, InterestBatchPaths(directory), backend=backend,
                                            evaluation_top_n=min(10, args.top_n), secret_values=secrets,
                                            selected_method=selected["method"])

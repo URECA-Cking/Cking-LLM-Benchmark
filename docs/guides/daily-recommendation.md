@@ -1,5 +1,8 @@
 # manifest 변경 감지와 일일 추천 배치
 
+관심 분야 후보는 유사 추천과 같은 LLM 태그 캐시를 사용해 제한한다.
+임베딩은 순위 계산에만 사용한다. [정책 변경·전체 재적재](../interest-llm-eligibility.md)를 확인한다.
+
 [문서 안내](../README.md) · [Creator 배치](batch-recommendation.md) · [관심 분야 배치](interest-recommendation.md)
 
 ## 매일 실행할 명령

@@ -61,6 +61,7 @@ class RecommendationResult:
     model_version: str
     input_hash: str
     candidates: tuple[RecommendationCandidate, ...]
+    eligibility: dict | None = None
 
     def to_backend_payload(self) -> dict[str, object]:
         """부분 상태 없이 한 번에 적재할 수 있는 BE 전달 payload를 만든다."""
@@ -80,4 +81,5 @@ class RecommendationResult:
             "modelVersion": self.model_version,
             "inputHash": self.input_hash,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
+            **({"eligibility": self.eligibility} if self.eligibility is not None else {}),
         }

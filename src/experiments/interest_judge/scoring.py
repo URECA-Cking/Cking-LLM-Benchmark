@@ -94,11 +94,15 @@ def aggregate(contract, scores):
 
 def choose_decision(contract, judge_report, human_report):
     generation = contract["generationConfig"]
+    llm_gated = generation.get("classificationSource") == "LLM_CONFIRMED_V1"
+    tau = generation["legacyZeroShotTau"] if llm_gated else generation["zeroShotTau"]
+    max_tags = generation["legacyZeroShotMaxTags"] if llm_gated else generation["zeroShotMaxTags"]
+    bonus = 0. if llm_gated else generation["m3Bonus"]
     result = {"conclusion": "M2 유지", "reason": "Judge 또는 최소 50쌍 사람 검증이 미완료",
-              "method": M2_METHOD, "tau": generation["zeroShotTau"], "bonus": 0.,
-              "maxTags": generation["zeroShotMaxTags"], "version": "interest-decision-v1",
-              "evaluatedM3": {"method": M3_METHOD, "tau": generation["zeroShotTau"],
-                              "bonus": generation["m3Bonus"], "modelVersion": generation["embeddingModelVersion"]},
+              "method": M2_METHOD, "tau": tau, "bonus": 0.,
+              "maxTags": max_tags, "version": "interest-decision-v1",
+              "evaluatedM3": {"method": M3_METHOD, "tau": tau,
+                              "bonus": bonus, "modelVersion": generation["embeddingModelVersion"]},
               "provisional": True}
     # 신뢰구간은 사전 채택 문턱을 바꾸지 않고 결론과 함께 해석 정보를 제공한다.
     result["primaryMetricUncertainty"] = None
@@ -133,7 +137,7 @@ def choose_decision(contract, judge_report, human_report):
         for k in (5, 10))
     if eligible:
         result.update(conclusion="M3 채택", reason="사전 +0.03 기준과 사람 적합·잡음 비악화 기준 충족",
-                      method=M3_METHOD, bonus=generation["m3Bonus"], provisional=False)
+                      method=M3_METHOD, bonus=bonus, provisional=False)
     else:
         result.update(conclusion="추가 실험", reason="사전 기준 미충족: M2를 유지하고 제한된 tau·bonus 후보를 별도 계약으로 비교")
     return finalized()
