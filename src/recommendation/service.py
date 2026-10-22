@@ -1,0 +1,344 @@
+"""단일 크리에이터의 M2/M4 유사 추천 후보를 결정적으로 생성한다."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, field
+from typing import Iterable, Protocol
+
+import numpy as np
+
+from src.clients.base import EmbeddingClient
+from src.clients.openai_tagger import TagResult
+from src.recommendation.cache import ModelCache, text_hash
+from src.recommendation.eligibility import POLICY, proof
+from src.recommendation.taxonomy import load_service_categories, DEFAULT_CATEGORIES_CSV
+from src.recommendation.embeddings import EMBEDDING_CONTRACT_VERSION, validated_embeddings
+from src.recommendation.models import (
+    MAX_BACKEND_CANDIDATES,
+    CreatorProfile,
+    RecommendationCandidate,
+    RecommendationResult,
+)
+from src.recommendation.taxonomy import (
+    DEFAULT_TAG_PROMPT_VERSION,
+    DEFAULT_TAXONOMY_VERSION,
+    default_taxonomy_hash,
+)
+
+
+class TaggingClient(Protocol):
+    """M4 상위 분야 분류기의 최소 인터페이스다."""
+
+    def tag(self, input_text: str) -> TagResult:
+        ...
+
+
+@dataclass(frozen=True)
+class RecommendationConfig:
+    """서비스 적용 방식과 캐시 무효화 버전을 한곳에 고정한다."""
+
+    eligibility_tau: float = 0.4296248555
+    short_introduction_chars: int = 15
+    top_n: int = 5
+    m4_bonus: float = 0.2
+    score_decimals: int = 8
+    embedding_batch_size: int = 96
+    tag_cache_flush_size: int = 100
+    embedding_model_version: str = "BAAI/bge-m3@deepinfra-v1"
+    tag_model_version: str = "gpt-5.4-nano-2026-03-17"
+    tag_prompt_version: str = DEFAULT_TAG_PROMPT_VERSION
+    tag_prompt: str = DEFAULT_TAG_PROMPT_VERSION
+    taxonomy_version: str = DEFAULT_TAXONOMY_VERSION
+    taxonomy_hash: str = field(default_factory=default_taxonomy_hash)
+    allowed_tags: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not np.isfinite(self.eligibility_tau) or not -1 <= self.eligibility_tau <= 1:
+            raise ValueError("eligibility_tau must be finite in [-1,1]")
+        if self.short_introduction_chars <= 0:
+            raise ValueError("short_introduction_chars는 양수여야 합니다.")
+        if isinstance(self.top_n, bool) or not isinstance(self.top_n, int) or not 1 <= self.top_n <= MAX_BACKEND_CANDIDATES:
+            raise ValueError("top_n은 1~100의 정수여야 합니다.")
+        if not np.isfinite(self.m4_bonus) or not 0 <= self.m4_bonus <= 1:
+            raise ValueError("m4_bonus는 0~1의 유한한 수여야 합니다.")
+        if self.score_decimals < 0:
+            raise ValueError("score_decimals는 0 이상이어야 합니다.")
+        if self.embedding_batch_size <= 0:
+            raise ValueError("embedding_batch_size는 양수여야 합니다.")
+        if self.tag_cache_flush_size <= 0:
+            raise ValueError("tag_cache_flush_size는 양수여야 합니다.")
+        for name, value in (
+            ("embedding_model_version", self.embedding_model_version),
+            ("tag_model_version", self.tag_model_version),
+            ("tag_prompt_version", self.tag_prompt_version),
+            ("tag_prompt", self.tag_prompt),
+            ("taxonomy_version", self.taxonomy_version),
+        ):
+            if not value.strip():
+                raise ValueError(f"{name}은 비어 있을 수 없습니다.")
+        if len(self.taxonomy_hash) != 64 or any(char not in "0123456789abcdef" for char in self.taxonomy_hash):
+            raise ValueError("taxonomy_hash는 64자리 SHA-256 소문자 hex여야 합니다.")
+        for method in ("M2", "M4"):
+            if len(self.model_version(method)) > 255:
+                raise ValueError(f"{method} modelVersion은 255자를 초과할 수 없습니다.")
+
+    @property
+    def tag_cache_version(self) -> str:
+        """프롬프트 본문이나 분류체계가 바뀌어도 태그 캐시가 무효화되는 식별자다."""
+        prompt_hash = hashlib.sha256(self.tag_prompt.encode("utf-8")).hexdigest()
+        return f"{self.tag_prompt_version}:{self.taxonomy_version}:{self.taxonomy_hash}:{prompt_hash}"
+
+    def model_version(self, method: str) -> str:
+        if method == "M2":
+            return self.embedding_model_version
+        if method == "M4":
+            return f"{self.embedding_model_version}+{self.tag_model_version}@{self.tag_prompt_version}"
+        raise ValueError(f"지원하지 않는 추천 방식입니다: {method}")
+
+
+class SimilarCreatorRecommender:
+    """주입된 모델 클라이언트와 캐시로 Top-N 유사 후보를 만든다."""
+
+    def __init__(
+        self,
+        embedding_client: EmbeddingClient,
+        tagging_client: TaggingClient,
+        cache: ModelCache,
+        config: RecommendationConfig | None = None,
+    ) -> None:
+        self.embedding_client = embedding_client
+        self.tagging_client = tagging_client
+        self.cache = cache
+        self.config = config or RecommendationConfig()
+        self._eligibility_categories = None
+
+    def recommend(
+        self,
+        seed: CreatorProfile,
+        candidates: Iterable[CreatorProfile],
+        top_n: int | None = None,
+    ) -> RecommendationResult:
+        """seed 자신과 중복을 제외하고 점수·ID 순으로 정렬한 후보 묶음을 반환한다.
+
+        빈 seed 소개는 추측하지 않고 빈 결과를 낸다. 일반 소개의 태그가 유효한 빈 결과
+        (UNCLASSIFIED)이면 M2로 폴백한다. 모델 API 예외는 잡지 않아 부분 결과가 저장되지
+        않게 하며, 호출 전까지 성공한 개별 캐시는 다음 배치 재시도에서 재사용한다.
+        """
+        limit = self.config.top_n if top_n is None else top_n
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_BACKEND_CANDIDATES:
+            raise ValueError("top_n은 1~100의 정수여야 합니다.")
+
+        pool = self._deduplicate(seed, candidates)
+        if not seed.text or not pool:
+            method = "M2"
+            model_version = self.config.model_version(method)
+            return RecommendationResult(
+                creator_id=seed.creator_id,
+                method=method,
+                model_version=model_version,
+                input_hash=self._generation_input_hash(seed, pool, limit, method, model_version),
+                candidates=(),
+                eligibility=proof([seed], {}, self.config.taxonomy_version, self.config.taxonomy_hash),
+            )
+
+        request_profiles = [seed, *pool]
+        method = "M2"
+        tags_by_id: dict[int, frozenset[str]] = {}
+        if len(seed.text) >= self.config.short_introduction_chars:
+            seed_tags = self._tags_many([seed.text])[seed.text]
+            if not seed_tags:
+                model_version = self.config.model_version("M2")
+                return RecommendationResult(
+                    creator_id=seed.creator_id, method="M2", model_version=model_version,
+                    input_hash=self._generation_input_hash(seed, pool, limit, "M2", model_version),
+                    candidates=(), eligibility=proof([seed], {}, self.config.taxonomy_version, self.config.taxonomy_hash),
+                )
+            if seed_tags:
+                method = "M4"
+                tags_by_id[seed.creator_id] = seed_tags
+                candidate_tags = self._tags_many([candidate.text for candidate in pool])
+                for candidate in pool:
+                    tags_by_id[candidate.creator_id] = candidate_tags[candidate.text]
+
+        if method == "M2":
+            # 짧은 소개의 M2 점수는 그대로 두고 같은 BGE-M3의 기존 tau 분류로 후보 자격만 정한다.
+            if self._eligibility_categories is None:
+                self._eligibility_categories = tuple(c for c in load_service_categories(DEFAULT_CATEGORIES_CSV)
+                    if not self.config.allowed_tags or c.code in self.config.allowed_tags)
+            categories = self._eligibility_categories
+            query_profiles = [CreatorProfile(max(p.creator_id for p in request_profiles) + 1 + i, c.description) for i,c in enumerate(categories)]
+            classified = self._embeddings([*request_profiles, *query_profiles])
+            for profile in request_profiles:
+                scores = [float(np.clip(classified[profile.creator_id] @ classified[q.creator_id], -1, 1)) for q in query_profiles]
+                order = sorted(range(len(categories)), key=lambda i:(-scores[i], i))
+                tags_by_id[profile.creator_id] = frozenset(categories[i].code for i in order[:3] if scores[i] >= self.config.eligibility_tau)
+
+        vectors = self._embeddings(request_profiles)
+        seed_vector = vectors[seed.creator_id]
+        scored: list[tuple[int, float]] = []
+        for candidate in pool:
+            if not tags_by_id[seed.creator_id] & tags_by_id[candidate.creator_id]:
+                continue
+            score = float(np.clip(seed_vector @ vectors[candidate.creator_id], -1.0, 1.0))
+            if method == "M4":
+                score += self.config.m4_bonus
+            scored.append((candidate.creator_id, round(score, self.config.score_decimals)))
+
+        scored.sort(key=lambda item: (-item[1], item[0]))
+        selected = scored[:limit]
+        model_version = self.config.model_version(method)
+        input_hash = self._generation_input_hash(seed, pool, limit, method, model_version)
+        result = tuple(
+            RecommendationCandidate(
+                creator_id=seed.creator_id,
+                similar_creator_id=candidate_id,
+                score=score,
+                rank=rank,
+                method=method,
+                model_version=model_version,
+                input_hash=input_hash,
+            )
+            for rank, (candidate_id, score) in enumerate(selected, start=1)
+        )
+        return RecommendationResult(
+            creator_id=seed.creator_id,
+            method=method,
+            model_version=model_version,
+            input_hash=input_hash,
+            candidates=result,
+            eligibility=proof([seed, *[p for p in pool if p.creator_id in dict(selected)]], tags_by_id,
+                              self.config.taxonomy_version, self.config.taxonomy_hash),
+        )
+
+    def _deduplicate(self, seed: CreatorProfile, candidates: Iterable[CreatorProfile]) -> list[CreatorProfile]:
+        by_id: dict[int, CreatorProfile] = {}
+        for candidate in candidates:
+            if candidate.creator_id == seed.creator_id:
+                continue
+            current = by_id.get(candidate.creator_id)
+            if current is not None and current.text != candidate.text:
+                raise ValueError(f"같은 creatorId에 서로 다른 소개가 있습니다: {candidate.creator_id}")
+            by_id[candidate.creator_id] = candidate
+        return [by_id[creator_id] for creator_id in sorted(by_id) if by_id[creator_id].text]
+
+    def _embeddings(self, profiles: list[CreatorProfile]) -> dict[int, np.ndarray]:
+        by_text: dict[str, list[CreatorProfile]] = {}
+        for profile in profiles:
+            by_text.setdefault(profile.text, []).append(profile)
+
+        vector_by_text: dict[str, np.ndarray] = {}
+        missing: list[str] = []
+        for text in by_text:
+            try:
+                cached = self.cache.get_embedding(text_hash(text), self.config.embedding_model_version)
+                if cached is not None:
+                    vector_by_text[text] = self._validated_embeddings(
+                        [cached],
+                        expected_rows=1,
+                        source="캐시",
+                    )[0]
+            except (TypeError, ValueError, OverflowError):
+                cached = None
+            if cached is None:
+                missing.append(text)
+
+        if missing:
+            for start in range(0, len(missing), self.config.embedding_batch_size):
+                texts = missing[start : start + self.config.embedding_batch_size]
+                raw, generated = validated_embeddings(
+                    self.embedding_client.embed(texts), len(texts), self.embedding_client.dim,
+                )
+                records = []
+                for text, vector, original in zip(texts, generated, raw):
+                    vector_by_text[text] = vector
+                    records.append((text_hash(text), self.config.embedding_model_version, original.tolist()))
+                self.cache.put_embeddings(records)
+
+        return {
+            profile.creator_id: vector_by_text[profile.text]
+            for profiles_with_text in by_text.values()
+            for profile in profiles_with_text
+        }
+
+    def _validated_embeddings(self, values: object, expected_rows: int, source: str) -> np.ndarray:
+        """캐시와 모델 응답을 같은 계약으로 검증하고 단위 벡터로 정규화한다."""
+        return validated_embeddings(values, expected_rows, self.embedding_client.dim)[1]
+
+    def _tags_many(self, texts: list[str]) -> dict[str, frozenset[str]]:
+        return self.classify_texts(texts)
+
+    def classify_texts(self, texts: list[str]) -> dict[str, frozenset[str]]:
+        """유사 추천과 관심 분야 추천에서 같은 검증·캐시 계약을 사용한다."""
+        by_text: dict[str, frozenset[str]] = {}
+        missing: list[str] = []
+        for text in dict.fromkeys(texts):
+            cached = self.cache.get_tags(
+                text_hash(text),
+                self.config.tag_model_version,
+                self.config.tag_cache_version,
+            )
+            if cached is None or len(cached) > 3 or len(set(cached)) != len(cached) or (self.config.allowed_tags and not set(cached) <= self.config.allowed_tags):
+                missing.append(text)
+            else:
+                by_text[text] = frozenset(cached)
+
+        pending_records: list[tuple[str, str, str, tuple[str, ...]]] = []
+        try:
+            for text in missing:
+                result = self.tagging_client.tag(text)
+                if len(result.tags) > 3 or len(set(result.tags)) != len(result.tags):
+                    raise ValueError("태그는 중복 없는 0~3개여야 합니다.")
+                tags = tuple(sorted(result.tags))
+                if self.config.allowed_tags and not set(tags) <= self.config.allowed_tags:
+                    unknown = sorted(set(tags) - self.config.allowed_tags)
+                    raise ValueError(f"분류체계에 없는 태그가 반환됐습니다: {unknown}")
+                by_text[text] = frozenset(tags)
+                pending_records.append(
+                    (
+                        text_hash(text),
+                        self.config.tag_model_version,
+                        self.config.tag_cache_version,
+                        tags,
+                    )
+                )
+                if len(pending_records) == self.config.tag_cache_flush_size:
+                    self.cache.put_tag_records(pending_records)
+                    pending_records = []
+        except Exception:
+            self.cache.put_tag_records(pending_records)
+            raise
+        self.cache.put_tag_records(pending_records)
+        return by_text
+
+    def _generation_input_hash(
+        self,
+        seed: CreatorProfile,
+        pool: list[CreatorProfile],
+        top_n: int,
+        method: str,
+        model_version: str,
+    ) -> str:
+        manifest = {
+            "embeddingContract": EMBEDDING_CONTRACT_VERSION,
+            "eligibilityPolicy": POLICY, "eligibilityTau": self.config.eligibility_tau,
+            "unclassifiedSeed": "empty-v1",
+            "creatorId": seed.creator_id,
+            "introduction": seed.text,
+            "candidates": [
+                {"creatorId": candidate.creator_id, "introduction": candidate.text}
+                for candidate in pool
+            ],
+            "topN": top_n,
+            "method": method,
+            "modelVersion": model_version,
+            "shortIntroductionChars": self.config.short_introduction_chars,
+            "m4Bonus": self.config.m4_bonus,
+            "scoreDecimals": self.config.score_decimals,
+            "taxonomyVersion": self.config.taxonomy_version,
+            "taxonomyHash": self.config.taxonomy_hash,
+            "tagCacheVersion": self.config.tag_cache_version,
+        }
+        encoded = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

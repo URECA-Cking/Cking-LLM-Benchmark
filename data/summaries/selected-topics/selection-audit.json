@@ -1,0 +1,45 @@
+{
+  "original_plan_hash": "d5090eadf4ef027d3c4f3c25ed2f338cc518ce57caa342bca6a6ca23b3f57cc8",
+  "selection_file_hash": "332a177ec62124e1cc527f3fda47e8c4fd633ca03c6a10a5eaca2575195ebf15",
+  "verified_case_topics": [
+    "BEAUTY_HAIR",
+    "FASHION_BAGS",
+    "FASHION_SHOES",
+    "FITNESS_WEIGHTS",
+    "FOOD_BAKING",
+    "TECH_PROGRAMMING",
+    "TRAVEL_DOMESTIC"
+  ],
+  "correct_user_selections": [
+    {
+      "requested": "헬스",
+      "topic": "FITNESS_WEIGHTS"
+    },
+    {
+      "requested": "코딩",
+      "topic": "TECH_PROGRAMMING"
+    },
+    {
+      "requested": "베이킹",
+      "topic": "FOOD_BAKING"
+    },
+    {
+      "requested": "헤어",
+      "topic": "BEAUTY_HAIR"
+    },
+    {
+      "requested": "신발",
+      "topic": "FASHION_SHOES"
+    },
+    {
+      "requested": "가방",
+      "topic": "FASHION_BAGS"
+    },
+    {
+      "requested": "국내 여행",
+      "topic": "TRAVEL_DOMESTIC"
+    }
+  ],
+  "reason": "Preparation loop overwrote user_selections metadata with the final candidate list. Frozen cases, candidates and human evidence remain unchanged.",
+  "regenerated_candidate_and_evidence_match": true
+}

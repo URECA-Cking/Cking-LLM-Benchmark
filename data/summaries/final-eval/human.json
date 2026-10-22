@@ -1,0 +1,136 @@
+{
+  "contract_verified": true,
+  "plan_hash": "37ffe6fde33667b30343e8cb9d24c0fee11418ab8534befff7fa81db38a7cb47",
+  "human_hash": "53255bedd508a33bba84cdda56f37590c6d77d04aeb84a20fa7aca92e00665ef",
+  "rated_pairs": 801,
+  "answers": {
+    "1": 532,
+    "0": 269
+  },
+  "groups": {
+    "regular": {
+      "n": 75,
+      "p_at_5": {
+        "M2": 0.736,
+        "M3": 0.7546666666666666,
+        "M4": 0.8266666666666667,
+        "H3": 0.7493333333333333,
+        "H4": 0.8346666666666666
+      },
+      "unknown_at_5": {
+        "M2": 0.0,
+        "M3": 0.0,
+        "M4": 0.0,
+        "H3": 0.0,
+        "H4": 0.0
+      },
+      "contrasts": {
+        "M3-M2": {
+          "difference": 0.018666666666666665,
+          "interval_99": [
+            0.002666666666666666,
+            0.04266666666666667
+          ]
+        },
+        "M4-M3": {
+          "difference": 0.072,
+          "interval_99": [
+            0.024,
+            0.13067999999999788
+          ]
+        },
+        "H3-M3": {
+          "difference": -0.005333333333333337,
+          "interval_99": [
+            -0.05066666666666668,
+            0.034666666666666665
+          ]
+        },
+        "H4-M4": {
+          "difference": 0.008000000000000002,
+          "interval_99": [
+            -0.021333333333333333,
+            0.03733333333333333
+          ]
+        },
+        "H4-H3": {
+          "difference": 0.08533333333333334,
+          "interval_99": [
+            0.026666666666666672,
+            0.152
+          ]
+        }
+      }
+    },
+    "short": {
+      "n": 25,
+      "p_at_5": {
+        "M2": 0.648,
+        "M3": 0.6560000000000001,
+        "M4": 0.68,
+        "H3": 0.664,
+        "H4": 0.6880000000000002
+      },
+      "unknown_at_5": {
+        "M2": 0.0,
+        "M3": 0.0,
+        "M4": 0.0,
+        "H3": 0.0,
+        "H4": 0.0
+      },
+      "contrasts": {
+        "M3-M2": {
+          "difference": 0.008,
+          "interval_99": [
+            0.0,
+            0.032
+          ]
+        },
+        "M4-M3": {
+          "difference": 0.024,
+          "interval_99": [
+            -0.05599999999999999,
+            0.12
+          ]
+        },
+        "H3-M3": {
+          "difference": 0.007999999999999998,
+          "interval_99": [
+            0.0,
+            0.031999999999999994
+          ]
+        },
+        "H4-M4": {
+          "difference": 0.008,
+          "interval_99": [
+            -0.032,
+            0.064
+          ]
+        },
+        "H4-H3": {
+          "difference": 0.024000000000000004,
+          "interval_99": [
+            -0.064,
+            0.168
+          ]
+        }
+      }
+    }
+  },
+  "decision_rule": {
+    "minimum_gain": 0.03,
+    "primary_contrasts": [
+      "M3-M2",
+      "M4-M3",
+      "H3-M3",
+      "H4-M4",
+      "H4-H3"
+    ],
+    "bootstrap_resamples": 10000,
+    "bootstrap_seed": 20261001,
+    "interval_rule": "Bonferroni: per contrast 99% percentile paired bootstrap within each intro group; exploratory single-rater uncertainty",
+    "uncertainty": "paired input bootstrap with simultaneous intervals across five prespecified contrasts",
+    "unclear": "simpler_method_provisional_not_equivalent",
+    "final_adoption": "offline provisional; cost ceilings and service validation not established"
+  }
+}

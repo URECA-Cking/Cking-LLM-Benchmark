@@ -1,0 +1,1597 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "rrfK": 60,
+    "scoreScale": 8,
+    "roundingMode": "HALF_UP",
+    "interestWeight": "0.5",
+    "followWeight": "0.5"
+  },
+  "cases": [
+    {
+      "id": "both_groups_valid",
+      "description": "두 그룹 0.5씩 혼합하며 한 그룹에만 있는 후보도 0.5를 적용한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 102,
+                  "rank": 3
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 103,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 101,
+                  "rank": 2
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "HYBRID_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 1
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01626124",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": [
+              2
+            ]
+          },
+          {
+            "creatorId": 103,
+            "aggregateScore": "0.00819672",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              2
+            ]
+          },
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00793651",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "interest_only",
+      "description": "팔로우가 없으면 관심 분야 평균을 전체 점수로 사용한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 102,
+                  "rank": 2
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 103,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 2,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01626124",
+            "interestCodes": [
+              "FITNESS",
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          },
+          {
+            "creatorId": 103,
+            "aggregateScore": "0.00819672",
+            "interestCodes": [
+              "FITNESS"
+            ],
+            "seedCreatorIds": []
+          },
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00806452",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "follow_only",
+      "description": "관심 분야가 없으면 유효 seed 둘의 평균을 사용한다. 합산만 하지 않는다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [],
+        "followedCreatorIds": [
+          3,
+          2
+        ],
+        "interestSources": [],
+        "followSources": [
+          {
+            "seedCreatorId": 3,
+            "activeGeneration": {
+              "generationId": "generation-3",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 103,
+                  "rank": 1
+                }
+              ]
+            }
+          },
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 102,
+                  "rank": 2
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "FOLLOW_PERSONALIZED_V2",
+        "validSourceCounts": {
+          "interest": 0,
+          "follow": 2
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01626124",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              2,
+              3
+            ]
+          },
+          {
+            "creatorId": 103,
+            "aggregateScore": "0.00819672",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              3
+            ]
+          },
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00806452",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "neither_selected",
+      "description": "두 그룹이 비어도 FOLLOW_PERSONALIZED_V2와 빈 목록을 반환한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [],
+        "followedCreatorIds": [],
+        "interestSources": [],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "FOLLOW_PERSONALIZED_V2",
+        "validSourceCounts": {
+          "interest": 0,
+          "follow": 0
+        },
+        "items": []
+      }
+    },
+    {
+      "id": "all_sources_invalid",
+      "description": "활성 세대 없음·빈 세대·전부 제외는 양쪽 모두 무효다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS",
+          "GAME"
+        ],
+        "followedCreatorIds": [
+          2,
+          3,
+          4
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": null
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": []
+            }
+          },
+          {
+            "interestCode": "GAME",
+            "activeGeneration": {
+              "generationId": "generation-GAME",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 2,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": null
+          },
+          {
+            "seedCreatorId": 3,
+            "activeGeneration": {
+              "generationId": "generation-3",
+              "candidates": []
+            }
+          },
+          {
+            "seedCreatorId": 4,
+            "activeGeneration": {
+              "generationId": "generation-4",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 3,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 1,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 2,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 3,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 104,
+            "hasCreatorSpace": false
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "FOLLOW_PERSONALIZED_V2",
+        "validSourceCounts": {
+          "interest": 0,
+          "follow": 0
+        },
+        "items": []
+      }
+    },
+    {
+      "id": "duplicate_candidates_and_sorted_provenance",
+      "description": "여러 source의 동일 후보를 합치고 기여 분야·seed를 정렬한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS"
+        ],
+        "followedCreatorIds": [
+          10,
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 102,
+                  "rank": 2
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 10,
+            "activeGeneration": {
+              "generationId": "generation-10",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 103,
+                  "rank": 2
+                }
+              ]
+            }
+          },
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "HYBRID_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 2,
+          "follow": 2
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01639344",
+            "interestCodes": [
+              "FITNESS",
+              "FOOD"
+            ],
+            "seedCreatorIds": [
+              2,
+              10
+            ]
+          },
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00403226",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          },
+          {
+            "creatorId": 103,
+            "aggregateScore": "0.00403226",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              10
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "equal_scores_creator_id_ascending",
+      "description": "서로 반대 순위인 후보의 평균 점수가 같으면 ID 오름차순이다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 10,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 2,
+                  "rank": 2
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": [
+                {
+                  "creatorId": 2,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 10,
+                  "rank": 2
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 10,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 2,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 2,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 2,
+            "aggregateScore": "0.01626124",
+            "interestCodes": [
+              "FITNESS",
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          },
+          {
+            "creatorId": 10,
+            "aggregateScore": "0.01626124",
+            "interestCodes": [
+              "FITNESS",
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "filter_before_valid_source_count",
+      "description": "본인·팔로우·Space 없음 제외 후 source 분모를 정하며 원래 rank를 유지한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS",
+          "GAME",
+          "TECH",
+          "MUSIC"
+        ],
+        "followedCreatorIds": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 2,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                },
+                {
+                  "creatorId": 101,
+                  "rank": 4
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 3,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "GAME",
+            "activeGeneration": {
+              "generationId": "generation-GAME",
+              "candidates": []
+            }
+          },
+          {
+            "interestCode": "TECH",
+            "activeGeneration": null
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 4,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                },
+                {
+                  "creatorId": 101,
+                  "rank": 4
+                },
+                {
+                  "creatorId": 102,
+                  "rank": 5
+                }
+              ]
+            }
+          },
+          {
+            "seedCreatorId": 3,
+            "activeGeneration": {
+              "generationId": "generation-3",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 5,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                }
+              ]
+            }
+          },
+          {
+            "seedCreatorId": 4,
+            "activeGeneration": {
+              "generationId": "generation-4",
+              "candidates": []
+            }
+          },
+          {
+            "seedCreatorId": 5,
+            "activeGeneration": null
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 1,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 2,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 3,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 4,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 5,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 104,
+            "hasCreatorSpace": false
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "HYBRID_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 1
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01562500",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": [
+              2
+            ]
+          },
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00769231",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "missing_and_unselected_sources",
+      "description": "선택하지 않은 source와 Space 정보가 없는 후보는 기여하지 않는다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "TECH"
+        ],
+        "followedCreatorIds": [
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 1
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "GAME",
+            "activeGeneration": {
+              "generationId": "generation-GAME",
+              "candidates": [
+                {
+                  "creatorId": 102,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 3,
+            "activeGeneration": {
+              "generationId": "generation-3",
+              "candidates": [
+                {
+                  "creatorId": 103,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01612903",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "deduplicate_selections",
+      "description": "같은 선택 분야·팔로우를 반복해도 기여도·분모·출처가 늘지 않는다.",
+      "input": {
+        "memberCreatorId": null,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FOOD"
+        ],
+        "followedCreatorIds": [
+          2,
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "HYBRID_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 1
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01639344",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": [
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "rrf_half_up_boundary",
+      "description": "1/(60+452)=0.001953125를 HALF_UP으로 0.00195313으로 반올림한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 452
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.00195313",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "group_mean_half_up_boundary",
+      "description": "rank 2 기여도 0.01612903을 유효 source 둘로 나눠 0.00806452로 반올림한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 2
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": [
+                {
+                  "creatorId": 102,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 2,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00819672",
+            "interestCodes": [
+              "FITNESS"
+            ],
+            "seedCreatorIds": []
+          },
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.00806452",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "final_weight_half_up_boundary",
+      "description": "그룹 평균에 0.5를 적용한 뒤 최종 점수를 다시 HALF_UP 한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 2
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 102,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "HYBRID_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 1
+        },
+        "items": [
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00819672",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              2
+            ]
+          },
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.00806452",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "round_contributions_before_mean",
+      "description": "rank 1와 11의 기여도를 먼저 반올림한 뒤 평균을 낸다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD",
+          "FITNESS"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          },
+          {
+            "interestCode": "FITNESS",
+            "activeGeneration": {
+              "generationId": "generation-FITNESS",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 11
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 2,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01523898",
+            "interestCodes": [
+              "FITNESS",
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "tie_after_rounding",
+      "description": "원래 기여도가 달라도 반올림 점수가 같으면 ID 순으로 정렬한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 102,
+                  "rank": 10010
+                },
+                {
+                  "creatorId": 101,
+                  "rank": 10011
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.00009930",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          },
+          {
+            "creatorId": 102,
+            "aggregateScore": "0.00009930",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "rounded_zero_still_valid",
+      "description": "점수가 0으로 반올림되어도 제외 후 후보가 남은 source는 유효하다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 2147483647
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [],
+        "creatorSpaces": [
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 102,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 103,
+            "hasCreatorSpace": true
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.00000000",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "follow_when_interest_filtered_out",
+      "description": "관심 분야가 전부 제외되면 팔로우 그룹만 전체 점수로 사용한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 2,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 1,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 2,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 104,
+            "hasCreatorSpace": false
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "FOLLOW_PERSONALIZED_V2",
+        "validSourceCounts": {
+          "interest": 0,
+          "follow": 1
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01639344",
+            "interestCodes": [],
+            "seedCreatorIds": [
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "interest_when_follow_filtered_out",
+      "description": "팔로우 후보가 전부 제외되면 관심 분야만 전체 점수로 사용한다.",
+      "input": {
+        "memberCreatorId": 1,
+        "selectedInterestCodes": [
+          "FOOD"
+        ],
+        "followedCreatorIds": [
+          2
+        ],
+        "interestSources": [
+          {
+            "interestCode": "FOOD",
+            "activeGeneration": {
+              "generationId": "generation-FOOD",
+              "candidates": [
+                {
+                  "creatorId": 101,
+                  "rank": 1
+                }
+              ]
+            }
+          }
+        ],
+        "followSources": [
+          {
+            "seedCreatorId": 2,
+            "activeGeneration": {
+              "generationId": "generation-2",
+              "candidates": [
+                {
+                  "creatorId": 1,
+                  "rank": 1
+                },
+                {
+                  "creatorId": 2,
+                  "rank": 2
+                },
+                {
+                  "creatorId": 104,
+                  "rank": 3
+                }
+              ]
+            }
+          }
+        ],
+        "creatorSpaces": [
+          {
+            "creatorId": 1,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 2,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 101,
+            "hasCreatorSpace": true
+          },
+          {
+            "creatorId": 104,
+            "hasCreatorSpace": false
+          }
+        ]
+      },
+      "expected": {
+        "policyVersion": "INTEREST_PERSONALIZED_V1",
+        "validSourceCounts": {
+          "interest": 1,
+          "follow": 0
+        },
+        "items": [
+          {
+            "creatorId": 101,
+            "aggregateScore": "0.01639344",
+            "interestCodes": [
+              "FOOD"
+            ],
+            "seedCreatorIds": []
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "completed": true,
+  "checks": [
+    {
+      "name": "unapproved_taxonomy_fails_closed",
+      "status": "passed"
+    },
+    {
+      "name": "dedicated_credential_and_owner_routes",
+      "status": "passed"
+    },
+    {
+      "name": "initial_v2_delivery_and_all_recommendation_targets",
+      "status": "passed"
+    },
+    {
+      "name": "daily_unchanged_no_model_calls",
+      "status": "passed"
+    },
+    {
+      "name": "idempotency_conflicting_payload_and_taxonomy_code_validation",
+      "status": "passed"
+    },
+    {
+      "name": "owner_confirmation_public_projection_and_same_result_preserves_confirmation",
+      "status": "passed"
+    },
+    {
+      "name": "mysql_space_edit_delivery_race_and_stale_confirmation",
+      "status": "passed"
+    },
+    {
+      "name": "edit_during_claim_keeps_successor_and_event_refreshes_results",
+      "status": "passed"
+    },
+    {
+      "name": "restart_after_commit_uses_saved_payload",
+      "status": "passed"
+    },
+    {
+      "name": "unapproved_model_config_stops_before_provider",
+      "status": "passed"
+    },
+    {
+      "name": "new_model_config_reclassifies_and_fences_previous_config",
+      "status": "passed"
+    },
+    {
+      "name": "expired_lease_redelivery_and_retry",
+      "status": "passed"
+    },
+    {
+      "name": "provider_failure_preserves_success_and_retries_independent_stage",
+      "status": "passed"
+    },
+    {
+      "name": "empty_input_without_provider_call",
+      "status": "passed"
+    },
+    {
+      "name": "final_failure_daily_reconciliation_and_manual_retry",
+      "status": "passed"
+    },
+    {
+      "name": "background_heartbeat_renews_actual_http_lease",
+      "status": "passed"
+    },
+    {
+      "name": "permanent_provider_failure_isolated_from_other_creator_ack_and_daily_reconcile",
+      "status": "passed"
+    },
+    {
+      "name": "taxonomy_revocation_hides_confirmation",
+      "status": "passed"
+    }
+  ],
+  "externalConnectionAttempts": 0,
+  "externalModelCalls": 0,
+  "llmCommitSha": "7d48364e29e22e15627fb4998e707bb7b7d272bf",
+  "beCommitSha": "fab5c1ce641a09d6337dc5adcad910d3365cadbb",
+  "syntheticModelCalls": 9,
+  "cleanupVerified": true,
+  "runId": "393b187cf53a4d9b925e43480ab6bbc5",
+  "sourceReportSha256": "6bdd6a924201c049d64032f94082544dc3731df0b8532dd428ded3501eb818f4",
+  "pythonRegressionTests": 549,
+  "workerRegressionTests": 43,
+  "sourceFingerprintAlgorithm": "SHA-256 of UTF-8 source with normalized LF line endings",
+  "sourceFingerprints": {
+    "llm": {
+      "src/recommendation/content_worker.py": "acec37fc0772b72ecfd047377f6e62f0eeef3c3e22d6d5bf158d139d15cbecc5",
+      "src/detail_tagging.py": "d6ed63542804412a250fa9273ed89dbdd43906533a5f3a962a47ffbad6b0801b",
+      "src/subtopic_tags.py": "9b82ce27c11b139a98744c6383da60f7f0bd4647b10908b108d6c135c7b9a13d",
+      "src/recommendation/e2e/content_scenarios.py": "97849724b8dc1fa3f886809d78cf1a3c1d83686298ea670e4628419036a2a72a",
+      "src/recommendation/e2e/content-java/kr/co/cking/e2e/ContentTagHttpE2eTest.java": "7770d3481eb46762c0d2133000d5426a0e91996b0bb8557ed9d4a347d7502bcb"
+    },
+    "be": {
+      "src/main/java/kr/co/cking/creator/application/ContentTagService.java": "bcd7e591375cf20407ce2c7f9a1ba072addc62f2478f48dd66ece04829866d94",
+      "src/main/java/kr/co/cking/creator/repository/ContentTagRepository.java": "c05ef28576dbc6597c386f58eaaa093c9b2cdb6cff3d3eccc1cc2dc230f52288",
+      "src/main/resources/db/migration/V84__add_creator_content_tags.sql": "f69c80e76118d6cb555385c1453aa3313b3d9e8af8bae711e802d59a3f530491"
+    }
+  },
+  "llmPullRequest": "https://github.com/URECA-Cking/Cking-LLM-Benchmark/pull/74",
+  "bePullRequest": "https://github.com/URECA-Cking/Cking-BE/pull/655",
+  "reviewUrl": "https://github.com/URECA-Cking/Cking-LLM-Benchmark/pull/74#pullrequestreview-5567815416",
+  "loadAndSystemdDeploymentVerified": false
+}
