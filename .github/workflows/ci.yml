@@ -263,6 +263,7 @@ jobs:
 
       # 개발과 같은 기준을 패키지 커밋에 쓴다. 배포된 패키지의 커밋이 고른 패키지 커밋의 조상이거나 같으면 바꾸고,
       # 더 새로우면(지난 실행의 재시도) 건너뛰고, 갈라졌으면 멈춘다. 되돌리기는 순서를 보지 않는다.
+      # 배포 버전 값은 서버 교체보다 먼저 바뀌므로, 값이 이미 같으면 그 뒤에 시작한 교체가 성공했을 때만 건너뛴다.
       - name: 배포 버전 갱신
         id: release
         env:
@@ -272,8 +273,17 @@ jobs:
           CURRENT=""
           if CURRENT=$(aws ssm get-parameter --name "$PROD_RELEASE_PARAMETER" --query Parameter.Value --output text 2>"$RUNNER_TEMP/ssm.err"); then
             if [ "$CURRENT" = "$RELEASE" ]; then
-              echo "이미 $RELEASE 이 배포되어 있다" | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "updated=false" >> "$GITHUB_OUTPUT"
+              SET_AT=$(aws ssm get-parameter --name "$PROD_RELEASE_PARAMETER" --query Parameter.LastModifiedDate --output text)
+              LAST=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$PROD_ASG_NAME" --max-records 1 \
+                --query 'InstanceRefreshes[0].[Status,StartTime]' --output text)
+              read -r STATUS STARTED <<< "$LAST"
+              if [ "$STATUS" = Successful ] && [ "$(date -d "$STARTED" +%s)" -ge "$(date -d "$SET_AT" +%s)" ]; then
+                echo "이미 $RELEASE 이 배포되어 있다" | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "updated=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "::warning::배포 버전은 이미 $RELEASE 이지만 그 뒤 서버 교체가 성공하지 않아(${STATUS:-없음}) 다시 교체한다"
+              echo "updated=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             DEPLOYED=${CURRENT##*-}
@@ -312,8 +322,16 @@ jobs:
             echo "운영 추천 배치 서버 그룹이 아직 없어 교체를 건너뛴다" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$PROD_ASG_NAME" \
-            --preferences '{"MinHealthyPercentage":0}' --query InstanceRefreshId --output text)
+          # 지난 실행이 시작한 교체가 아직 돌고 있으면 새로 시작하지 않고 그 교체를 지켜본다.
+          # shellcheck disable=SC2016 # 백틱은 JMESPath 문자열이다
+          ID=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$PROD_ASG_NAME" \
+            --query 'InstanceRefreshes[?Status==`Pending` || Status==`InProgress`] | [0].InstanceRefreshId' --output text)
+          if [ -z "$ID" ] || [ "$ID" = None ]; then
+            ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$PROD_ASG_NAME" \
+              --preferences '{"MinHealthyPercentage":0}' --query InstanceRefreshId --output text)
+          else
+            echo "진행 중인 서버 교체를 지켜본다: $ID" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
           for _ in $(seq 1 80); do
             STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$PROD_ASG_NAME" \
               --instance-refresh-ids "$ID" --query 'InstanceRefreshes[0].Status' --output text)
