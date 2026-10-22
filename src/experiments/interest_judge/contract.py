@@ -115,13 +115,29 @@ def prepare_contract(evaluation_dir: Path, manifest_path: Path, config: JudgeCon
     provenance = read_json(evaluation_dir / "provenance.json")
     categories = load_service_categories(DEFAULT_CATEGORIES_CSV)
     raw = provenance["generationConfig"]
+    llm_gated = raw.get("classificationSource") == "LLM_CONFIRMED_V1"
     generation = InterestRecommendationConfig(
-        top_n=raw["topN"], zero_shot_tau=raw["zeroShotTau"], zero_shot_max_tags=raw["zeroShotMaxTags"],
-        m3_bonus=raw["m3Bonus"], score_decimals=raw["scoreDecimals"],
+        top_n=raw["topN"], zero_shot_tau=raw["legacyZeroShotTau"] if llm_gated else raw["zeroShotTau"],
+        zero_shot_max_tags=raw["legacyZeroShotMaxTags"] if llm_gated else raw["zeroShotMaxTags"],
+        m3_bonus=raw["legacyM3Bonus"] if llm_gated else raw["m3Bonus"], score_decimals=raw["scoreDecimals"],
         embedding_model_version=raw["embeddingModelVersion"],
         taxonomy_version=raw["taxonomyVersion"], taxonomy_hash=raw["taxonomyHash"],
+        **({"tag_model_version": raw["tagModelVersion"], "tag_prompt_version": raw["tagPromptVersion"]} if llm_gated else {}),
     )
-    if (raw != generation.identity() or provenance.get("schemaVersion") != 1
+    expected = generation.identity()
+    if llm_gated:
+        prompt_hash = raw.get("tagPromptHash")
+        if not isinstance(prompt_hash, str) or len(prompt_hash) != 64 or any(c not in '0123456789abcdef' for c in prompt_hash):
+            raise ValueError("태깅 프롬프트 해시가 올바르지 않습니다.")
+        expected['tagPromptHash'] = prompt_hash
+    else:
+        for key in ('classificationSource', 'tagModelVersion', 'tagPromptVersion', 'tagPromptHash', 'scoring'):
+            expected.pop(key)
+        expected['zeroShotTau'] = expected.pop('legacyZeroShotTau')
+        expected['zeroShotMaxTags'] = expected.pop('legacyZeroShotMaxTags')
+        expected['m3Bonus'] = expected.pop('legacyM3Bonus')
+        expected['zeroShotTieBreak'] = 'taxonomy display order ASC'
+    if (raw != expected or provenance.get("schemaVersion") != 1
             or provenance.get("manifestHash") != manifest.manifest_hash
             or provenance.get("evaluationTopN") != 10 or generation.top_n < 10
             or provenance.get("methods") != list(METHODS)
@@ -144,8 +160,8 @@ def prepare_contract(evaluation_dir: Path, manifest_path: Path, config: JudgeCon
                         "method": method, "modelVersion": generation.embedding_model_version,
                         "inputHash": input_hash}
             candidates = ranking["candidates"]
-            count = min(10, len(profiles))
-            if (not isinstance(candidates, list) or len(candidates) != count
+            count = len(candidates) if isinstance(candidates, list) else -1
+            if (not isinstance(candidates, list) or not 0 <= count <= min(10, len(profiles))
                     or ranking != {"inputHash": input_hash, "requestedCount": 10,
                                    "candidateCount": count, "shortageCount": 10 - count,
                                    "candidates": candidates}):
@@ -156,7 +172,7 @@ def prepare_contract(evaluation_dir: Path, manifest_path: Path, config: JudgeCon
                 if (type(cid) is not int or cid not in profiles or cid in seen
                         or type(candidate.get("rank")) is not int or candidate["rank"] != rank
                         or type(score) not in (int, float) or not math.isfinite(score)
-                        or not -1 <= score <= round(1 + (generation.m3_bonus if method == M3_METHOD else 0), generation.score_decimals)
+                        or not -1 <= score <= round(1 + (generation.m3_bonus if method == M3_METHOD and not llm_gated else 0), generation.score_decimals)
                         or round(score, generation.score_decimals) != score
                         or candidate != {"creatorId": cid, "rank": rank, "score": score, **metadata}):
                     raise ValueError("후보 ID·순위·점수·세대 메타데이터가 올바르지 않습니다.")

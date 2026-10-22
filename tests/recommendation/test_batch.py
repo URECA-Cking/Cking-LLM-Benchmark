@@ -5,6 +5,7 @@ import json
 import pytest
 
 from src.recommendation.batch import BatchPaths, RecommendationBatch
+from src.recommendation.eligibility import proof
 from src.recommendation.manifest import build_manifest
 from src.recommendation.models import CreatorProfile, RecommendationCandidate, RecommendationResult
 from src.recommendation.service import RecommendationConfig
@@ -37,7 +38,9 @@ class FakeRecommender:
                     INPUT_HASH,
                 ),
             )
-        return RecommendationResult(seed.creator_id, "M2", "model-v1", INPUT_HASH, candidates_result)
+        profiles = [seed] + ([similar] if candidates_result else [])
+        evidence = proof(profiles, {p.creator_id: ("A",) if p.text else () for p in profiles}, config().taxonomy_version, config().taxonomy_hash)
+        return RecommendationResult(seed.creator_id, "M2", "model-v1", INPUT_HASH, candidates_result, evidence)
 
 
 class FakeBackend:

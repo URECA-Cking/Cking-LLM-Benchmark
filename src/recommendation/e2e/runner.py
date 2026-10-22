@@ -113,7 +113,7 @@ def main(argv=None):
     parser.add_argument("--be-dir", type=Path, default=ROOT.parent / "Cking-BE")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "results" / "recommendation" / "e2e")
     parser.add_argument("--timeout", type=int, default=900)
-    parser.add_argument("--suite", choices=("recommendation", "content"), default="recommendation")
+    parser.add_argument("--suite", choices=("recommendation", "content", "small-pool"), default="recommendation")
     args = parser.parse_args(argv)
     be = args.be_dir.resolve()
     output = args.output_dir.resolve() / uuid.uuid4().hex
@@ -141,6 +141,7 @@ def main(argv=None):
                    CKING_E2E_JWT_SECRET=base64.b64encode(secrets.token_bytes(32)).decode(),
                    CKING_E2E_PYTHON=sys.executable, CKING_E2E_LLM_ROOT=str(ROOT), CKING_E2E_BE_ROOT=str(be),
                    CKING_E2E_JAVA_SOURCE=str(ASSETS / ("content-java" if args.suite == "content" else "java")), CKING_E2E_OUTPUT=str(output),
+                   CKING_E2E_SCENARIO="src.recommendation.e2e.small_pool" if args.suite == "small-pool" else "src.recommendation.e2e.scenarios",
                    CKING_E2E_TEST_CLASS="kr.co.cking.e2e.ContentTagHttpE2eTest" if args.suite == "content" else "kr.co.cking.e2e.RecommendationHttpE2eTest")
         phase = "containers"
         # 고유 이름은 생성 전에 정해 둔다. 명령이 timeout되어도 finally에서 이 이름만 제거한다.

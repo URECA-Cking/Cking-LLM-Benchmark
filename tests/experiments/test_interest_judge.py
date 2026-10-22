@@ -21,7 +21,7 @@ from src.experiments.interest_judge.runner import (
 from src.experiments.interest_judge.scoring import aggregate, choose_decision, metrics
 from src.recommendation.batch import _json_hash, _write_json_atomic
 from src.recommendation.interest import (
-    METHODS, M2_METHOD, M3_METHOD, InterestRecommendationResult, InterestRecommender,
+    METHODS, M2_METHOD, M3_METHOD, InterestRecommendationResult, InterestRecommender, InterestRecommendationConfig,
 )
 from src.recommendation.interest_evaluation import write_interest_evaluation
 from src.recommendation.manifest import build_manifest, write_manifest
@@ -35,13 +35,13 @@ class NoEmbedding:
         raise AssertionError("evaluation must never call embedding")
 
 
-def source_files(root, *, changed=False, count=25):
+def source_files(root, *, changed=False, count=25, config=None):
     root.mkdir(parents=True, exist_ok=True)
     profiles = [CreatorProfile(cid, f"PRIVATE_CREATOR_{cid}" + (" changed" if changed and cid == 1 else ""))
                 for cid in range(1, count + 1)]
     manifest = build_manifest(profiles)
     write_manifest(root / "manifest.json", manifest)
-    service = InterestRecommender(manifest, load_service_categories(DEFAULT_CATEGORIES_CSV), NoEmbedding(), None)
+    service = InterestRecommender(manifest, load_service_categories(DEFAULT_CATEGORIES_CSV), NoEmbedding(), None, config)
     bundles = {}
     for category in service.categories:
         bundles[category.code] = {}
@@ -477,3 +477,44 @@ def test_decision_reports_uncertainty_without_changing_adoption_gate(prepared, g
     for method in METHODS:
         for k in ("5", "10"):
             assert public["human"]["methods"][method]["byCutoff"][k]["pairCount"] > 0
+
+
+def test_llm_filtered_shortage_and_empty_interests_prepare_without_padding(tmp_path):
+    from tests.recommendation.test_interest import recommender, categories
+    service = recommender(tmp_path)
+    evaluation = tmp_path / "evaluation"
+    manifest = tmp_path / "manifest.json"
+    write_manifest(manifest, service.manifest)
+    bundles = {c.code: {m: service.recommend(c.code, m).to_backend_payload() for m in METHODS}
+               for c in categories()}
+    write_interest_evaluation(evaluation, service, bundles)
+    contract = prepare_contract(evaluation, manifest, JudgeConfig(model="fake"))
+    assert len(contract['pairs']) == 3
+    assert len(contract['rankings']['FITNESS'][M2_METHOD]) == 3
+    assert contract['rankings']['BEAUTY'][M2_METHOD] == []
+
+
+def test_custom_llm_model_and_prompt_fingerprint_survive_prepare(tmp_path):
+    config = InterestRecommendationConfig(tag_model_version='custom-model', tag_prompt_version='custom-v2', tag_prompt='custom prompt')
+    evaluation, manifest = source_files(tmp_path/'source', config=config)
+    contract = prepare_contract(evaluation, manifest, JudgeConfig(model='fake'))
+    assert contract['generationConfig'] == config.identity()
+    assert choose_decision(contract, {'complete':False}, None)['evaluatedM3']['bonus'] == 0
+
+
+def test_legacy_zero_shot_contract_remains_separate_and_readable(tmp_path):
+    class LegacyConfig(InterestRecommendationConfig):
+        def identity(self):
+            raw=super().identity()
+            for k in ('classificationSource','tagModelVersion','tagPromptVersion','tagPromptHash','scoring'):
+                raw.pop(k)
+            raw['zeroShotTau']=raw.pop('legacyZeroShotTau')
+            raw['zeroShotMaxTags']=raw.pop('legacyZeroShotMaxTags')
+            raw['m3Bonus']=raw.pop('legacyM3Bonus')
+            raw['zeroShotTieBreak']='taxonomy display order ASC'
+            return raw
+    config=LegacyConfig()
+    evaluation, manifest=source_files(tmp_path/'legacy',config=config)
+    contract=prepare_contract(evaluation,manifest,JudgeConfig(model='fake'))
+    assert 'classificationSource' not in contract['generationConfig']
+    assert choose_decision(contract,{'complete':False},None)['evaluatedM3']['bonus']==config.m3_bonus

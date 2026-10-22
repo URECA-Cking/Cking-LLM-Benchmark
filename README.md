@@ -4,6 +4,9 @@
 
 ## 지금 결론
 
+**서비스 관심 분야 추천은 LLM 확정 태그로 후보를 제한하고 BGE-M3 코사인 점수로 정렬합니다.**
+[후보 자격·캐시·기존 실행 옵션 호환 정책](docs/interest-llm-eligibility.md)을 확인합니다.
+
 **세부 태그 분류 프롬프트는 `grounded-detail-candidates-v2`를 표준 채택했습니다(2026-10-15, 사용자 결정).**
 [채택 범위·지문·실험 한계](docs/results/detail-tagging-v2-adoption.md)와
 [바로 실행하는 v2 명령](docs/guides/detail-tagging.md#표준-v2-실행)을 확인합니다.
@@ -74,7 +77,7 @@ python -m pytest -q
     - `verified` 표시가 있는(개발 서버 교체에 성공한) 개발 패키지 중 패키지에 들어가는 파일(`src/`, `data/`, `deploy/`, `requirements-deploy.txt`, `scripts/build-package.sh`)이 main과 같은 것을 고르고, 여럿이면 가장 최근 빌드를 고릅니다. develop→main은 squash로 합쳐 개발 커밋이 main의 조상이 아니므로 이력이 아니라 내용으로 고릅니다. 없으면(develop의 개발 배포가 끝나기 전에 합친 경우) 실패하고, 개발 배포가 끝난 뒤 main에서 다시 실행합니다
     - 순서는 개발과 같은 기준을 패키지 커밋에 씁니다. 버전 ID는 개발과 같습니다
     - 되돌리기: main에서 수동 실행하며 운영 배포 버킷에 있는 예전 버전 ID를 `release`에 넣습니다. 되돌린 뒤 main 실행을 다시 실행하거나 main에 새로 합치면 그때 고른 최신 패키지가 다시 올라갑니다
-  - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`)로 올립니다
+  - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`, 매월, 마이너·패치만)로 올리고, 메이저 업데이트는 따로 확인해 올립니다
 
 로컬에서 패키지를 만들고 확인하려면 다음을 실행합니다(Docker 필요).
 

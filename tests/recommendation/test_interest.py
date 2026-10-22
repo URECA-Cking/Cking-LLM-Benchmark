@@ -5,6 +5,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from src.clients.openai_tagger import TagResult
 from src.recommendation.cache import JsonModelCache, text_hash
 from src.recommendation.interest import (
     M2_METHOD, M3_METHOD, InterestRecommendationConfig, InterestRecommender,
@@ -36,7 +37,17 @@ def vector(*values):
     return np.array([*values, *([0] * (17 - len(values)))], dtype=float)
 
 
-def recommender(tmp_path, profiles=None, vectors=None, config=None, client=None):
+class FakeTagger:
+    def __init__(self, tags=None):
+        self.tags = tags or {}
+        self.calls = []
+
+    def tag(self, text):
+        self.calls.append(text)
+        return TagResult(tuple(self.tags.get(text, (categories()[0].code,))), 0, 0)
+
+
+def recommender(tmp_path, profiles=None, vectors=None, config=None, client=None, tagger=None):
     manifest = build_manifest(profiles if profiles is not None else [
         CreatorProfile(3, "third"), CreatorProfile(1, "first"), CreatorProfile(2, "second"),
         CreatorProfile(4, "  "),
@@ -45,7 +56,7 @@ def recommender(tmp_path, profiles=None, vectors=None, config=None, client=None)
         "first": vector(.8, .6), "second": vector(.75, .6614378278),
         "third": vector(.75, .6614378278),
     })
-    return InterestRecommender(manifest, categories(), client, JsonModelCache(tmp_path / "cache.json"), config)
+    return InterestRecommender(manifest, categories(), client, JsonModelCache(tmp_path / "cache.json"), config, tagging_client=tagger or FakeTagger())
 
 
 def test_all_17_independent_queries_default_top20_and_metadata(tmp_path):
@@ -55,12 +66,13 @@ def test_all_17_independent_queries_default_top20_and_metadata(tmp_path):
     for category in categories():
         result = service.recommend(category.code)
         assert result.method == M3_METHOD
-        assert len(result.candidates) == 20
-        assert [cid for cid, _ in result.candidates] == list(range(1, 21))
+        expected = list(range(1, 21)) if category == categories()[0] else []
+        assert len(result.candidates) == len(expected)
+        assert [cid for cid, _ in result.candidates] == expected
         payload = result.to_backend_payload()
         assert payload["taxonomyVersion"] == "v0.2"
         assert payload["interestCode"] == category.code
-        assert [candidate["rank"] for candidate in payload["candidates"]] == list(range(1, 21))
+        assert [candidate["rank"] for candidate in payload["candidates"]] == expected
         for candidate in payload["candidates"]:
             for key in ("method", "modelVersion", "inputHash", "taxonomyVersion", "taxonomyHash", "interestCode"):
                 assert candidate[key] == payload[key]
@@ -68,36 +80,38 @@ def test_all_17_independent_queries_default_top20_and_metadata(tmp_path):
     assert len(client.calls[0]) == 18  # 동일한 소개는 한 번만 임베딩한다.
 
 
-def test_bonus_only_for_thresholded_top_tags_and_m2_has_no_bonus(tmp_path):
+def test_llm_eligibility_and_embedding_only_scores_for_both_methods(tmp_path):
     service = recommender(tmp_path, config=InterestRecommendationConfig(
         zero_shot_tau=.77, m3_bonus=.1, top_n=20,
     ))
     code = categories()[0].code
     m3, m2 = service.recommend(code), service.recommend(code, M2_METHOD)
-    assert m3.candidates == ((1, .9), (2, .75), (3, .75))
-    assert m2.candidates == ((1, .8), (2, .75), (3, .75))
+    assert m3.candidates == ((1, .8), (2, .75), (3, .75))
+    assert m2.candidates == m3.candidates
     assert m3.input_hash != m2.input_hash
     assert all(cid != 4 for cid, _ in m3.candidates)
 
 
-def test_zero_shot_tag_cap_and_ties_use_taxonomy_order(tmp_path):
+def test_high_cosines_cannot_assign_additional_tags(tmp_path):
     service = recommender(tmp_path, [CreatorProfile(1, "tie")], {"tie": vector(1, 1, 1, 1)},
-                          InterestRecommendationConfig(zero_shot_tau=.5, zero_shot_max_tags=3))
-    assert [service.recommend(row.code).candidates[0][1] for row in categories()[:4]] == [.6, .6, .6, .5]
+                          tagger=FakeTagger({"tie": [categories()[0].code]}))
+    assert service.recommend(categories()[0].code).candidates == ((1, .5),)
+    assert all(service.recommend(c.code).candidates == () for c in categories()[1:])
 
 
 def test_round_before_sort_breaks_score_ties_by_id(tmp_path):
     service = recommender(tmp_path, [CreatorProfile(2, "high"), CreatorProfile(1, "low")],
                           {"high": vector(.800004, .6), "low": vector(.8, .6)},
                           InterestRecommendationConfig(score_decimals=4))
-    assert service.recommend(categories()[0].code).candidates == ((1, .9), (2, .9))
+    assert service.recommend(categories()[0].code).candidates == ((1, .8), (2, .8))
 
 
-def test_m3_can_promote_tagged_candidate_over_m2_neighbor(tmp_path):
+def test_unrelated_higher_cosine_candidate_is_excluded_before_ranking(tmp_path):
     service = recommender(tmp_path, [CreatorProfile(1, "broad"), CreatorProfile(2, "focused")],
-                          {"broad": vector(.45, .51, .51, .51), "focused": vector(.44, .9)})
+                          {"broad": vector(.45, .51, .51, .51), "focused": vector(.44, .9)},
+                          tagger=FakeTagger({"broad": ["FOOD"], "focused": ["FITNESS"]}))
     code = categories()[0].code
-    assert service.recommend(code, M2_METHOD).candidates[0][0] == 1
+    assert service.recommend(code, M2_METHOD).candidates[0][0] == 2
     assert service.recommend(code, M3_METHOD).candidates[0][0] == 2
 
 
@@ -108,7 +122,7 @@ def test_parameter_changes_reuse_vectors_but_recompute_scores(tmp_path):
     second = recommender(tmp_path, config=replace(first.config, m3_bonus=.2))
     changed = second.recommend(code)
     assert second.embedding_client.calls == []
-    assert changed.candidates[0][1] == 1.0
+    assert changed.candidates == initial.candidates
     assert changed.input_hash != initial.input_hash
 
 
@@ -138,7 +152,7 @@ def test_cached_rerun_has_identical_payload_and_skips_model(tmp_path):
 def test_corrupt_cached_vector_is_regenerated(tmp_path, bad):
     service = recommender(tmp_path)
     service.cache.put_embedding(text_hash("first"), service.config.embedding_model_version, bad)
-    assert service.recommend(categories()[0].code).candidates[0] == (1, .9)
+    assert service.recommend(categories()[0].code).candidates[0] == (1, .8)
     assert "first" in service.embedding_client.calls[0]
 
 
@@ -228,7 +242,7 @@ def test_shared_cache_order_and_disk_reload_preserve_exact_payload(tmp_path, met
     similar_settings = RecommendationConfig(embedding_model_version=settings.embedding_model_version, short_introduction_chars=100)
 
     def payloads(cache, client):
-        service = InterestRecommender(manifest, categories(), client, cache, settings)
+        service = InterestRecommender(manifest, categories(), client, cache, settings, tagging_client=FakeTagger())
         return [service.recommend(row.code, method).to_backend_payload() for row in categories()]
 
     direct = payloads(JsonModelCache(tmp_path / "direct.json"), DenseEmbedding())

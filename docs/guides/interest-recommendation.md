@@ -1,5 +1,9 @@
 # 관심 분야별 M3 후보 생성과 BE 적재
 
+> 현재 서비스 정책: LLM 확정 태그로 후보를 제한하고 BGE-M3 코사인 점수로만 정렬한다.
+> 아래 zero-shot 임계값·가산점 설명은 이전 실험 계약이다. 실행 옵션은 호환용으로 유지하지만
+> 후보 판정·순위에는 사용하지 않는다. [변경 정책과 재적재 절차](../interest-llm-eligibility.md)를 먼저 확인한다.
+
 [LLM #41](https://github.com/URECA-Cking/Cking-LLM-Benchmark/issues/41)의 오프라인 생성기다.
 `data/categories_v2.csv`의 17개 분야를 각각 독립 쿼리로 처리한다.
 분야 조합·회원 선택·개인화 혼합·공개 분야별 추천 조회·인기순 fallback은 구현하지 않는다.
