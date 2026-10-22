@@ -2,10 +2,10 @@ name: CI/CD
 
 on:
   pull_request:
-    branches: [develop]
-  # 배포 패키지에 들어가는 파일이 바뀔 때만 개발에 배포한다.
+    branches: [develop, main]
+  # 배포 패키지에 들어가는 파일이 바뀔 때만 배포한다. develop은 개발, main은 운영이다.
   push:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "src/**"
       - "data/**"
@@ -18,9 +18,15 @@ on:
   # 라이브러리 패치는 고정 버전이라 다시 빌드해도 바뀌지 않으므로 Dependabot PR로 받는다.
   schedule:
     - cron: "0 1 1 * *"
+  # develop에서는 개발 재빌드·배포, main에서는 운영 배포. 운영 되돌리기는 main에서 예전 버전 ID를 넣는다.
   workflow_dispatch:
+    inputs:
+      release:
+        description: 운영 되돌리기용 운영 배포 버킷의 버전 ID(<빌드 시각>-<커밋 12자리>). 일반 실행은 비워 둔다
+        type: string
+        required: false
 
-# develop 실행은 푸시 순서대로 하나씩 돌린다. PR은 새 커밋이 오면 이전 실행을 취소한다.
+# develop·main 실행은 브랜치마다 푸시 순서대로 하나씩 돌린다. PR은 새 커밋이 오면 이전 실행을 취소한다.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -34,6 +40,10 @@ env:
   RELEASE_PREFIX: s3://dev-cking-deploy-551372961758/recommendation/releases
   RELEASE_PARAMETER: /cking/dev-recommendation/RELEASE
   ASG_NAME: dev-cking-recommendation
+  PROD_ROLE_ARN: arn:aws:iam::551372961758:role/prod-cking-recommendation-github-actions-role
+  PROD_RELEASE_PREFIX: s3://prod-cking-deploy-551372961758-ap-northeast-2-an/recommendation/releases
+  PROD_RELEASE_PARAMETER: /cking/prod-recommendation/RELEASE
+  PROD_ASG_NAME: prod-cking-recommendation
   TORCH_VERSION: "2.14.1+cpu"
 
 jobs:
@@ -62,7 +72,7 @@ jobs:
   deploy-dev:
     name: Deploy to dev
     needs: test
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -153,6 +163,154 @@ jobs:
             --preferences '{"MinHealthyPercentage":0}' --query InstanceRefreshId --output text)
           for _ in $(seq 1 80); do
             STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$ASG_NAME" \
+              --instance-refresh-ids "$ID" --query 'InstanceRefreshes[0].Status' --output text)
+            case "$STATUS" in
+              Successful)
+                echo "서버 교체 완료: $ID" | tee -a "$GITHUB_STEP_SUMMARY"
+                exit 0 ;;
+              Failed|Cancelled|RollbackSuccessful|RollbackFailed)
+                echo "::error::서버 교체 $STATUS: $ID"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::서버 교체가 20분 안에 끝나지 않았다: $ID"
+          exit 1
+
+  # 운영은 새로 빌드하지 않고 개발 CI가 확인하고 올린 패키지를 운영 배포 버킷에 복사한다. 역할은 main에서만 맡을 수 있다.
+  deploy-prod:
+    name: Deploy to prod
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ env.PROD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 이 커밋의 조상 중 패키지에 들어가는 파일이 이 커밋과 같은 커밋의 개발 패키지를 고른다. 같은 커밋을 다시 빌드한
+      # 패키지(매월 재빌드)가 있으면 가장 최근 빌드를 고른다(Python 최신 패치). 없으면 develop의 개발 배포가 끝나기 전에 합친 것이라 멈춘다.
+      - name: 올릴 패키지 정하기
+        id: pick
+        env:
+          INPUT_RELEASE: ${{ inputs.release }}
+        run: |
+          if [ -n "$INPUT_RELEASE" ]; then
+            if ! [[ "$INPUT_RELEASE" =~ ^[0-9]{14}-[0-9a-f]{12}$ ]]; then
+              echo "::error::버전 ID는 <빌드 시각 14자리>-<커밋 12자리>다: $INPUT_RELEASE"
+              exit 1
+            fi
+            if ! aws s3 ls "$PROD_RELEASE_PREFIX/$INPUT_RELEASE/cking-llm.tar.gz" >/dev/null; then
+              echo "::error::운영 배포 버킷에 $INPUT_RELEASE 가 없다"
+              exit 1
+            fi
+            echo "release=$INPUT_RELEASE" >> "$GITHUB_OUTPUT"
+            echo "rollback=true" >> "$GITHUB_OUTPUT"
+            echo "운영 되돌리기: $INPUT_RELEASE" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          INPUTS=(src data deploy requirements-deploy.txt scripts/build-package.sh)
+          BEST=""
+          while read -r _ ID; do
+            ID=${ID%/}
+            [[ "$ID" =~ ^[0-9]{14}-[0-9a-f]{12}$ ]] || continue
+            T=${ID##*-}
+            git rev-parse -q --verify "$T^{commit}" >/dev/null || continue
+            git merge-base --is-ancestor "$T" "$GITHUB_SHA" || continue
+            git diff --quiet "$T" "$GITHUB_SHA" -- "${INPUTS[@]}" || continue
+            if [[ -z "$BEST" || "$ID" > "$BEST" ]]; then
+              BEST="$ID"
+            fi
+          done < <(aws s3 ls "$RELEASE_PREFIX/")
+          if [ -z "$BEST" ]; then
+            echo "::error::이 커밋과 패키지 내용이 같은 개발 패키지가 없다. develop의 개발 배포가 끝난 뒤 main에 합친다"
+            exit 1
+          fi
+          echo "release=$BEST" >> "$GITHUB_OUTPUT"
+          echo "올릴 패키지: $RELEASE_PREFIX/$BEST/" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # 버전 ID는 개발과 같게 둔다. 이미 복사해 둔 버전이면(다시 실행) 복사하지 않는다. 복사본은 내려받아 sha256으로 확인한다.
+      - name: 운영 배포 버킷에 복사
+        if: steps.pick.outputs.rollback != 'true'
+        env:
+          RELEASE: ${{ steps.pick.outputs.release }}
+        run: |
+          if ! aws s3 ls "$PROD_RELEASE_PREFIX/$RELEASE/cking-llm.tar.gz.sha256" >/dev/null; then
+            for f in cking-llm.tar.gz cking-llm.tar.gz.sha256; do
+              aws s3 cp "$RELEASE_PREFIX/$RELEASE/$f" "$PROD_RELEASE_PREFIX/$RELEASE/$f" --only-show-errors
+            done
+          fi
+          mkdir -p "$RUNNER_TEMP/prod"
+          for f in cking-llm.tar.gz cking-llm.tar.gz.sha256; do
+            aws s3 cp "$PROD_RELEASE_PREFIX/$RELEASE/$f" "$RUNNER_TEMP/prod/$f" --only-show-errors
+          done
+          (cd "$RUNNER_TEMP/prod" && sha256sum -c --quiet cking-llm.tar.gz.sha256)
+          echo "운영 패키지: $PROD_RELEASE_PREFIX/$RELEASE/" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # 개발과 같은 기준을 패키지 커밋에 쓴다. 배포된 패키지의 커밋이 고른 패키지 커밋의 조상이거나 같으면 바꾸고,
+      # 더 새로우면(지난 실행의 재시도) 건너뛰고, 갈라졌으면 멈춘다. 되돌리기는 순서를 보지 않는다.
+      - name: 배포 버전 갱신
+        id: release
+        env:
+          RELEASE: ${{ steps.pick.outputs.release }}
+          ROLLBACK: ${{ steps.pick.outputs.rollback }}
+        run: |
+          CURRENT=""
+          if CURRENT=$(aws ssm get-parameter --name "$PROD_RELEASE_PARAMETER" --query Parameter.Value --output text 2>"$RUNNER_TEMP/ssm.err"); then
+            if [ "$CURRENT" = "$RELEASE" ]; then
+              echo "이미 $RELEASE 이 배포되어 있다" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "updated=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            DEPLOYED=${CURRENT##*-}
+            T=${RELEASE##*-}
+            if [ "$ROLLBACK" != true ]; then
+              if ! git rev-parse -q --verify "$DEPLOYED^{commit}" >/dev/null; then
+                echo "::error::배포된 버전 $CURRENT 의 커밋을 확인할 수 없다"
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$DEPLOYED" "$T"; then
+                if git merge-base --is-ancestor "$T" "$DEPLOYED"; then
+                  echo "::warning::더 새 커밋의 버전 $CURRENT 이 배포되어 있어 배포 버전을 바꾸지 않는다"
+                  echo "더 새 커밋의 버전 $CURRENT 이 배포되어 있어 배포 버전을 바꾸지 않는다" >> "$GITHUB_STEP_SUMMARY"
+                  echo "updated=false" >> "$GITHUB_OUTPUT"
+                  exit 0
+                fi
+                echo "::error::배포된 버전 $CURRENT 과 이 패키지의 이력이 갈라졌다"
+                exit 1
+              fi
+            fi
+          elif ! grep -q ParameterNotFound "$RUNNER_TEMP/ssm.err"; then
+            cat "$RUNNER_TEMP/ssm.err"
+            exit 1
+          fi
+          aws ssm put-parameter --name "$PROD_RELEASE_PARAMETER" --type String --value "$RELEASE" --overwrite >/dev/null
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+          echo "운영 배포 버전: ${CURRENT:-없음} -> $RELEASE" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # 개발과 같다. 서버 그룹(URECA-Cking/Cking-Infra#155)이 없으면 건너뛴다.
+      - name: 운영 추천 배치 서버 교체
+        if: steps.release.outputs.updated == 'true'
+        run: |
+          COUNT=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$PROD_ASG_NAME" \
+            --query 'length(AutoScalingGroups)' --output text)
+          if [ "$COUNT" = 0 ]; then
+            echo "운영 추천 배치 서버 그룹이 아직 없어 교체를 건너뛴다" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$PROD_ASG_NAME" \
+            --preferences '{"MinHealthyPercentage":0}' --query InstanceRefreshId --output text)
+          for _ in $(seq 1 80); do
+            STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$PROD_ASG_NAME" \
               --instance-refresh-ids "$ID" --query 'InstanceRefreshes[0].Status' --output text)
             case "$STATUS" in
               Successful)
