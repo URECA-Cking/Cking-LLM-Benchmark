@@ -112,6 +112,7 @@ class SimilarCreatorRecommender:
         self.tagging_client = tagging_client
         self.cache = cache
         self.config = config or RecommendationConfig()
+        self._eligibility_categories = None
 
     def recommend(
         self,
@@ -147,6 +148,13 @@ class SimilarCreatorRecommender:
         tags_by_id: dict[int, frozenset[str]] = {}
         if len(seed.text) >= self.config.short_introduction_chars:
             seed_tags = self._tags_many([seed.text])[seed.text]
+            if not seed_tags:
+                model_version = self.config.model_version("M2")
+                return RecommendationResult(
+                    creator_id=seed.creator_id, method="M2", model_version=model_version,
+                    input_hash=self._generation_input_hash(seed, pool, limit, "M2", model_version),
+                    candidates=(), eligibility=proof([seed], {}, self.config.taxonomy_version, self.config.taxonomy_hash),
+                )
             if seed_tags:
                 method = "M4"
                 tags_by_id[seed.creator_id] = seed_tags
@@ -156,7 +164,10 @@ class SimilarCreatorRecommender:
 
         if method == "M2":
             # 짧은 소개의 M2 점수는 그대로 두고 같은 BGE-M3의 기존 tau 분류로 후보 자격만 정한다.
-            categories = load_service_categories(DEFAULT_CATEGORIES_CSV)
+            if self._eligibility_categories is None:
+                self._eligibility_categories = tuple(c for c in load_service_categories(DEFAULT_CATEGORIES_CSV)
+                    if not self.config.allowed_tags or c.code in self.config.allowed_tags)
+            categories = self._eligibility_categories
             query_profiles = [CreatorProfile(max(p.creator_id for p in request_profiles) + 1 + i, c.description) for i,c in enumerate(categories)]
             classified = self._embeddings([*request_profiles, *query_profiles])
             for profile in request_profiles:
@@ -171,7 +182,7 @@ class SimilarCreatorRecommender:
             if not tags_by_id[seed.creator_id] & tags_by_id[candidate.creator_id]:
                 continue
             score = float(np.clip(seed_vector @ vectors[candidate.creator_id], -1.0, 1.0))
-            if method == "M4" and tags_by_id[seed.creator_id] & tags_by_id[candidate.creator_id]:
+            if method == "M4":
                 score += self.config.m4_bonus
             scored.append((candidate.creator_id, round(score, self.config.score_decimals)))
 
@@ -312,6 +323,7 @@ class SimilarCreatorRecommender:
         manifest = {
             "embeddingContract": EMBEDDING_CONTRACT_VERSION,
             "eligibilityPolicy": POLICY, "eligibilityTau": self.config.eligibility_tau,
+            "unclassifiedSeed": "empty-v1",
             "creatorId": seed.creator_id,
             "introduction": seed.text,
             "candidates": [

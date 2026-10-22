@@ -57,6 +57,7 @@ def generation_config_hash(config: RecommendationConfig, top_n: int) -> str:
     identity = {
         "embeddingContract": EMBEDDING_CONTRACT_VERSION,
         "eligibilityPolicy": "RELATED_V1", "eligibilityTau": config.eligibility_tau,
+        "unclassifiedSeed": "empty-v1",
         "topN": top_n,
         "shortIntroductionChars": config.short_introduction_chars,
         "m4Bonus": config.m4_bonus,
@@ -231,16 +232,15 @@ class RecommendationBatch:
             return None
         if 'eligibility' not in payload:
             return None
-        if 'eligibility' in payload:
-            try:
-                if (payload['eligibility'].get('taxonomyVersion') != self.config.taxonomy_version
-                        or payload['eligibility'].get('taxonomyHash') != self.config.taxonomy_hash):
-                    return None
-                validate(payload['eligibility'], {p.creator_id:p for p in self.manifest.creators},
-                         {c['similarCreatorId'] for c in payload['candidates']}, seed=seed.creator_id,
-                         allowed=self.config.allowed_tags or frozenset(row.code for row in load_service_categories(DEFAULT_CATEGORIES_CSV)))
-            except (ValueError, KeyError, TypeError, AttributeError):
+        try:
+            if (payload['eligibility'].get('taxonomyVersion') != self.config.taxonomy_version
+                    or payload['eligibility'].get('taxonomyHash') != self.config.taxonomy_hash):
                 return None
+            validate(payload['eligibility'], {p.creator_id:p for p in self.manifest.creators},
+                     {c['similarCreatorId'] for c in payload['candidates']}, seed=seed.creator_id,
+                     allowed=self.config.allowed_tags or frozenset(row.code for row in load_service_categories(DEFAULT_CATEGORIES_CSV)))
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return None
         return payload
 
     @staticmethod
