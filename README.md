@@ -76,6 +76,7 @@ python -m pytest -q
   - main 푸시(패키지에 들어가는 파일이 바뀔 때), main에서 수동 실행: 새로 빌드하지 않고 개발 CI가 확인하고 올린 패키지를 운영 배포 버킷 `prod-cking-deploy-551372961758-ap-northeast-2-an/recommendation/releases/`에 복사(sha256 확인) → 운영 배포 버전 값 `/cking/prod-recommendation/RELEASE` 갱신 → 운영 추천 배치 서버 교체
     - `verified` 표시가 있는(개발 서버 교체에 성공한) 개발 패키지 중 패키지에 들어가는 파일(`src/`, `data/`, `deploy/`, `requirements-deploy.txt`, `scripts/build-package.sh`)이 main과 같은 것을 고르고, 여럿이면 가장 최근 빌드를 고릅니다. develop→main은 squash로 합쳐 개발 커밋이 main의 조상이 아니므로 이력이 아니라 내용으로 고릅니다. 없으면(develop의 개발 배포가 끝나기 전에 합친 경우) 실패하고, 개발 배포가 끝난 뒤 main에서 다시 실행합니다
     - 순서는 개발과 같은 기준을 패키지 커밋에 씁니다. 버전 ID는 개발과 같습니다
+    - 배포 버전 값이 이미 같으면, 값을 바꾼 뒤 시작한 서버 교체가 성공했을 때만 건너뜁니다. 교체가 실패한 뒤 다시 실행하면 다시 교체합니다. 진행 중인 교체가 있으면, 배포 버전 값을 바꾼 뒤 시작한 것은 지켜보고, 바꾸기 전에 시작한 것은 끝나기를 기다린 뒤 새로 교체합니다
     - 되돌리기: main에서 수동 실행하며 운영 배포 버킷에 있는 예전 버전 ID를 `release`에 넣습니다. 되돌린 뒤 main 실행을 다시 실행하거나 main에 새로 합치면 그때 고른 최신 패키지가 다시 올라갑니다
   - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`, 매월, 마이너·패치만)로 올리고, 메이저 업데이트는 따로 확인해 올립니다
 
