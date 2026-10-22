@@ -73,7 +73,7 @@ python -m pytest -q
   - PR: 테스트(Python 3.12, CPU torch), 워크플로 검사
   - develop 푸시(패키지에 들어가는 파일이 바뀔 때), 매월 1일 10:00(KST) 재빌드, 수동 실행: 패키지 빌드 → 확인 → 개발 배포 버킷 `recommendation/releases/<빌드 시각>-<커밋 12자리>/` 업로드 → 배포 버전 값 `/cking/dev-recommendation/RELEASE` 갱신 → 개발 추천 배치 서버 교체(새 서버가 부팅하며 그 버전을 받음)
   - 실행은 푸시 순서대로 하나씩 돕니다. 배포된 커밋이 이 커밋보다 새로우면 배포 버전을 바꾸지 않고, 이력이 갈라졌으면 실패합니다
-  - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`)로 올립니다
+  - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`, 매월, 마이너·패치만)로 올리고, 메이저 업데이트는 따로 확인해 올립니다
 
 로컬에서 패키지를 만들고 확인하려면 다음을 실행합니다(Docker 필요).
 
