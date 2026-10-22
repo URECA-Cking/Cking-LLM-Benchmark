@@ -108,8 +108,12 @@ def main():
             assert backend.put(f'/api/admin/creators/{ids[2]}/similar', {**similar_payload, 'applicationSequence': 1})['applied'] is False
             assert public_similar() == []
             passed('idempotent_retry_does_not_restore_stale_candidates')
+            # 새 적재 중 소개가 바뀌어도 묶음은 저장하고 오래된 후보는 조회에서만 제외한다.
+            assert backend.put(f'/api/admin/creators/{ids[2]}/similar', {**similar_payload, 'applicationSequence': 2})['applied'] is True
+            assert public_similar() == []
+            passed('changed_profile_does_not_fail_entire_new_generation_and_stays_hidden')
             old = {k:v for k,v in similar_payload.items() if k != 'eligibility'}
-            backend.put(f'/api/admin/creators/{ids[2]}/similar', {**old, 'applicationSequence': 2})
+            backend.put(f'/api/admin/creators/{ids[2]}/similar', {**old, 'applicationSequence': 3})
             assert public_similar() == [] and creators() == []
             passed('legacy_generation_without_classification_proof_is_not_exposed')
         report.update(status='passed', completed=True)

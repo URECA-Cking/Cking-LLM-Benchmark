@@ -287,7 +287,7 @@ class RecommendationHttpE2eTest {
         candidates.forEach(c->ids.add(c.path("creatorId").asLong()));
         var profiles=ids.stream().map(id->{
             var texts=jdbc.queryForList("select intro_text from creator_space where creator_id=?",String.class,id);
-            return Map.of("creatorId",id,"introductionHash",kr.co.cking.creator.application.RecommendationEligibilityService.introductionHash(texts.isEmpty()?"":texts.getFirst()),"tags",tags);
+            return Map.of("creatorId",id,"introductionHash",kr.co.cking.recommendation.application.RecommendationEligibilityService.introductionHash(texts.isEmpty()?"":texts.getFirst()),"tags",tags);
         }).toList();
         var proof=Map.of("policyVersion","RELATED_V1","taxonomyVersion","v0.2","taxonomyHash",jdbc.queryForObject("select taxonomy_hash from interest_taxonomy where taxonomy_version='v0.2'",String.class),"profiles",profiles);
         try { jdbc.update("insert into recommendation_eligibility(source_kind,generation_id,proof) values(?,?,?)",kind,generation,json.writeValueAsString(proof)); }

@@ -125,7 +125,7 @@ def test_short_introduction_uses_m2_without_tagger(tmp_path) -> None:
     assert tagger.calls == []
 
 
-def test_unclassified_regular_seed_falls_back_to_m2(tmp_path) -> None:
+def test_unclassified_regular_seed_returns_empty_without_embedding(tmp_path) -> None:
     seed = CreatorProfile(10, "분류 근거 없는 긴 소개")
     candidate = CreatorProfile(20, "충분히 긴 후보 소개")
     embedder = FakeEmbeddingClient({seed.text: [1, 0], candidate.text: [1, 0]})
@@ -133,7 +133,9 @@ def test_unclassified_regular_seed_falls_back_to_m2(tmp_path) -> None:
 
     result = build_service(tmp_path, embedder, tagger).recommend(seed, [candidate])
 
-    assert result.candidates[0].method == "M2"
+    assert result.method == "M2"
+    assert result.candidates == ()
+    assert embedder.calls == []
     assert tagger.calls == [seed.text]
 
 
@@ -252,7 +254,7 @@ def test_embeddings_are_requested_in_configured_batches(tmp_path) -> None:
         config(embedding_batch_size=2),
     ).recommend(seed, candidates)
 
-    assert [len(batch) for batch in embedder.calls] == [2] * 11 + [1]
+    assert [len(batch) for batch in embedder.calls] == [2] * 4
 
 
 def test_dimension_error_does_not_poison_retry_with_valid_embedder(tmp_path) -> None:
@@ -280,7 +282,7 @@ def test_dimension_error_does_not_poison_retry_with_valid_embedder(tmp_path) -> 
 
     assert [item.similar_creator_id for item in result.candidates] == [20, 30, 40]
     assert valid_embedder.calls[0] == [candidates[1].text, candidates[2].text]
-    assert sum(map(len, valid_embedder.calls)) == 19
+    assert sum(map(len, valid_embedder.calls)) == 4
 
 
 def test_zero_vector_is_rejected_before_cache_write(tmp_path) -> None:
@@ -295,7 +297,7 @@ def test_zero_vector_is_rejected_before_cache_write(tmp_path) -> None:
     build_service(tmp_path, valid_embedder, FakeTaggingClient({})).recommend(seed, [candidate])
 
     assert valid_embedder.calls[0][:2] == [seed.text, candidate.text]
-    assert sum(map(len, valid_embedder.calls)) == 19
+    assert sum(map(len, valid_embedder.calls)) == 4
 
 
 def test_invalid_cached_embedding_is_regenerated(tmp_path) -> None:
@@ -308,7 +310,7 @@ def test_invalid_cached_embedding_is_regenerated(tmp_path) -> None:
     build_service(tmp_path, embedder, FakeTaggingClient({})).recommend(seed, [candidate])
 
     assert embedder.calls[0][:2] == [seed.text, candidate.text]
-    assert sum(map(len, embedder.calls)) == 19
+    assert sum(map(len, embedder.calls)) == 4
 
 
 def test_tagger_failure_aborts_without_partial_result(tmp_path) -> None:
@@ -332,3 +334,19 @@ def test_conflicting_duplicate_creator_is_rejected(tmp_path) -> None:
             CreatorProfile(10, "충분히 긴 소개"),
             [CreatorProfile(20, "첫 소개"), CreatorProfile(20, "다른 소개")],
         )
+
+
+def test_short_seed_taxonomy_is_loaded_once_and_limited_to_allowed_tags(tmp_path, monkeypatch):
+    import src.recommendation.service as module
+    original = module.load_service_categories
+    calls=[]
+    def load(path):
+        calls.append(path)
+        return original(path)
+    monkeypatch.setattr(module, 'load_service_categories', load)
+    seed, candidate = CreatorProfile(10, '짧음'), CreatorProfile(20, '후보')
+    service=build_service(tmp_path, FakeEmbeddingClient({seed.text:[1,0], candidate.text:[1,0]}), FakeTaggingClient({}))
+    service.recommend(seed,[candidate])
+    service.recommend(seed,[candidate])
+    assert len(calls)==1
+    assert {c.code for c in service._eligibility_categories} <= service.config.allowed_tags
