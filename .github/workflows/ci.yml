@@ -150,8 +150,11 @@ jobs:
 
       # 서버 1대가 상태 디스크 하나를 붙여 쓰므로 기존 서버를 먼저 내리고(최소 정상 0%) 새 서버를 띄운다.
       # 새 서버는 부팅하며 배포 버전의 패키지를 받는다. 서버 그룹은 URECA-Cking/Cking-Infra#136에서 만들며, 그 전에는 건너뛴다.
+      # 교체가 성공하면 패키지 옆에 verified를 남긴다. 운영 배포는 이 표시가 있는 패키지만 고른다.
       - name: 개발 추천 배치 서버 교체
         if: steps.release.outputs.updated == 'true'
+        env:
+          RELEASE: ${{ steps.build.outputs.release }}
         run: |
           COUNT=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG_NAME" \
             --query 'length(AutoScalingGroups)' --output text)
@@ -166,6 +169,7 @@ jobs:
               --instance-refresh-ids "$ID" --query 'InstanceRefreshes[0].Status' --output text)
             case "$STATUS" in
               Successful)
+                printf '%s\n' "$ID" | aws s3 cp - "$RELEASE_PREFIX/$RELEASE/verified" --only-show-errors
                 echo "서버 교체 완료: $ID" | tee -a "$GITHUB_STEP_SUMMARY"
                 exit 0 ;;
               Failed|Cancelled|RollbackSuccessful|RollbackFailed)
@@ -197,8 +201,9 @@ jobs:
           role-to-assume: ${{ env.PROD_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 이 커밋의 조상 중 패키지에 들어가는 파일이 이 커밋과 같은 커밋의 개발 패키지를 고른다. 같은 커밋을 다시 빌드한
-      # 패키지(매월 재빌드)가 있으면 가장 최근 빌드를 고른다(Python 최신 패치). 없으면 develop의 개발 배포가 끝나기 전에 합친 것이라 멈춘다.
+      # 개발 서버 교체에 성공한(verified) 개발 패키지 중 패키지에 들어가는 파일이 이 커밋과 같은 것을 고르고, 여럿이면 가장 최근 빌드를
+      # 고른다(매월 재빌드의 Python 최신 패치). develop→main은 squash로 합쳐 개발 커밋이 main의 조상이 아니므로 이력이 아니라 내용으로 고른다.
+      # 없으면 develop의 개발 배포가 끝나기 전에 합친 것이라 멈춘다.
       - name: 올릴 패키지 정하기
         id: pick
         env:
@@ -219,20 +224,20 @@ jobs:
             exit 0
           fi
           INPUTS=(src data deploy requirements-deploy.txt scripts/build-package.sh)
+          LIST=$(aws s3 ls --recursive "$RELEASE_PREFIX/")
           BEST=""
-          while read -r _ ID; do
-            ID=${ID%/}
-            [[ "$ID" =~ ^[0-9]{14}-[0-9a-f]{12}$ ]] || continue
+          while read -r _ _ _ KEY; do
+            [[ "$KEY" =~ /([0-9]{14}-[0-9a-f]{12})/verified$ ]] || continue
+            ID=${BASH_REMATCH[1]}
             T=${ID##*-}
             git rev-parse -q --verify "$T^{commit}" >/dev/null || continue
-            git merge-base --is-ancestor "$T" "$GITHUB_SHA" || continue
             git diff --quiet "$T" "$GITHUB_SHA" -- "${INPUTS[@]}" || continue
             if [[ -z "$BEST" || "$ID" > "$BEST" ]]; then
               BEST="$ID"
             fi
-          done < <(aws s3 ls "$RELEASE_PREFIX/")
+          done <<< "$LIST"
           if [ -z "$BEST" ]; then
-            echo "::error::이 커밋과 패키지 내용이 같은 개발 패키지가 없다. develop의 개발 배포가 끝난 뒤 main에 합친다"
+            echo "::error::이 커밋과 패키지 내용이 같고 개발 서버 교체에 성공한 개발 패키지가 없다. develop의 개발 배포가 끝난 뒤 main에서 다시 실행한다"
             exit 1
           fi
           echo "release=$BEST" >> "$GITHUB_OUTPUT"
