@@ -269,6 +269,56 @@ def test_paging_and_duplicate_or_cyclic_cursor_rejected(tmp_path, taxonomy):
         worker.inputs()
 
 
+def test_failure_codes_separate_model_rejection_from_provider_errors(tmp_path, taxonomy):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    def provider_error(name, **attrs):
+        return type(name, (Exception,), attrs)('private provider message token=secret')
+    cases = [(ValueError('private evidence'), 'MODEL_OUTPUT_REJECTED'),
+             (provider_error('RateLimitError', code='rate_limit_exceeded'), 'PROVIDER_RATE_LIMITED'),
+             (provider_error('RateLimitError', code='insufficient_quota'), 'PROVIDER_QUOTA_EXCEEDED'),
+             (provider_error('APITimeoutError'), 'PROVIDER_TIMEOUT'),
+             (provider_error('APIConnectionError'), 'PROVIDER_CONNECTION_FAILED'),
+             (provider_error('AuthenticationError'), 'PROVIDER_AUTHORIZATION_FAILED'),
+             (provider_error('InternalServerError', status_code=503), 'PROVIDER_SERVER_ERROR'),
+             (RuntimeError('private'), 'PROVIDER_FAILURE')]
+    for index, (error, expected) in enumerate(cases):
+        be.rows = [be.row(f'소개 {index}', 1)]
+        def fail(*args, error=error):
+            raise error
+        worker.classify_fn = fail
+        assert worker.run()['stages']['tags']['rows'][0]['code'] == expected
+    summary = (tmp_path / 'summary.json').read_text()
+    assert 'private' not in summary and 'secret' not in summary
+
+
+def test_attempt_limit_resets_on_next_utc_day_and_keeps_last_code(tmp_path, taxonomy):
+    now = [1792700000.0]
+    worker, be, calls = setup_worker(tmp_path, taxonomy, clock=lambda: now[0])
+    original = worker.classify_fn
+    def reject(*args):
+        calls.append('rejected')
+        raise ValueError('empty evidence')
+    worker.classify_fn = reject
+    for _ in range(3):
+        assert worker.run()['stages']['tags']['rows'][0]['code'] == 'MODEL_OUTPUT_REJECTED'
+    final = worker.run()['stages']['tags']['rows'][0]
+    assert final['code'] == 'FINAL_PROVIDER_FAILURE' and final['lastCode'] == 'MODEL_OUTPUT_REJECTED'
+    assert calls.count('rejected') == 3
+    now[0] += 86400
+    worker.classify_fn = original
+    assert worker.run()['stages']['tags']['rows'][0]['status'] == 'success'
+    assert be.sent
+
+
+def test_legacy_attempt_record_without_date_is_retried(tmp_path, taxonomy):
+    worker, be, calls = setup_worker(tmp_path, taxonomy)
+    row = be.rows[0]
+    key = digest([be.target_identity, row['creatorId'], row['inputRevision'], row['inputHash'], worker.identity])
+    (tmp_path / 'records' / key).mkdir(parents=True)
+    (tmp_path / 'records' / key / 'attempts.json').write_text(json.dumps({'count': 3}))
+    assert worker.run()['stages']['tags']['rows'][0]['status'] == 'success'
+    assert len(calls) == 1
+
 def test_summary_failure_codes_and_no_success_marker_on_failure(tmp_path, taxonomy):
     worker, be, calls = setup_worker(tmp_path, taxonomy)
     worker.approved = False
@@ -525,6 +575,13 @@ def test_main_persistent_conflict_returns_one(cli, monkeypatch, capsys):
     assert module.main(args + ['--', 'apply']) == 1
     assert 'PERSISTENT_INPUT_CONFLICT' in capsys.readouterr().out
 
+
+def test_main_prints_last_code_of_final_failure(cli, monkeypatch, capsys):
+    module, daily, args = cli
+    monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: {'failureCount': 1, 'stages': {'tags': {'rows': [
+        {'code': 'FINAL_PROVIDER_FAILURE', 'lastCode': 'MODEL_OUTPUT_REJECTED'}]}}})
+    assert module.main(args + ['--', 'apply']) == 1
+    assert 'FINAL_PROVIDER_FAILURE:MODEL_OUTPUT_REJECTED' in capsys.readouterr().out
 
 def test_operator_conflict_recovery_replays_saved_payload_without_model_call(tmp_path, taxonomy):
     worker, be, calls = setup_worker(tmp_path, taxonomy)
