@@ -82,8 +82,21 @@ Linux의 전용 사용자 `cking`과 배포 패키지를 푼 `/opt/cking-llm`을
 영속 볼륨을 잃으면 실행을 중지하고 BE 최대 applicationSequence와 결과 세대를 먼저 확인한다.
 적재 직후 중단해도 payload가 먼저 저장되어 있으므로 같은 멱등 키로 재전송한다.
 `summary.json`의 행별 creatorId/recordKey/code로 실패 입력과 보호된 artifact 위치를 찾는다.
-`EXTERNAL_TRANSFER_NOT_APPROVED`, `DAILY_BUDGET_EXHAUSTED`, `PROVIDER_FAILURE`,
-`FINAL_PROVIDER_FAILURE`, `CONFIGURATION_MISMATCH`, `BACKEND_AUTHORIZATION_FAILED`를 구분한다.
+`EXTERNAL_TRANSFER_NOT_APPROVED`, `DAILY_BUDGET_EXHAUSTED`, `FINAL_PROVIDER_FAILURE`,
+`CONFIGURATION_MISMATCH`, `BACKEND_AUTHORIZATION_FAILED`와 분류 시도의 실패 코드를 구분한다.
+
+| 코드 | 뜻 |
+| --- | --- |
+| `MODEL_OUTPUT_REJECTED` | 모델은 응답했지만 검증에서 거절(근거 인용 불일치·빈 근거, 거부, 미완료, JSON 오류) |
+| `PROVIDER_RATE_LIMITED` / `PROVIDER_QUOTA_EXCEEDED` | 공급자 속도 제한 / 지출 한도·잔액 부족(429 `insufficient_quota`) |
+| `PROVIDER_TIMEOUT` / `PROVIDER_CONNECTION_FAILED` | 호출 시간 초과(60초) / 연결 실패 |
+| `PROVIDER_AUTHORIZATION_FAILED` | 공급자 키 인증·권한 실패 |
+| `PROVIDER_SERVER_ERROR` | 공급자 5xx |
+| `PROVIDER_FAILURE` | 그 밖의 분류 함수 예외 |
+
+공급자 예외는 클래스 이름과 상태 코드로만 위 코드에 대응시키고 메시지는 읽지 않는다.
+`FINAL_PROVIDER_FAILURE`는 그날 시도 한도에 도달했다는 뜻이며, 행의 `lastCode`와 stdout(`FINAL_PROVIDER_FAILURE:<lastCode>`)에
+마지막 실패 코드를 남긴다.
 외부 예외 메시지나 소개 원문은 summary/stdout에 기록하지 않는다.
 승격된 409를 **같은 입력으로** 복구해야 한다면 두 timer/worker를 중지하고 실행 종료·잠금 해제를
 확인한다. BE의 충돌 원인이 해결되어 저장 payload/멱등 키를 수용할 수 있는지 확인한 뒤, 해당
@@ -92,8 +105,10 @@ Linux의 전용 사용자 `cking`과 배포 패키지를 푼 `/opt/cking-llm`을
 `/jobs/{id}/retry`도 수행하고 검증 후 timer를 재개한다. payload/receipt/attempts/budget/ledger는
 삭제·변경하지 않는다. BE의 payload 불일치가 남아 있다면 flag만 해제하지 말고 먼저 원인을 해결한다.
 
-실패 횟수 한도(입력·설정당 3회)에 도달한 입력의 수동 재시도는 운영자가 실패 원인을
-해결한 뒤 해당 records/<key>/attempts.json count를 승인하에 조정한다. payload/ledger는 삭제하지 않는다.
+실패 횟수 한도는 입력·설정당 UTC 날짜마다 3회다(`records/<key>/attempts.json`의 `date`·`count`·`lastCode`).
+날짜가 바뀌면 다시 시도하고, 날짜가 없는 이전 기록은 지난 날짜로 본다. 호출은 하루 예산(`CKING_TAG_DAILY_CALLS`) 안에서만 한다.
+같은 날 바로 다시 시도해야 하면 운영자가 실패 원인을 해결한 뒤 해당 attempts.json `count`를 승인하에 조정한다.
+payload/ledger는 삭제하지 않는다.
 롤백은 timer 중지→이전 코드 복귀다. 이미 저장한 자동·확인 결과를 삭제하지 않는다.
 
 ## 승인·호출량·측정
