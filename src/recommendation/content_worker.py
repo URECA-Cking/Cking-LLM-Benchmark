@@ -68,9 +68,31 @@ class ContentBackend(CkingBackendClient):
 
 class WorkerFailure(RuntimeError):
     """Only application-owned constant codes may enter summaries or stdout."""
-    def __init__(self, code):
+    def __init__(self, code, last=None):
         super().__init__(code)
         self.code = code
+        self.last = last
+
+
+# Provider SDK errors map to constant codes by class name and status only; messages are never read.
+PROVIDER_FAILURES = {'RateLimitError': 'PROVIDER_RATE_LIMITED', 'APITimeoutError': 'PROVIDER_TIMEOUT',
+                     'APIConnectionError': 'PROVIDER_CONNECTION_FAILED',
+                     'AuthenticationError': 'PROVIDER_AUTHORIZATION_FAILED',
+                     'PermissionDeniedError': 'PROVIDER_AUTHORIZATION_FAILED'}
+
+
+def classification_failure(error):
+    if isinstance(error, ValueError):
+        return 'MODEL_OUTPUT_REJECTED'
+    name = type(error).__name__
+    if name == 'RateLimitError' and getattr(error, 'code', None) == 'insufficient_quota':
+        return 'PROVIDER_QUOTA_EXCEEDED'
+    if name in PROVIDER_FAILURES:
+        return PROVIDER_FAILURES[name]
+    status = getattr(error, 'status_code', None)
+    if type(status) is int and status >= 500:
+        return 'PROVIDER_SERVER_ERROR'
+    return 'PROVIDER_FAILURE'
 
 
 def diagnostic(error, fallback):
@@ -172,21 +194,26 @@ class ContentWorker:
             if text.strip():
                 if not self.approved:
                     raise WorkerFailure('EXTERNAL_TRANSFER_NOT_APPROVED')
+                today = datetime.fromtimestamp(self.clock(), timezone.utc).date().isoformat()
                 attempts = folder / 'attempts.json'
-                count = json.loads(attempts.read_text())['count'] if attempts.exists() else 0
+                state = json.loads(attempts.read_text()) if attempts.exists() else {}
+                # The attempt limit is per UTC day; legacy records without a date count as an earlier day.
+                count = state.get('count', 0) if state.get('date') == today else 0
                 if count >= self.max_attempts:
-                    raise WorkerFailure('FINAL_PROVIDER_FAILURE')
-                budget_path = self.directory / ('budget-' + datetime.fromtimestamp(self.clock(), timezone.utc).date().isoformat() + '.json')
+                    raise WorkerFailure('FINAL_PROVIDER_FAILURE', state.get('lastCode'))
+                budget_path = self.directory / ('budget-' + today + '.json')
                 budget = json.loads(budget_path.read_text())['calls'] if budget_path.exists() else 0
                 if budget >= self.max_calls:
                     raise WorkerFailure('DAILY_BUDGET_EXHAUSTED')
                 # Reserve before invocation: crash must not reset paid-call budget.
                 _write_json_atomic(budget_path, {'calls': budget + 1})
-                _write_json_atomic(attempts, {'count': count + 1})
+                _write_json_atomic(attempts, {'count': count + 1, 'date': today, 'lastCode': state.get('lastCode')})
                 try:
                     record = self.classify_fn(str(row['creatorId']), text, self.taxonomy, self.model)
-                except Exception:
-                    raise WorkerFailure('PROVIDER_FAILURE') from None
+                except Exception as error:
+                    code = classification_failure(error)
+                    _write_json_atomic(attempts, {'count': count + 1, 'date': today, 'lastCode': code})
+                    raise WorkerFailure(code) from None
             else:
                 record = automatic_record(str(row['creatorId']), text, {'parents': [], 'topics': []},
                                           self.taxonomy, self.model)
@@ -263,6 +290,8 @@ class ContentWorker:
                     if code == 'INPUT_REFRESH_REQUIRED':
                         code = self._observe_conflict(self.directory / 'records' / key)
                     outcome.update(status='refresh_required' if code == 'INPUT_REFRESH_REQUIRED' else 'failed', code=code)
+                    if getattr(error, 'last', None):
+                        outcome['lastCode'] = error.last
                     outcomes[row['creatorId']] = outcome
                     if isinstance(error, BackendRequestError) and error.status in {401, 403}:
                         break
@@ -373,7 +402,8 @@ def main(argv=None):
             approved=True, max_calls=args.max_daily_calls)
         result = worker.run(args.source)
         if result['failureCount']:
-            codes = {row.get('code') for stage in result.get('stages', {}).values() for row in stage.get('rows', []) if row.get('code')}
+            codes = {row['code'] + (':' + row['lastCode'] if row.get('lastCode') else '')
+                     for stage in result.get('stages', {}).values() for row in stage.get('rows', []) if row.get('code')}
             codes.update(stage['code'] for stage in result.get('stages', {}).values() if 'code' in stage)
             if result.get('coordination', {}).get('code'):
                 codes.add(result['coordination']['code'])
