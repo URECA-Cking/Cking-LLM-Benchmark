@@ -289,7 +289,7 @@ class ContentWorker:
                     code = diagnostic(error, 'TAG_EXECUTION_FAILED')
                     if code == 'INPUT_REFRESH_REQUIRED':
                         code = self._observe_conflict(self.directory / 'records' / key)
-                    # 하루 시도 한도에 걸린 입력은 다음 UTC 날짜에 다시 시도하므로 새 실패로 세지 않는다.
+                    # Inputs at the per-day attempt limit are retried on the next UTC day, so they are not new failures.
                     status = ('refresh_required' if code == 'INPUT_REFRESH_REQUIRED'
                               else 'deferred' if code == 'FINAL_PROVIDER_FAILURE' else 'failed')
                     outcome.update(status=status, code=code)
@@ -322,8 +322,8 @@ class ContentWorker:
         failed = sum(s['status'] != 'success' for s in stages.values())
         refresh = stages['tags'].get('refreshRequired', False)
         summary = {'status': 'partial' if failed else 'refresh_required' if refresh else 'completed',
-                   'failureCount': failed, 'source': source, 'startedAt': started,
-                   'completedAt': self.clock(), 'stages': stages}
+                   'failureCount': failed, 'deferredCount': stages['tags'].get('deferredCount', 0),
+                   'source': source, 'startedAt': started, 'completedAt': self.clock(), 'stages': stages}
         try:
             rec_ok = stages['recommendations']['status'] == 'success'
             if rec_ok and source != 'event':

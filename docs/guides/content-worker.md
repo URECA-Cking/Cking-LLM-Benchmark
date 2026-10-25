@@ -82,7 +82,7 @@ Linux의 전용 사용자 `cking`과 배포 패키지를 푼 `/opt/cking-llm`을
 영속 볼륨을 잃으면 실행을 중지하고 BE 최대 applicationSequence와 결과 세대를 먼저 확인한다.
 적재 직후 중단해도 payload가 먼저 저장되어 있으므로 같은 멱등 키로 재전송한다.
 `summary.json`의 행별 creatorId/recordKey/code로 실패 입력과 보호된 artifact 위치를 찾는다.
-`EXTERNAL_TRANSFER_NOT_APPROVED`, `DAILY_BUDGET_EXHAUSTED`, `FINAL_PROVIDER_FAILURE`,
+`EXTERNAL_TRANSFER_NOT_APPROVED`, `DAILY_BUDGET_EXHAUSTED`, `FINAL_PROVIDER_FAILURE`(실패가 아닌 보류, 아래),
 `CONFIGURATION_MISMATCH`, `BACKEND_AUTHORIZATION_FAILED`와 분류 시도의 실패 코드를 구분한다.
 
 | 코드 | 뜻 |
@@ -98,7 +98,11 @@ Linux의 전용 사용자 `cking`과 배포 패키지를 푼 `/opt/cking-llm`을
 `FINAL_PROVIDER_FAILURE`는 그날 시도 한도에 도달했다는 뜻이며, 행의 `lastCode`와 stdout(`FINAL_PROVIDER_FAILURE:<lastCode>`)에
 마지막 실패 코드를 남긴다. 이 행은 `status: deferred`로 기록하고 실패 수(`failureCount`)에 넣지 않는다(태그 단계의 `deferredCount`).
 한도에 걸리기까지의 시도 실패는 그때마다 실패로 끝나 경보로 남고, 그 뒤 다음 UTC 날짜까지는 보류만 남은 실행이 성공(0)으로 끝나
-같은 입력으로 실패 경보가 반복되지 않는다. 보류가 있으면 stdout에 `deferred until next UTC day (<코드>)`를 남긴다.
+같은 입력으로 실패 경보가 반복되지 않는다. 보류가 있으면 stdout에 `deferred until next UTC day (<코드>)`를 남기고,
+`summary.json` 최상위와 태그 단계에 `deferredCount`를 기록한다.
+`DAILY_BUDGET_EXHAUSTED`도 다음 UTC 날짜에 풀리지만 보류로 바꾸지 않고 실패로 남긴다. 입력 하나가 아니라 그날
+유료 호출 상한(`--max-daily-calls`)에 닿아 모든 입력의 태그가 멈췄다는 뜻이라, 상한을 올릴지 호출이 왜 늘었는지
+사람이 확인해야 한다. 그날 남은 실행은 실패로 끝나 경보가 이어진다.
 외부 예외 메시지나 소개 원문은 summary/stdout에 기록하지 않는다.
 승격된 409를 **같은 입력으로** 복구해야 한다면 두 timer/worker를 중지하고 실행 종료·잠금 해제를
 확인한다. BE의 충돌 원인이 해결되어 저장 payload/멱등 키를 수용할 수 있는지 확인한 뒤, 해당

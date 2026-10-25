@@ -225,13 +225,14 @@ def test_permanent_failure_isolated_from_claimed_creator_and_daily_reconcile(tmp
     worker.classify_fn = model
     for attempt in range(4):
         result = worker.run('event')
-        # 시도할 때마다의 실패는 경보로 남고, 하루 한도에 걸린 뒤의 보류는 실패로 세지 않는다
+        # Each failed attempt still alerts; once the daily limit is hit the input is deferred, not failed.
         assert result['failureCount'] == (1 if attempt < 3 else 0)
         assert (tmp_path / 'last-success.json').exists() == (attempt == 3)
         assert be.acks[-1]['status'] == 'completed'
     result = worker.run('daily')
     assert result['failureCount'] == 0
     assert result['stages']['tags']['deferredCount'] == 1
+    assert result['deferredCount'] == 1
     assert [r['creatorId'] for r in be.reconciles[-1]['inputs']] == [1]
     failed = next(r for r in result['stages']['tags']['rows'] if r['creatorId'] == 2)
     assert failed['code'] == 'FINAL_PROVIDER_FAILURE' and failed['status'] == 'deferred'
