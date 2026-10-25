@@ -223,15 +223,19 @@ def test_permanent_failure_isolated_from_claimed_creator_and_daily_reconcile(tmp
             raise ValueError('private refusal contents token=secret')
         return original(cid, *args)
     worker.classify_fn = model
-    for _ in range(4):
+    for attempt in range(4):
         result = worker.run('event')
-        assert result['failureCount'] == 1  # alert remains nonzero for the failing row
+        # Each failed attempt still alerts; once the daily limit is hit the input is deferred, not failed.
+        assert result['failureCount'] == (1 if attempt < 3 else 0)
+        assert (tmp_path / 'last-success.json').exists() == (attempt == 3)
         assert be.acks[-1]['status'] == 'completed'
     result = worker.run('daily')
-    assert result['failureCount'] == 1
+    assert result['failureCount'] == 0
+    assert result['stages']['tags']['deferredCount'] == 1
+    assert result['deferredCount'] == 1
     assert [r['creatorId'] for r in be.reconciles[-1]['inputs']] == [1]
     failed = next(r for r in result['stages']['tags']['rows'] if r['creatorId'] == 2)
-    assert failed['code'] == 'FINAL_PROVIDER_FAILURE'
+    assert failed['code'] == 'FINAL_PROVIDER_FAILURE' and failed['status'] == 'deferred'
     assert (tmp_path / 'records' / failed['recordKey'] / 'attempts.json').exists()
     assert calls.count('refusal') == 3
     assert 'private' not in (tmp_path / 'summary.json').read_text()
@@ -301,8 +305,10 @@ def test_attempt_limit_resets_on_next_utc_day_and_keeps_last_code(tmp_path, taxo
     worker.classify_fn = reject
     for _ in range(3):
         assert worker.run()['stages']['tags']['rows'][0]['code'] == 'MODEL_OUTPUT_REJECTED'
-    final = worker.run()['stages']['tags']['rows'][0]
+    limited = worker.run()
+    final = limited['stages']['tags']['rows'][0]
     assert final['code'] == 'FINAL_PROVIDER_FAILURE' and final['lastCode'] == 'MODEL_OUTPUT_REJECTED'
+    assert final['status'] == 'deferred' and limited['failureCount'] == 0
     assert calls.count('rejected') == 3
     now[0] += 86400
     worker.classify_fn = original
@@ -574,6 +580,16 @@ def test_main_persistent_conflict_returns_one(cli, monkeypatch, capsys):
     monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: {'failureCount': 1, 'stages': {'tags': {'rows': [{'code': 'PERSISTENT_INPUT_CONFLICT'}]}}})
     assert module.main(args + ['--', 'apply']) == 1
     assert 'PERSISTENT_INPUT_CONFLICT' in capsys.readouterr().out
+
+
+def test_main_daily_limit_deferral_exits_zero(cli, monkeypatch, capsys):
+    module, daily, args = cli
+    monkeypatch.setattr(module.ContentWorker, 'run', lambda *args: {'failureCount': 0, 'stages': {'tags': {'rows': [
+        {'status': 'deferred', 'code': 'FINAL_PROVIDER_FAILURE', 'lastCode': 'MODEL_OUTPUT_REJECTED'}]}}})
+    assert module.main(args + ['--', 'apply']) == 0
+    out = capsys.readouterr().out
+    assert 'deferred until next UTC day (FINAL_PROVIDER_FAILURE:MODEL_OUTPUT_REJECTED)' in out
+    assert 'partial failure' not in out
 
 
 def test_main_prints_last_code_of_final_failure(cli, monkeypatch, capsys):
