@@ -289,7 +289,10 @@ class ContentWorker:
                     code = diagnostic(error, 'TAG_EXECUTION_FAILED')
                     if code == 'INPUT_REFRESH_REQUIRED':
                         code = self._observe_conflict(self.directory / 'records' / key)
-                    outcome.update(status='refresh_required' if code == 'INPUT_REFRESH_REQUIRED' else 'failed', code=code)
+                    # 하루 시도 한도에 걸린 입력은 다음 UTC 날짜에 다시 시도하므로 새 실패로 세지 않는다.
+                    status = ('refresh_required' if code == 'INPUT_REFRESH_REQUIRED'
+                              else 'deferred' if code == 'FINAL_PROVIDER_FAILURE' else 'failed')
+                    outcome.update(status=status, code=code)
                     if getattr(error, 'last', None):
                         outcome['lastCode'] = error.last
                     outcomes[row['creatorId']] = outcome
@@ -298,8 +301,9 @@ class ContentWorker:
                 outcomes[row['creatorId']] = outcome
             failures = sum(r['status'] == 'failed' for r in outcomes.values())
             refresh = any(r['status'] == 'refresh_required' for r in outcomes.values())
+            deferred = sum(r['status'] == 'deferred' for r in outcomes.values())
             stages['tags'] = {'status': 'failed' if failures else 'success',
-                              'failureCount': failures, 'refreshRequired': refresh,
+                              'failureCount': failures, 'deferredCount': deferred, 'refreshRequired': refresh,
                               'rows': list(outcomes.values())}
         except Exception as error:
             stages['tags'] = {'status': 'failed', 'failureCount': 1,
@@ -409,6 +413,12 @@ def main(argv=None):
                 codes.add(result['coordination']['code'])
             codes = codes or {'WORKER_PARTIAL_FAILURE'}
             print('content-worker: partial failure (' + ','.join(sorted(codes)) + '); inspect protected summary.json')
+        else:
+            deferred = {row['code'] + (':' + row['lastCode'] if row.get('lastCode') else '')
+                        for stage in result.get('stages', {}).values() for row in stage.get('rows', [])
+                        if row.get('status') == 'deferred'}
+            if deferred:
+                print('content-worker: deferred until next UTC day (' + ','.join(sorted(deferred)) + ')')
         return 1 if result['failureCount'] else 0
     except BatchAlreadyRunning:
         # No claim occurred; durable BE job remains available.
