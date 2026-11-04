@@ -72,7 +72,8 @@ jobs:
   deploy-dev:
     name: Deploy to dev
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+    # 저장소 변수 DEPLOY_ENABLED가 true일 때만 배포한다. 배포할 서버가 없을 때는 변수를 지워 검사만 돌린다.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -185,7 +186,7 @@ jobs:
   deploy-prod:
     name: Deploy to prod
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04
     # 이전 교체 대기(최대 20분)와 새 교체(최대 20분)가 이어질 수 있다.
     timeout-minutes: 45
