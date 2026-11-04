@@ -3,7 +3,7 @@ name: CI/CD
 on:
   pull_request:
     branches: [develop, main]
-  # 배포 패키지에 들어가는 파일이 바뀔 때만 배포한다. develop은 개발, main은 운영이다.
+  # 배포 패키지에 들어가는 파일과 패키지 확인 스크립트, 이 워크플로가 바뀔 때만 배포한다. develop은 개발, main은 운영이다.
   push:
     branches: [develop, main]
     paths:
@@ -14,7 +14,7 @@ on:
       - "scripts/build-package.sh"
       - "scripts/check-package.sh"
       - ".github/workflows/ci.yml"
-  # 매월 1일 10:00(KST)에 Python 3.12 최신 패치로 다시 빌드해 배포한다. 03:00 일일 작업과 겹치지 않게 한다.
+  # 매월 1일 10:00(KST)에 Python 3.12 최신 패치로 다시 빌드해 개발에 배포한다. 03:00 일일 작업과 겹치지 않게 한다.
   # 라이브러리 패치는 고정 버전이라 다시 빌드해도 바뀌지 않으므로 Dependabot PR로 받는다.
   schedule:
     - cron: "0 1 1 * *"
@@ -26,7 +26,7 @@ on:
         type: string
         required: false
 
-# develop·main 실행은 브랜치마다 푸시 순서대로 하나씩 돌린다. PR은 새 커밋이 오면 이전 실행을 취소한다.
+# develop·main 실행은 브랜치마다 하나씩 돌린다. 대기 중인 실행은 새 실행이 오면 취소되고 새 실행이 대신한다. PR은 새 커밋이 오면 이전 실행을 취소한다.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

@@ -60,11 +60,13 @@ BE의 Space 생성/프로필 수정 Service가 소개와 outbox를 같은 트랜
 
 Linux의 전용 사용자 `cking`과 배포 패키지를 푼 `/opt/cking-llm`을 사용한다. 패키지는 CI가 만들며 Python 3.12와 가상환경을
 함께 담아 서버 Python과 관계없이 돈다([README 배포](../../README.md#배포)).
-`deploy/content-worker`의 unit을 `/etc/systemd/system`에 설치한다. 승인한 운영자가
-환경 예제를 `/etc/cking/content-worker.env`에 복사하고 권한 0640으로 설정한다.
-`StateDirectory=cking-content`와 `StateDirectoryMode=0700`으로 `/var/lib/cking-content`를 생성한다.
+서버에서는 부팅 스크립트(Cking-Infra `envs/prod/templates/recommendation-init.sh`, 개발·운영 공용)가 설치한다.
+`deploy/content-worker`의 unit을 `/etc/systemd/system`에 설치하고, Parameter Store 값으로
+`/etc/cking/content-worker.env`(권한 0640, root:cking)를 만든 뒤, 값이 모두 있을 때만 event.timer와 daily.timer를 켠다.
+`/var/lib/cking-content`는 서버가 바뀌어도 남는 상태 디스크(EBS)를 붙인 경로이며,
+`StateDirectory=cking-content`와 `StateDirectoryMode=0700`으로 권한을 맞춘다.
 컨테이너/볼륨 환경에서도 이 경로의 영속성을 보장한다.
-`systemctl daemon-reload` 후 event.timer와 daily.timer를 enable/start한다.
+직접 설치할 때는 같은 순서로 unit 설치, 환경 파일 작성(0640), `systemctl daemon-reload` 후 event.timer와 daily.timer enable/start를 한다.
 이 문서 추가만으로 배포나 유료 호출은 실행되지 않는다.
 
 일일 보정은 매일 **03:00 Asia/Seoul**, 이벤트 polling은 이전 실행 종료 후 **60초**다.
