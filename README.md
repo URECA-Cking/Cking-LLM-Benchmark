@@ -70,6 +70,7 @@ python -m pytest -q
 - 의존성: 배포는 `requirements-deploy.txt`(고정 버전)입니다. 서비스 경로는 임베딩을 DeepInfra API로 받아 torch·sentence-transformers를 넣지 않으므로, 배포 패키지에서는 `--embedding-provider local`을 쓸 수 없습니다. 테스트는 `requirements-test.txt`(배포 버전 + sentence-transformers, pytest)입니다
 - 확인: `scripts/check-package.sh`가 서버와 같은 Ubuntu 26.04에서 읽기 전용·root가 아닌 사용자로 Python 버전, 서비스 모듈 import(torch 없음), systemd 실행 경로, BE 없이 기동해 BE 요청 단계까지 가는지를 보고 생성 설정 해시(`configHash`)를 출력합니다. taxonomy 승인 등록에 이 값을 씁니다
 - CI
+  - 배포 job(개발·운영)은 저장소 변수 `DEPLOY_ENABLED`가 `true`일 때만 돕니다. 없으면 테스트만 돌고 배포는 건너뜁니다(매월 재빌드 포함)
   - PR(develop, main): 테스트(Python 3.12, CPU torch), 워크플로 검사
   - develop 푸시(패키지에 들어가는 파일이 바뀔 때), 매월 1일 10:00(KST) 재빌드, 수동 실행: 패키지 빌드 → 확인 → 개발 배포 버킷 `recommendation/releases/<빌드 시각>-<커밋 12자리>/` 업로드 → 배포 버전 값 `/cking/dev-recommendation/RELEASE` 갱신 → 개발 추천 배치 서버 교체(새 서버가 부팅하며 그 버전을 받음) → 교체에 성공하면 그 버전 폴더에 `verified` 표시
   - 실행은 푸시 순서대로 하나씩 돕니다. 배포된 커밋이 이 커밋보다 새로우면 배포 버전을 바꾸지 않고, 이력이 갈라졌으면 실패합니다
