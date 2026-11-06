@@ -12,11 +12,12 @@ if [ "$COUNT" = 0 ]; then
   echo "운영 추천 배치 서버 그룹이 아직 없어 교체를 건너뛴다" | tee -a "$GITHUB_STEP_SUMMARY"
   exit 0
 fi
-# 교체가 끝날 때까지(최대 20분) 기다려 마지막 상태를 출력한다. 끝나지 않으면 Timeout이다.
+# 교체가 끝날 때까지(최대 20분) 기다려 마지막 상태를 출력한다. 끝나지 않으면 Timeout, 조회가 실패하면 QueryFailed다.
+# 명령 치환 안에서 돌아 set -e가 꺼지므로 조회 실패를 직접 확인한다.
 wait_refresh() {
   for _ in $(seq 1 80); do
     STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$PROD_ASG_NAME" \
-      --instance-refresh-ids "$1" --query 'InstanceRefreshes[0].Status' --output text)
+      --instance-refresh-ids "$1" --query 'InstanceRefreshes[0].Status' --output text) || { echo QueryFailed; return; }
     case "$STATUS" in
       Successful|Failed|Cancelled|RollbackSuccessful|RollbackFailed) echo "$STATUS"; return ;;
     esac
@@ -31,10 +32,14 @@ ACTIVE=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "
 read -r ID STARTED <<< "$ACTIVE"
 if [ -n "$ID" ] && [ "$ID" != None ] && [ "$(date -d "$STARTED" +%s)" -lt "$(date -d "$SET_AT" +%s)" ]; then
   echo "배포 버전 값을 바꾸기 전에 시작한 교체($ID)가 끝나기를 기다린 뒤 새로 교체한다" | tee -a "$GITHUB_STEP_SUMMARY"
-  if [ "$(wait_refresh "$ID")" = Timeout ]; then
-    echo "::error::이전 서버 교체가 20분 안에 끝나지 않았다: $ID"
-    exit 1
-  fi
+  case "$(wait_refresh "$ID")" in
+    Timeout)
+      echo "::error::이전 서버 교체가 20분 안에 끝나지 않았다: $ID"
+      exit 1 ;;
+    QueryFailed)
+      echo "::error::이전 서버 교체 상태를 조회하지 못했다: $ID"
+      exit 1 ;;
+  esac
   ID=None
 fi
 if [ -z "$ID" ] || [ "$ID" = None ]; then
@@ -49,6 +54,9 @@ case "$STATUS" in
     echo "서버 교체 완료: $ID" | tee -a "$GITHUB_STEP_SUMMARY" ;;
   Timeout)
     echo "::error::서버 교체가 20분 안에 끝나지 않았다: $ID"
+    exit 1 ;;
+  QueryFailed)
+    echo "::error::서버 교체 상태를 조회하지 못했다: $ID"
     exit 1 ;;
   *)
     echo "::error::서버 교체 $STATUS: $ID"
