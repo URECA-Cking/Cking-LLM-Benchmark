@@ -70,16 +70,17 @@ python -m pytest -q
 - 의존성: 배포는 `requirements-deploy.txt`(고정 버전)입니다. 서비스 경로는 임베딩을 DeepInfra API로 받아 torch·sentence-transformers를 넣지 않으므로, 배포 패키지에서는 `--embedding-provider local`을 쓸 수 없습니다. 테스트는 `requirements-test.txt`(배포 버전 + sentence-transformers, pytest)입니다
 - 확인: `scripts/check-package.sh`가 서버와 같은 Ubuntu 26.04에서 읽기 전용·root가 아닌 사용자로 Python 버전, 서비스 모듈 import(torch 없음), systemd 실행 경로, BE 없이 기동해 BE 요청 단계까지 가는지를 보고 생성 설정 해시(`configHash`)를 출력합니다. taxonomy 승인 등록에 이 값을 씁니다
 - CI
+  - 배포 job(개발·운영)은 저장소 변수 `DEPLOY_ENABLED`가 `true`일 때만 돕니다. 없으면 테스트만 돌고 배포는 건너뜁니다(매월 재빌드 포함)
   - PR(develop, main): 테스트(Python 3.12, CPU torch), 워크플로 검사
-  - develop 푸시(패키지에 들어가는 파일이 바뀔 때), 매월 1일 10:00(KST) 재빌드, 수동 실행: 패키지 빌드 → 확인 → 개발 배포 버킷 `recommendation/releases/<빌드 시각>-<커밋 12자리>/` 업로드 → 배포 버전 값 `/cking/dev-recommendation/RELEASE` 갱신 → 개발 추천 배치 서버 교체(새 서버가 부팅하며 그 버전을 받음) → 교체에 성공하면 그 버전 폴더에 `verified` 표시
-  - 실행은 푸시 순서대로 하나씩 돕니다. 배포된 커밋이 이 커밋보다 새로우면 배포 버전을 바꾸지 않고, 이력이 갈라졌으면 실패합니다
-  - main 푸시(패키지에 들어가는 파일이 바뀔 때), main에서 수동 실행: 새로 빌드하지 않고 개발 CI가 확인하고 올린 패키지를 운영 배포 버킷 `prod-cking-deploy-551372961758-ap-northeast-2-an/recommendation/releases/`에 복사(sha256 확인) → 운영 배포 버전 값 `/cking/prod-recommendation/RELEASE` 갱신 → 운영 추천 배치 서버 교체
+  - develop 푸시(패키지에 들어가는 파일, `scripts/check-package.sh`, 워크플로가 바뀔 때), 매월 1일 10:00(KST) 재빌드, 수동 실행: 패키지 빌드 → 확인 → 개발 배포 버킷 `recommendation/releases/<빌드 시각>-<커밋 12자리>/` 업로드 → 배포 버전 값 `/cking/dev-recommendation/RELEASE` 갱신 → 개발 추천 배치 서버 교체(새 서버가 부팅하며 그 버전을 받음) → 교체에 성공하면 그 버전 폴더에 `verified` 표시
+  - 실행은 브랜치마다 하나씩 돕니다. 대기 중인 실행은 같은 브랜치에 새 실행이 생기면 취소되고 새 실행이 대신합니다. 배포된 커밋이 이 커밋보다 새로우면 배포 버전을 바꾸지 않고, 이력이 갈라졌으면 실패합니다
+  - main 푸시(패키지에 들어가는 파일, `scripts/check-package.sh`, 워크플로가 바뀔 때), main에서 수동 실행: 새로 빌드하지 않고 개발 CI가 확인하고 올린 패키지를 운영 배포 버킷 `prod-cking-deploy-551372961758-ap-northeast-2-an/recommendation/releases/`에 복사(sha256 확인) → 운영 배포 버전 값 `/cking/prod-recommendation/RELEASE` 갱신 → 운영 추천 배치 서버 교체
     - `verified` 표시가 있는(개발 서버 교체에 성공한) 개발 패키지 중 패키지에 들어가는 파일(`src/`, `data/`, `deploy/`, `requirements-deploy.txt`, `scripts/build-package.sh`)이 main과 같은 것을 고르고, 여럿이면 가장 최근 빌드를 고릅니다. develop→main은 squash로 합쳐 개발 커밋이 main의 조상이 아니므로 이력이 아니라 내용으로 고릅니다. 없으면(develop의 개발 배포가 끝나기 전에 합친 경우) 실패하고, 개발 배포가 끝난 뒤 main에서 다시 실행합니다
     - 순서는 개발과 같은 기준을 패키지 커밋에 씁니다. 버전 ID는 개발과 같습니다
     - 배포 버전 값이 이미 같으면, 값을 바꾼 뒤 시작한 서버 교체가 성공했을 때만 건너뜁니다. 교체가 실패한 뒤 다시 실행하면 다시 교체합니다. 진행 중인 교체가 있으면, 배포 버전 값을 바꾼 뒤 시작한 것은 지켜보고, 바꾸기 전에 시작한 것은 끝나기를 기다린 뒤 새로 교체합니다
     - 되돌리기: main에서 수동 실행하며 운영 배포 버킷에 있는 예전 버전 ID를 `release`에 넣습니다. 되돌린 뒤 main 실행을 다시 실행하거나 main에 새로 합치면 그때 고른 최신 패키지가 다시 올라갑니다
     - 릴리스: 이 저장소는 squash만 허용해 이전 릴리스의 squash 커밋이 develop의 조상이 아닙니다. 지난 릴리스에 들어간 줄을 develop에서 다시 고치면 develop → main PR이 충돌합니다. develop에서 릴리스 브랜치(`chore/<이슈 번호>-release-vX.Y.Z`)를 만들고 main을 합쳐 충돌을 develop 쪽으로 푼 뒤(`git diff origin/develop`이 비어야 함) 그 브랜치로 main에 PR을 올립니다. 머지 뒤 main 커밋에 `vX.Y.Z` 태그를 답니다
-  - 매월 재빌드는 Python 3.12 최신 패치를 반영합니다. 라이브러리는 고정 버전이라 Dependabot PR(`.github/dependabot.yml`, 매월, 마이너·패치만)로 올리고, 메이저 업데이트는 따로 확인해 올립니다
+  - 매월 재빌드는 Python 3.12 최신 패치를 개발에 반영합니다. 운영에는 다음 main 실행(머지 또는 수동 실행) 때 그 패키지가 올라갑니다. 라이브러리와 액션은 고정 버전이라 Dependabot PR(`.github/dependabot.yml`, 매월, 마이너·패치만)로 올리고, 메이저 업데이트는 따로 확인해 올립니다
 
 로컬에서 패키지를 만들고 확인하려면 다음을 실행합니다(Docker 필요).
 
