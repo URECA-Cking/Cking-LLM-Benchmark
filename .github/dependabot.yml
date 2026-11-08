@@ -1,8 +1,10 @@
+# 버전 업데이트는 끈다(open-pull-requests-limit: 0). 다시 켤 때 이 줄들을 지운다.
 # 배포·테스트 의존성은 고정 버전이라 다시 빌드해도 바뀌지 않는다. 라이브러리 보안 패치와 액션 갱신은 PR로 받는다.
 # 메이저는 PR CI로 확인되지 않는 경로(배포 job의 액션, 실제 공급자 호출)가 있어 사람이 계획해서 올린다.
 version: 2
 updates:
   - package-ecosystem: pip
+    open-pull-requests-limit: 0
     directory: /
     target-branch: develop
     schedule:
@@ -22,6 +24,7 @@ updates:
       - rmsckd1640
 
   - package-ecosystem: github-actions
+    open-pull-requests-limit: 0
     directory: /
     target-branch: develop
     schedule:
